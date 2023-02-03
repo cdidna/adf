@@ -1,0 +1,162 @@
+{
+	"name": "PIP_RSN_STORE_SEARCH_FULL",
+	"properties": {
+		"activities": [
+			{
+				"name": "Copy data All date",
+				"type": "Copy",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "MySqlSource",
+						"query": {
+							"value": "@concat('SELECT * FROM ', pipeline().parameters.SourceTable)",
+							"type": "Expression"
+						}
+					},
+					"sink": {
+						"type": "DelimitedTextSink",
+						"storeSettings": {
+							"type": "AzureBlobFSWriteSettings"
+						},
+						"formatSettings": {
+							"type": "DelimitedTextWriteSettings",
+							"quoteAllText": true,
+							"fileExtension": ".csv"
+						}
+					},
+					"enableStaging": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"typeConversion": true,
+						"typeConversionSettings": {
+							"allowDataTruncation": true,
+							"treatBooleanAsNumber": false
+						}
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "DTS_RSN_SRC",
+						"type": "DatasetReference",
+						"parameters": {
+							"SourceTable": {
+								"value": "@pipeline().parameters.SourceTable",
+								"type": "Expression"
+							}
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "DTS_ADLS_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"AdlsDirectory": {
+								"value": "@pipeline().parameters.AdlsDirectory",
+								"type": "Expression"
+							},
+							"FileName": {
+								"value": "@concat('D_RSN_온라인몰_검색어검색결과정보_', pipeline().parameters.SourceTable,'.csv')",
+								"type": "Expression"
+							}
+						}
+					}
+				]
+			},
+			{
+				"name": "Copy data PG",
+				"type": "Copy",
+				"dependsOn": [
+					{
+						"activity": "Copy data All date",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "DelimitedTextSource",
+						"storeSettings": {
+							"type": "AzureBlobFSReadSettings",
+							"recursive": true,
+							"enablePartitionDiscovery": false
+						},
+						"formatSettings": {
+							"type": "DelimitedTextReadSettings"
+						}
+					},
+					"sink": {
+						"type": "AzurePostgreSQLSink",
+						"writeBatchSize": 1000000,
+						"writeBatchTimeout": "00:30:00",
+						"preCopyScript": "truncate table\ncd_mart.dm_cm_rsn_store_search_master_t;",
+						"writeMethod": "CopyCommand"
+					},
+					"enableStaging": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"typeConversion": true,
+						"typeConversionSettings": {
+							"allowDataTruncation": true,
+							"treatBooleanAsNumber": false
+						}
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "DTS_ADLS_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"AdlsDirectory": "고객/외부/온라인몰정보/RSN_온라인몰_검색어검색결과정보",
+							"FileName": "D_RSN_온라인몰_검색어검색결과정보_STORE_SEARCH.csv"
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "DTS_POSTGRESQL_SNK_P02",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "cd_mart",
+							"SinkTable": "dm_cm_rsn_store_search_master_t"
+						}
+					}
+				]
+			}
+		],
+		"parameters": {
+			"SourceTable": {
+				"type": "string",
+				"defaultValue": "STORE_SEARCH"
+			},
+			"AdlsDirectory": {
+				"type": "string",
+				"defaultValue": "고객/외부/온라인몰정보/RSN_온라인몰_검색어검색결과정보"
+			}
+		},
+		"folder": {
+			"name": "고객/외부/온라인몰정보"
+		},
+		"annotations": [],
+		"lastPublishTime": "2023-01-25T01:34:12Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

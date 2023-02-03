@@ -1,0 +1,279 @@
+{
+	"name": "PIP_D_CD_DDREAM_POS_DD_SALES_INC_PG",
+	"properties": {
+		"activities": [
+			{
+				"name": "Lookup API Info",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "OracleSource",
+						"oracleReaderQuery": {
+							"value": "select to_char(min(base_date),'YYYYMMDD') AS SDATE\n         ,to_char(MAX(base_date),'YYYYMMDD') AS EDATE\n    from cd_ods.aps_sdc_pw_mst\n   where CMONTH2 between to_char(add_months(sysdate,-1),'YYYYMM') AND TO_CHAR(SYSDATE,'YYYYMM')\n   GROUP BY CMONTH2\n   ORDER BY CMONTH2\n  ",
+							"type": "Expression"
+						},
+						"partitionOption": "None",
+						"convertDecimalToInteger": false,
+						"queryTimeout": "02:00:00"
+					},
+					"dataset": {
+						"referenceName": "DTS_ORACLE_SRC",
+						"type": "DatasetReference",
+						"parameters": {
+							"SourceSchema": "@pipeline().parameters.SourceSchema",
+							"SourceTable": {
+								"value": "@pipeline().parameters.SourceTable",
+								"type": "Expression"
+							}
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Lookup API Info",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Lookup API Info').output.value",
+						"type": "Expression"
+					},
+					"isSequential": true,
+					"activities": [
+						{
+							"name": "Copy data1",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "OracleSource",
+									"oracleReaderQuery": {
+										"value": "SELECT *\n FROM CD_DDREAM.POS_DD_SALES\nWHERE SALES_DATE BETWEEN '@{item().SDATE}' AND '@{item().EDATE}'\n           ",
+										"type": "Expression"
+									},
+									"partitionOption": "None",
+									"convertDecimalToInteger": false,
+									"queryTimeout": "02:00:00"
+								},
+								"sink": {
+									"type": "AzurePostgreSQLSink",
+									"writeBatchSize": 1000000,
+									"writeBatchTimeout": "00:30:00",
+									"preCopyScript": {
+										"value": "DELETE\n    FROM CD_ODS.POS_DD_SALES\n    WHERE SALES_DATE BETWEEN  '@{item().SDATE}' AND '@{item().EDATE}'",
+										"type": "Expression"
+									},
+									"writeMethod": "CopyCommand"
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"mappings": [
+										{
+											"source": {
+												"name": "SALES_DATE",
+												"type": "String"
+											},
+											"sink": {
+												"name": "sales_date",
+												"type": "String",
+												"physicalType": "character varying"
+											}
+										},
+										{
+											"source": {
+												"name": "DRIM_STORE_ID",
+												"type": "String"
+											},
+											"sink": {
+												"name": "drim_store_id",
+												"type": "String",
+												"physicalType": "character varying"
+											}
+										},
+										{
+											"source": {
+												"name": "BARCODE_NO",
+												"type": "String"
+											},
+											"sink": {
+												"name": "barcode_no",
+												"type": "String",
+												"physicalType": "character varying"
+											}
+										},
+										{
+											"source": {
+												"name": "SALES_CNT",
+												"type": "Double"
+											},
+											"sink": {
+												"name": "sales_cnt",
+												"type": "Decimal",
+												"physicalType": "numeric"
+											}
+										},
+										{
+											"source": {
+												"name": "SALES_AMT",
+												"type": "Double"
+											},
+											"sink": {
+												"name": "sales_amt",
+												"type": "Decimal",
+												"physicalType": "numeric"
+											}
+										},
+										{
+											"source": {
+												"name": "REGI_DATE",
+												"type": "String"
+											},
+											"sink": {
+												"name": "regi_date",
+												"type": "String",
+												"physicalType": "character varying"
+											}
+										}
+									],
+									"typeConversion": true,
+									"typeConversionSettings": {
+										"allowDataTruncation": true,
+										"treatBooleanAsNumber": false
+									}
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "DTS_ORACLE_SRC",
+									"type": "DatasetReference",
+									"parameters": {
+										"SourceSchema": {
+											"value": "@pipeline().parameters.SourceSchema",
+											"type": "Expression"
+										},
+										"SourceTable": {
+											"value": "@pipeline().parameters.SourceTable",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "DTS_POSTGRESQL_SNK",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": {
+											"value": "@pipeline().parameters.SinkSchema",
+											"type": "Expression"
+										},
+										"SinkTable": {
+											"value": "@pipeline().parameters.SinkTable",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					]
+				}
+			},
+			{
+				"name": "Execute_SP",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "ForEach1",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": "select cd_mart.func_dm_pr_datadream_summary();",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					}
+				}
+			}
+		],
+		"parameters": {
+			"SourceSchema": {
+				"type": "string",
+				"defaultValue": "CD_DDREAM"
+			},
+			"SourceTable": {
+				"type": "string",
+				"defaultValue": "POS_DD_SALES"
+			},
+			"SinkSchema": {
+				"type": "string",
+				"defaultValue": "CD_ODS"
+			},
+			"SinkTable": {
+				"type": "string",
+				"defaultValue": "POS_DD_SALES"
+			}
+		},
+		"variables": {
+			"prev_start": {
+				"type": "String",
+				"defaultValue": "@startOfMonth(addToTime(addHours(utcNow(), 9), -1, 'Month'), 'yyyyMMdd')"
+			},
+			"prev_end": {
+				"type": "String",
+				"defaultValue": "@adddays(startOfMonth(addHours(utcNow(), 9)), -1, 'yyyyMMdd')"
+			}
+		},
+		"folder": {
+			"name": "매출_주문/외부/데이터드림"
+		},
+		"annotations": [],
+		"lastPublishTime": "2023-01-16T02:10:16Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

@@ -1,0 +1,95 @@
+{
+	"name": "DF_ADLS_PG_STORE_REVIEW_INC",
+	"properties": {
+		"folder": {
+			"name": "고객/외부/RSN"
+		},
+		"type": "MappingDataFlow",
+		"typeProperties": {
+			"sources": [
+				{
+					"dataset": {
+						"referenceName": "DTS_RSN_STORE_REVIEW_INC",
+						"type": "DatasetReference"
+					},
+					"name": "source1"
+				}
+			],
+			"sinks": [
+				{
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK_P02",
+						"type": "DatasetReference"
+					},
+					"name": "sink1"
+				}
+			],
+			"transformations": [
+				{
+					"name": "select1"
+				},
+				{
+					"name": "derivedColumn1"
+				},
+				{
+					"name": "alterRow1"
+				}
+			],
+			"scriptLines": [
+				"source(output(",
+				"          srd_id as string,",
+				"          sd_reviewid as string,",
+				"          site as string,",
+				"          site_id as string,",
+				"          srd_title as string,",
+				"          srd_content as string,",
+				"          srd_writer as string,",
+				"          srd_writetime as string,",
+				"          srd_rate as string,",
+				"          srd_crawl_time as string",
+				"     ),",
+				"     allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     ignoreNoFilesFound: false) ~> source1",
+				"source1 select(mapColumn(",
+				"          id = srd_id,",
+				"          sd_review_id = sd_reviewid,",
+				"          channel_nm = site,",
+				"          title = srd_title,",
+				"          contents = srd_content,",
+				"          write_time = srd_writetime,",
+				"          srd_rate",
+				"     ),",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true) ~> select1",
+				"select1 derive(contents = substring(replace(replace(contents, '//CM//',','),'//LF//','\\n'),1,1000),",
+				"          write_time = toDate(substring(write_time,1,10)),",
+				"          title = replace(replace(title, '//CM//',','),'//LF//','\\n'),",
+				"          source_nm = \"REVIEW\",",
+				"          if_dt = currentTimestamp()) ~> derivedColumn1",
+				"derivedColumn1 alterRow(upsertIf(true())) ~> alterRow1",
+				"alterRow1 sink(allowSchemaDrift: true,",
+				"     validateSchema: false,",
+				"     deletable:false,",
+				"     insertable:false,",
+				"     updateable:false,",
+				"     upsertable:true,",
+				"     keys:['id'],",
+				"     format: 'table',",
+				"     skipDuplicateMapInputs: true,",
+				"     skipDuplicateMapOutputs: true,",
+				"     mapColumn(",
+				"          id,",
+				"          sd_review_id,",
+				"          channel_nm,",
+				"          title,",
+				"          contents,",
+				"          write_time,",
+				"          srd_rate,",
+				"          source_nm,",
+				"          if_dt",
+				"     )) ~> sink1"
+			]
+		}
+	}
+}

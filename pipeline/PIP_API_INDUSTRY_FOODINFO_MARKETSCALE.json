@@ -1,0 +1,286 @@
+{
+	"name": "PIP_API_INDUSTRY_FOODINFO_MARKETSCALE",
+	"properties": {
+		"description": "국내식품시장규모",
+		"activities": [
+			{
+				"name": "API REQ_copy1",
+				"description": "각 API 호출",
+				"type": "Copy",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "RestSource",
+						"httpRequestTimeout": "00:03:00",
+						"requestInterval": "00.00:00:00.010",
+						"requestMethod": "GET",
+						"paginationRules": {
+							"supportRFC5988": "true"
+						}
+					},
+					"sink": {
+						"type": "DelimitedTextSink",
+						"storeSettings": {
+							"type": "AzureBlobFSWriteSettings"
+						},
+						"formatSettings": {
+							"type": "DelimitedTextWriteSettings",
+							"quoteAllText": true,
+							"fileExtension": ".txt"
+						}
+					},
+					"enableStaging": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"mappings": [
+							{
+								"source": {
+									"path": "$['fdmsId']"
+								},
+								"sink": {
+									"name": "fdmsId",
+									"type": "String"
+								}
+							},
+							{
+								"source": {
+									"path": "$['fdmsYear']"
+								},
+								"sink": {
+									"name": "fdmsYear",
+									"type": "String"
+								}
+							},
+							{
+								"source": {
+									"path": "$['fdmsSectorCd']"
+								},
+								"sink": {
+									"name": "fdmsSectorCd",
+									"type": "String"
+								}
+							},
+							{
+								"source": {
+									"path": "$['fdmsNumber']"
+								},
+								"sink": {
+									"name": "fdmsNumber",
+									"type": "String"
+								}
+							},
+							{
+								"source": {
+									"path": "$['fdmsRatio']"
+								},
+								"sink": {
+									"name": "fdmsRatio",
+									"type": "String"
+								}
+							},
+							{
+								"source": {
+									"path": "$['fdmsUnit']"
+								},
+								"sink": {
+									"name": "fdmsUnit",
+									"type": "String"
+								}
+							},
+							{
+								"source": {
+									"path": "$['fdmsIndustryGubun']"
+								},
+								"sink": {
+									"name": "fdmsIndustryGubun",
+									"type": "String"
+								}
+							}
+						]
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "DTS_API_ATFIS_SCALE_SRC",
+						"type": "DatasetReference",
+						"parameters": {
+							"ApiKey": {
+								"value": "@pipeline().parameters.ApiKey",
+								"type": "Expression"
+							},
+							"BeginYear": {
+								"value": "@pipeline().parameters.BeginYear",
+								"type": "Expression"
+							},
+							"EndYear": {
+								"value": "@pipeline().parameters.EndYear",
+								"type": "Expression"
+							}
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "DTS_ADLS_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"AdlsDirectory": {
+								"value": "@concat(pipeline().parameters.AdlsDirectoryOri,'/',formatDateTime(addHours(utcNow(), 9), 'yyyy'))",
+								"type": "Expression"
+							},
+							"FileName": {
+								"value": "@concat(pipeline().parameters.FileName,'_',formatDateTime(addHours(utcNow(), 9), 'yyyyMMdd'),'.csv')",
+								"type": "Expression"
+							}
+						}
+					}
+				]
+			},
+			{
+				"name": "Ori Copy Data",
+				"description": "cdi-root / Industry / 외부 / 식품산업통계정에 통합본을 저장합니다.",
+				"type": "Copy",
+				"dependsOn": [
+					{
+						"activity": "API REQ_copy1",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "DelimitedTextSource",
+						"storeSettings": {
+							"type": "AzureBlobFSReadSettings",
+							"maxConcurrentConnections": 1,
+							"recursive": true,
+							"wildcardFolderPath": {
+								"value": "@concat(pipeline().parameters.AdlsDirectoryOri,'/',formatDateTime(addHours(utcNow(), 9), 'yyyy'))",
+								"type": "Expression"
+							},
+							"wildcardFileName": "*",
+							"enablePartitionDiscovery": false
+						},
+						"formatSettings": {
+							"type": "DelimitedTextReadSettings"
+						}
+					},
+					"sink": {
+						"type": "DelimitedTextSink",
+						"storeSettings": {
+							"type": "AzureBlobFSWriteSettings",
+							"maxConcurrentConnections": 1,
+							"copyBehavior": "MergeFiles"
+						},
+						"formatSettings": {
+							"type": "DelimitedTextWriteSettings",
+							"quoteAllText": true,
+							"fileExtension": ".txt"
+						}
+					},
+					"enableStaging": false,
+					"parallelCopies": 1,
+					"enableSkipIncompatibleRow": true,
+					"validateDataConsistency": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"typeConversion": true,
+						"typeConversionSettings": {
+							"allowDataTruncation": true,
+							"treatBooleanAsNumber": false
+						}
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "DTS_ADLS_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"AdlsDirectory": {
+								"value": "@pipeline().parameters.AdlsDirectory",
+								"type": "Expression"
+							},
+							"FileName": {
+								"value": "@pipeline().parameters.FileName",
+								"type": "Expression"
+							}
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "DTS_ADLS_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"AdlsDirectory": {
+								"value": "@pipeline().parameters.AdlsDirectory",
+								"type": "Expression"
+							},
+							"FileName": {
+								"value": "@concat(pipeline().parameters.FileName,'_', formatDateTime(addHours(utcNow(), 9), 'yyyy'),'.csv')\n\n",
+								"type": "Expression"
+							}
+						}
+					}
+				]
+			}
+		],
+		"parameters": {
+			"AdlsDirectory": {
+				"type": "string",
+				"defaultValue": "Industry/외부/식품산업통계정보"
+			},
+			"FileName": {
+				"type": "string",
+				"defaultValue": "국내식품시장규모"
+			},
+			"AdlsDirectoryConf": {
+				"type": "string",
+				"defaultValue": "Industry/외부/식품산업통계정보/conf"
+			},
+			"ConfFile": {
+				"type": "string",
+				"defaultValue": "식품산업통계정보_국내식품시장규모_conf"
+			},
+			"ApiKey": {
+				"type": "string",
+				"defaultValue": "jdoqB049MSLEl6kapN6Ox2w2jCv/h57g2tQt4bmGEzk="
+			},
+			"BeginYear": {
+				"type": "string",
+				"defaultValue": "2012"
+			},
+			"EndYear": {
+				"type": "string",
+				"defaultValue": "2021"
+			},
+			"AdlsDirectoryOri": {
+				"type": "string",
+				"defaultValue": "Industry/외부/식품산업통계정보/국내식품시장규모"
+			}
+		},
+		"folder": {
+			"name": "Industry/외부/식품산업통계정보"
+		},
+		"annotations": [],
+		"lastPublishTime": "2023-01-20T01:28:18Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

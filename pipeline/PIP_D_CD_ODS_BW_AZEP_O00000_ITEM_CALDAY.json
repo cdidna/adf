@@ -1,0 +1,212 @@
+{
+	"name": "PIP_D_CD_ODS_BW_AZEP_O00000_ITEM_CALDAY",
+	"properties": {
+		"activities": [
+			{
+				"name": "Lookup API Info",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "OracleSource",
+						"oracleReaderQuery": {
+							"value": "@concat('SELECT TO_CHAR(TRUNC(ADD_MONTHS(SYSDATE,-1),''MM''),''YYYYMMDD'') AS SDATE, TO_CHAR(LAST_DAY(SYSDATE),''YYYYMMDD'')   AS EDATE FROM DUAL ')\n",
+							"type": "Expression"
+						},
+						"partitionOption": "None",
+						"convertDecimalToInteger": false,
+						"queryTimeout": "02:00:00"
+					},
+					"dataset": {
+						"referenceName": "DTS_ORACLE_SRC",
+						"type": "DatasetReference",
+						"parameters": {
+							"SourceSchema": "@pipeline().parameters.SourceSchema",
+							"SourceTable": {
+								"value": "@pipeline().parameters.SourceTable",
+								"type": "Expression"
+							}
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Lookup API Info",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Lookup API Info').output.value",
+						"type": "Expression"
+					},
+					"isSequential": true,
+					"activities": [
+						{
+							"name": "Copy data1",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "OracleSource",
+									"oracleReaderQuery": {
+										"value": "@concat('SELECT CALDAY, MATERIAL, ZAMT, ZBOX FROM ',pipeline().parameters.SinkSchema,'.',pipeline().parameters.SinkTable,' WHERE CALDAY BETWEEN ''',item().SDATE,''' AND ''', item().EDATE,'''')",
+										"type": "Expression"
+									},
+									"partitionOption": "None",
+									"convertDecimalToInteger": false,
+									"queryTimeout": "02:00:00"
+								},
+								"sink": {
+									"type": "AzurePostgreSQLSink",
+									"writeBatchSize": 1000000,
+									"writeBatchTimeout": "00:30:00",
+									"preCopyScript": {
+										"value": "@{concat('DELETE FROM ',pipeline().parameters.SinkSchema,'.',pipeline().parameters.SinkTable,' WHERE CALDAY BETWEEN ''', item().SDATE, ''' AND ''',item().EDATE,'''')}",
+										"type": "Expression"
+									},
+									"writeMethod": "CopyCommand"
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"mappings": [
+										{
+											"source": {
+												"name": "CALDAY",
+												"type": "String"
+											},
+											"sink": {
+												"name": "calday",
+												"type": "String",
+												"physicalType": "character varying"
+											}
+										},
+										{
+											"source": {
+												"name": "MATERIAL",
+												"type": "String"
+											},
+											"sink": {
+												"name": "material",
+												"type": "String",
+												"physicalType": "character varying"
+											}
+										},
+										{
+											"source": {
+												"name": "ZBOX",
+												"type": "Decimal"
+											},
+											"sink": {
+												"name": "zbox",
+												"type": "Decimal",
+												"physicalType": "numeric"
+											}
+										},
+										{
+											"source": {
+												"name": "ZAMT",
+												"type": "String"
+											},
+											"sink": {
+												"name": "zamt",
+												"type": "Decimal",
+												"physicalType": "numeric"
+											}
+										}
+									],
+									"typeConversion": true,
+									"typeConversionSettings": {
+										"allowDataTruncation": true,
+										"treatBooleanAsNumber": false
+									}
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "DTS_ORACLE_SRC",
+									"type": "DatasetReference",
+									"parameters": {
+										"SourceSchema": {
+											"value": "@pipeline().parameters.SourceSchema",
+											"type": "Expression"
+										},
+										"SourceTable": {
+											"value": "@pipeline().parameters.SourceTable",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "DTS_POSTGRESQL_SNK",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": {
+											"value": "@pipeline().parameters.SinkSchema",
+											"type": "Expression"
+										},
+										"SinkTable": {
+											"value": "@pipeline().parameters.SinkTable",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"SourceSchema": {
+				"type": "string",
+				"defaultValue": "CD_ODS"
+			},
+			"SourceTable": {
+				"type": "string",
+				"defaultValue": "BW_AZEP_o00000_ITEM_CALDAY"
+			},
+			"SinkSchema": {
+				"type": "string",
+				"defaultValue": "cd_ods"
+			},
+			"SinkTable": {
+				"type": "string",
+				"defaultValue": "bw_azep_o00000_item_calday"
+			}
+		},
+		"folder": {
+			"name": "매출_주문/내부/ODS"
+		},
+		"annotations": [],
+		"lastPublishTime": "2022-10-20T07:08:24Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}
