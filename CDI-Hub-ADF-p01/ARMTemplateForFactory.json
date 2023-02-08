@@ -20081,6 +20081,162 @@
 			]
 		},
 		{
+			"name": "[concat(parameters('factoryName'), '/PG_MART_IN_CDI_D')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "PIP_M_PT_HOME_DATA_FULL",
+						"type": "ExecutePipeline",
+						"dependsOn": [
+							{
+								"activity": "Input log",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"pipeline": {
+								"referenceName": "PIP_DM_PT_HOME_DATA_FULL",
+								"type": "PipelineReference"
+							},
+							"waitOnCompletion": true,
+							"parameters": {}
+						}
+					},
+					{
+						"name": "Input log",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "OracleSource",
+								"oracleReaderQuery": {
+									"value": "select CD_IF.FUNC_CDI_LOG(  'I' , p_pipline => 'PIP_M_PT_HOME_DATA_FULL' ) as result from dual;",
+									"type": "Expression"
+								},
+								"partitionOption": "None",
+								"convertDecimalToInteger": false,
+								"queryTimeout": "02:00:00"
+							},
+							"dataset": {
+								"referenceName": "DTS_ORACLE_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceSchema": "1",
+									"SourceTable": "1"
+								}
+							}
+						}
+					},
+					{
+						"name": "Output Success log",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "PIP_M_PT_HOME_DATA_FULL",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "OracleSource",
+								"oracleReaderQuery": {
+									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log').output.firstRow.RESULT, ''', p_result => ''S'') as result from dual')",
+									"type": "Expression"
+								},
+								"partitionOption": "None",
+								"convertDecimalToInteger": false,
+								"queryTimeout": "02:00:00"
+							},
+							"dataset": {
+								"referenceName": "DTS_ORACLE_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceSchema": "1",
+									"SourceTable": "1"
+								}
+							}
+						}
+					},
+					{
+						"name": "Output Error log",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "PIP_M_PT_HOME_DATA_FULL",
+								"dependencyConditions": [
+									"Failed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "OracleSource",
+								"oracleReaderQuery": {
+									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log').output.firstRow.RESULT, ''', p_result => ''E'', p_error_msg => ''', replace(activity('PIP_M_PT_HOME_DATA_FULL').Error.Message, '''','‘'),''') as result from dual')",
+									"type": "Expression"
+								},
+								"partitionOption": "None",
+								"convertDecimalToInteger": false,
+								"queryTimeout": "02:00:00"
+							},
+							"dataset": {
+								"referenceName": "DTS_ORACLE_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceSchema": "1",
+									"SourceTable": "1"
+								}
+							}
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {},
+					"cancelAfter": {}
+				},
+				"folder": {
+					"name": "실행/Daily"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-01-12T11:22:18Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/pipelines/PIP_DM_PT_HOME_DATA_FULL')]",
+				"[concat(variables('factoryId'), '/datasets/DTS_ORACLE_SRC')]"
+			]
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_ADLS_PG_ONLINE_MEMBER_MST')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -72740,6 +72896,50 @@
 								}
 							}
 						]
+					},
+					{
+						"name": "Execute_SP",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "Copy data Next Month",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "Copy data Current Month",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "select cd_mart.func_dm_fm_school_food_frequency();",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							}
+						}
 					}
 				],
 				"policy": {
@@ -72768,7 +72968,8 @@
 			},
 			"dependsOn": [
 				"[concat(variables('factoryId'), '/datasets/DTS_ORACLE_SRC')]",
-				"[concat(variables('factoryId'), '/datasets/DTS_POSTGRESQL_SNK_P02')]"
+				"[concat(variables('factoryId'), '/datasets/DTS_POSTGRESQL_SNK_P02')]",
+				"[concat(variables('factoryId'), '/datasets/DTS_POSTGRESQL_SNK')]"
 			]
 		},
 		{
@@ -115270,162 +115471,6 @@
 			},
 			"dependsOn": [
 				"[concat(variables('factoryId'), '/datasets/DTS_ADLS_SNK_P01')]"
-			]
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PG_MART_IN_CDI_D')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "PIP_M_PT_HOME_DATA_FULL",
-						"type": "ExecutePipeline",
-						"dependsOn": [
-							{
-								"activity": "Input log",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"pipeline": {
-								"referenceName": "PIP_DM_PT_HOME_DATA_FULL",
-								"type": "PipelineReference"
-							},
-							"waitOnCompletion": true,
-							"parameters": {}
-						}
-					},
-					{
-						"name": "Input log",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "select CD_IF.FUNC_CDI_LOG(  'I' , p_pipline => 'PIP_M_PT_HOME_DATA_FULL' ) as result from dual;",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Success log",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_M_PT_HOME_DATA_FULL",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log').output.firstRow.RESULT, ''', p_result => ''S'') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Error log",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_M_PT_HOME_DATA_FULL",
-								"dependencyConditions": [
-									"Failed"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log').output.firstRow.RESULT, ''', p_result => ''E'', p_error_msg => ''', replace(activity('PIP_M_PT_HOME_DATA_FULL').Error.Message, '''','‘'),''') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {},
-					"cancelAfter": {}
-				},
-				"folder": {
-					"name": "실행/Daily"
-				},
-				"annotations": [],
-				"lastPublishTime": "2023-01-12T11:22:18Z"
-			},
-			"dependsOn": [
-				"[concat(variables('factoryId'), '/pipelines/PIP_DM_PT_HOME_DATA_FULL')]",
-				"[concat(variables('factoryId'), '/datasets/DTS_ORACLE_SRC')]"
 			]
 		}
 	]
