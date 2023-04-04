@@ -13,6 +13,298 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_FOODINFO_MARKETSCALE')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "국내식품시장규모",
+				"activities": [
+					{
+						"name": "API REQ_copy1",
+						"description": "각 API 호출",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "RestSource",
+								"httpRequestTimeout": "00:03:00",
+								"requestInterval": "00.00:00:00.010",
+								"requestMethod": "GET",
+								"paginationRules": {
+									"supportRFC5988": "true"
+								}
+							},
+							"sink": {
+								"type": "DelimitedTextSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								},
+								"formatSettings": {
+									"type": "DelimitedTextWriteSettings",
+									"quoteAllText": true,
+									"fileExtension": ".txt"
+								}
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"mappings": [
+									{
+										"source": {
+											"path": "$['fdmsId']"
+										},
+										"sink": {
+											"name": "fdmsId",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "$['fdmsYear']"
+										},
+										"sink": {
+											"name": "fdmsYear",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "$['fdmsSectorCd']"
+										},
+										"sink": {
+											"name": "fdmsSectorCd",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "$['fdmsNumber']"
+										},
+										"sink": {
+											"name": "fdmsNumber",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "$['fdmsRatio']"
+										},
+										"sink": {
+											"name": "fdmsRatio",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "$['fdmsUnit']"
+										},
+										"sink": {
+											"name": "fdmsUnit",
+											"type": "String"
+										}
+									},
+									{
+										"source": {
+											"path": "$['fdmsIndustryGubun']"
+										},
+										"sink": {
+											"name": "fdmsIndustryGubun",
+											"type": "String"
+										}
+									}
+								]
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_API_ATFIS_SCALE_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"ApiKey": {
+										"value": "@pipeline().parameters.ApiKey",
+										"type": "Expression"
+									},
+									"BeginYear": {
+										"value": "@pipeline().parameters.BeginYear",
+										"type": "Expression"
+									},
+									"EndYear": {
+										"value": "@pipeline().parameters.EndYear",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": {
+										"value": "@concat(pipeline().parameters.AdlsDirectoryOri,'/',formatDateTime(addHours(utcNow(), 9), 'yyyy'))",
+										"type": "Expression"
+									},
+									"FileName": {
+										"value": "@concat(pipeline().parameters.FileName,'_',formatDateTime(addHours(utcNow(), 9), 'yyyyMMdd'),'.csv')",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					},
+					{
+						"name": "Ori Copy Data",
+						"description": "cdi-root / Industry / 외부 / 식품산업통계정에 통합본을 저장합니다.",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "API REQ_copy1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"maxConcurrentConnections": 1,
+									"recursive": true,
+									"wildcardFolderPath": {
+										"value": "@concat(pipeline().parameters.AdlsDirectoryOri,'/',formatDateTime(addHours(utcNow(), 9), 'yyyy'))",
+										"type": "Expression"
+									},
+									"wildcardFileName": "*",
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "DelimitedTextSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings",
+									"maxConcurrentConnections": 1,
+									"copyBehavior": "MergeFiles"
+								},
+								"formatSettings": {
+									"type": "DelimitedTextWriteSettings",
+									"quoteAllText": true,
+									"fileExtension": ".txt"
+								}
+							},
+							"enableStaging": false,
+							"parallelCopies": 1,
+							"enableSkipIncompatibleRow": true,
+							"validateDataConsistency": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": {
+										"value": "@pipeline().parameters.AdlsDirectory",
+										"type": "Expression"
+									},
+									"FileName": {
+										"value": "@pipeline().parameters.FileName",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": {
+										"value": "@pipeline().parameters.AdlsDirectory",
+										"type": "Expression"
+									},
+									"FileName": {
+										"value": "@concat(pipeline().parameters.FileName,'_', formatDateTime(addHours(utcNow(), 9), 'yyyy'),'.csv')\n\n",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {},
+					"cancelAfter": {}
+				},
+				"parameters": {
+					"AdlsDirectory": {
+						"type": "string",
+						"defaultValue": "Industry/외부/식품산업통계정보"
+					},
+					"FileName": {
+						"type": "string",
+						"defaultValue": "국내식품시장규모"
+					},
+					"AdlsDirectoryConf": {
+						"type": "string",
+						"defaultValue": "Industry/외부/식품산업통계정보/conf"
+					},
+					"ConfFile": {
+						"type": "string",
+						"defaultValue": "식품산업통계정보_국내식품시장규모_conf"
+					},
+					"ApiKey": {
+						"type": "string",
+						"defaultValue": "jdoqB049MSLEl6kapN6Ox2w2jCv/h57g2tQt4bmGEzk="
+					},
+					"BeginYear": {
+						"type": "string",
+						"defaultValue": "2012"
+					},
+					"EndYear": {
+						"type": "string",
+						"defaultValue": "2021"
+					},
+					"AdlsDirectoryOri": {
+						"type": "string",
+						"defaultValue": "Industry/외부/식품산업통계정보/국내식품시장규모"
+					}
+				},
+				"folder": {
+					"name": "Industry/외부/식품산업통계정보"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-01-20T01:28:18Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_FOODINFO_MARKETSIZE')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -6269,7 +6561,7 @@
 							"source": {
 								"type": "AzurePostgreSqlSource",
 								"query": {
-									"value": "delete from  @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}       \n WHERE  REGEXP_REPLACE(rgstDt, '[^0-9]','','g') BETWEEN '@{variables('strdt')}' AND '@{variables('enddt')}';\n \nselect 1 as success",
+									"value": "delete from  @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}       \n WHERE  REGEXP_REPLACE(rgst_dt, '[^0-9]','','g') BETWEEN '@{variables('strdt')}' AND '@{variables('enddt')}';\n \nselect 1 as success",
 									"type": "Expression"
 								},
 								"partitionOption": "None"
@@ -6384,7 +6676,7 @@
 														"path": "[['bidNtceNo']"
 													},
 													"sink": {
-														"name": "bidntceno",
+														"name": "bid_ntce_no",
 														"type": "String"
 													}
 												},
@@ -6393,7 +6685,7 @@
 														"path": "[['bidNtceOrd']"
 													},
 													"sink": {
-														"name": "bidntceord",
+														"name": "bid_ntce_ord",
 														"type": "String"
 													}
 												},
@@ -6402,7 +6694,7 @@
 														"path": "[['reNtceYn']"
 													},
 													"sink": {
-														"name": "rentceyn",
+														"name": "re_ntce_yn",
 														"type": "String"
 													}
 												},
@@ -6411,7 +6703,7 @@
 														"path": "[['rgstTyNm']"
 													},
 													"sink": {
-														"name": "rgsttynm",
+														"name": "rgst_ty_nm",
 														"type": "String"
 													}
 												},
@@ -6420,7 +6712,7 @@
 														"path": "[['ntceKindNm']"
 													},
 													"sink": {
-														"name": "ntcekindnm",
+														"name": "ntce_kind_nm",
 														"type": "String"
 													}
 												},
@@ -6429,7 +6721,7 @@
 														"path": "[['intrbidYn']"
 													},
 													"sink": {
-														"name": "intrbidyn",
+														"name": "intrbid_yn",
 														"type": "String"
 													}
 												},
@@ -6438,7 +6730,7 @@
 														"path": "[['bidNtceDt']"
 													},
 													"sink": {
-														"name": "bidntcedt",
+														"name": "bid_ntce_dt",
 														"type": "String"
 													}
 												},
@@ -6447,7 +6739,7 @@
 														"path": "[['refNo']"
 													},
 													"sink": {
-														"name": "refno",
+														"name": "ref_no",
 														"type": "String"
 													}
 												},
@@ -6456,7 +6748,7 @@
 														"path": "[['bidNtceNm']"
 													},
 													"sink": {
-														"name": "bidntcenm",
+														"name": "bid_ntce_nm",
 														"type": "String"
 													}
 												},
@@ -6465,7 +6757,7 @@
 														"path": "[['ntceInsttCd']"
 													},
 													"sink": {
-														"name": "ntceinsttcd",
+														"name": "ntce_instt_cd",
 														"type": "String"
 													}
 												},
@@ -6474,7 +6766,7 @@
 														"path": "[['ntceInsttNm']"
 													},
 													"sink": {
-														"name": "ntceinsttnm",
+														"name": "ntce_instt_nm",
 														"type": "String"
 													}
 												},
@@ -6483,7 +6775,7 @@
 														"path": "[['dminsttCd']"
 													},
 													"sink": {
-														"name": "dminsttcd",
+														"name": "dminstt_cd",
 														"type": "String"
 													}
 												},
@@ -6492,7 +6784,7 @@
 														"path": "[['dminsttNm']"
 													},
 													"sink": {
-														"name": "dminsttnm",
+														"name": "dminstt_nm",
 														"type": "String"
 													}
 												},
@@ -6501,7 +6793,7 @@
 														"path": "[['bidMethdNm']"
 													},
 													"sink": {
-														"name": "bidmethdnm",
+														"name": "bid_methd_nm",
 														"type": "String"
 													}
 												},
@@ -6510,7 +6802,7 @@
 														"path": "[['cntrctCnclsMthdNm']"
 													},
 													"sink": {
-														"name": "cntrctcnclsmthdnm",
+														"name": "cntrct_cncls_mthd_nm",
 														"type": "String"
 													}
 												},
@@ -6519,7 +6811,7 @@
 														"path": "[['ntceInsttOfclNm']"
 													},
 													"sink": {
-														"name": "ntceinsttofclnm",
+														"name": "ntce_instt_ofcl_nm",
 														"type": "String"
 													}
 												},
@@ -6528,7 +6820,7 @@
 														"path": "[['ntceInsttOfclTelNo']"
 													},
 													"sink": {
-														"name": "ntceinsttofcltelno",
+														"name": "ntce_instt_ofcl_tel_no",
 														"type": "String"
 													}
 												},
@@ -6537,7 +6829,7 @@
 														"path": "[['ntceInsttOfclEmailAdrs']"
 													},
 													"sink": {
-														"name": "ntceinsttofclemailadrs",
+														"name": "ntce_instt_ofcl_email_adrs",
 														"type": "String"
 													}
 												},
@@ -6546,7 +6838,7 @@
 														"path": "[['exctvNm']"
 													},
 													"sink": {
-														"name": "exctvnm",
+														"name": "exctv_nm",
 														"type": "String"
 													}
 												},
@@ -6555,7 +6847,7 @@
 														"path": "[['bidQlfctRgstDt']"
 													},
 													"sink": {
-														"name": "bidqlfctrgstdt",
+														"name": "bid_qlfct_rgst_dt",
 														"type": "String"
 													}
 												},
@@ -6564,7 +6856,7 @@
 														"path": "[['cmmnSpldmdAgrmntRcptdocMethd']"
 													},
 													"sink": {
-														"name": "cmmnspldmdagrmntrcptdocmethd",
+														"name": "cmmn_spldmd_agrmnt_rcptdoc_methd",
 														"type": "String"
 													}
 												},
@@ -6573,7 +6865,7 @@
 														"path": "[['cmmnSpldmdAgrmntClseDt']"
 													},
 													"sink": {
-														"name": "cmmnspldmdagrmntclsedt",
+														"name": "cmmn_spldmd_agrmnt_clse_dt",
 														"type": "String"
 													}
 												},
@@ -6582,7 +6874,7 @@
 														"path": "[['cmmnSpldmdCorpRgnLmtYn']"
 													},
 													"sink": {
-														"name": "cmmnspldmdcorprgnlmtyn",
+														"name": "cmmn_spldmd_corp_rgn_lmt_yn",
 														"type": "String"
 													}
 												},
@@ -6591,7 +6883,7 @@
 														"path": "[['bidBeginDt']"
 													},
 													"sink": {
-														"name": "bidbegindt",
+														"name": "bid_begin_dt",
 														"type": "String"
 													}
 												},
@@ -6600,7 +6892,7 @@
 														"path": "[['bidClseDt']"
 													},
 													"sink": {
-														"name": "bidclsedt",
+														"name": "bid_clse_dt",
 														"type": "String"
 													}
 												},
@@ -6609,7 +6901,7 @@
 														"path": "[['opengDt']"
 													},
 													"sink": {
-														"name": "opengdt",
+														"name": "openg_dt",
 														"type": "String"
 													}
 												},
@@ -6618,7 +6910,7 @@
 														"path": "[['ntceSpecDocUrl1']"
 													},
 													"sink": {
-														"name": "ntcespecdocurl1",
+														"name": "ntce_spec_doc_url1",
 														"type": "String"
 													}
 												},
@@ -6627,7 +6919,7 @@
 														"path": "[['ntceSpecDocUrl2']"
 													},
 													"sink": {
-														"name": "ntcespecdocurl2",
+														"name": "ntce_spec_doc_url2",
 														"type": "String"
 													}
 												},
@@ -6636,7 +6928,7 @@
 														"path": "[['ntceSpecDocUrl3']"
 													},
 													"sink": {
-														"name": "ntcespecdocurl3",
+														"name": "ntce_spec_doc_url3",
 														"type": "String"
 													}
 												},
@@ -6645,7 +6937,7 @@
 														"path": "[['ntceSpecDocUrl4']"
 													},
 													"sink": {
-														"name": "ntcespecdocurl4",
+														"name": "ntce_spec_doc_url4",
 														"type": "String"
 													}
 												},
@@ -6654,7 +6946,7 @@
 														"path": "[['ntceSpecDocUrl5']"
 													},
 													"sink": {
-														"name": "ntcespecdocurl5",
+														"name": "ntce_spec_doc_url5",
 														"type": "String"
 													}
 												},
@@ -6663,7 +6955,7 @@
 														"path": "[['ntceSpecDocUrl6']"
 													},
 													"sink": {
-														"name": "ntcespecdocurl6",
+														"name": "ntce_spec_doc_url6",
 														"type": "String"
 													}
 												},
@@ -6672,7 +6964,7 @@
 														"path": "[['ntceSpecDocUrl7']"
 													},
 													"sink": {
-														"name": "ntcespecdocurl7",
+														"name": "ntce_spec_doc_url7",
 														"type": "String"
 													}
 												},
@@ -6681,7 +6973,7 @@
 														"path": "[['ntceSpecDocUrl8']"
 													},
 													"sink": {
-														"name": "ntcespecdocurl8",
+														"name": "ntce_spec_doc_url8",
 														"type": "String"
 													}
 												},
@@ -6690,7 +6982,7 @@
 														"path": "[['ntceSpecDocUrl9']"
 													},
 													"sink": {
-														"name": "ntcespecdocurl9",
+														"name": "ntce_spec_doc_url9",
 														"type": "String"
 													}
 												},
@@ -6699,7 +6991,7 @@
 														"path": "[['ntceSpecDocUrl10']"
 													},
 													"sink": {
-														"name": "ntcespecdocurl10",
+														"name": "ntce_spec_doc_url10",
 														"type": "String"
 													}
 												},
@@ -6708,7 +7000,7 @@
 														"path": "[['ntceSpecFileNm1']"
 													},
 													"sink": {
-														"name": "ntcespecfilenm1",
+														"name": "ntce_spec_file_nm1",
 														"type": "String"
 													}
 												},
@@ -6717,7 +7009,7 @@
 														"path": "[['ntceSpecFileNm2']"
 													},
 													"sink": {
-														"name": "ntcespecfilenm2",
+														"name": "ntce_spec_file_nm2",
 														"type": "String"
 													}
 												},
@@ -6726,7 +7018,7 @@
 														"path": "[['ntceSpecFileNm3']"
 													},
 													"sink": {
-														"name": "ntcespecfilenm3",
+														"name": "ntce_spec_file_nm3",
 														"type": "String"
 													}
 												},
@@ -6735,7 +7027,7 @@
 														"path": "[['ntceSpecFileNm4']"
 													},
 													"sink": {
-														"name": "ntcespecfilenm4",
+														"name": "ntce_spec_file_nm4",
 														"type": "String"
 													}
 												},
@@ -6744,7 +7036,7 @@
 														"path": "[['ntceSpecFileNm5']"
 													},
 													"sink": {
-														"name": "ntcespecfilenm5",
+														"name": "ntce_spec_file_nm5",
 														"type": "String"
 													}
 												},
@@ -6753,7 +7045,7 @@
 														"path": "[['ntceSpecFileNm6']"
 													},
 													"sink": {
-														"name": "ntcespecfilenm6",
+														"name": "ntce_spec_file_nm6",
 														"type": "String"
 													}
 												},
@@ -6762,7 +7054,7 @@
 														"path": "[['ntceSpecFileNm7']"
 													},
 													"sink": {
-														"name": "ntcespecfilenm7",
+														"name": "ntce_spec_file_nm7",
 														"type": "String"
 													}
 												},
@@ -6771,7 +7063,7 @@
 														"path": "[['ntceSpecFileNm8']"
 													},
 													"sink": {
-														"name": "ntcespecfilenm8",
+														"name": "ntce_spec_file_nm8",
 														"type": "String"
 													}
 												},
@@ -6780,7 +7072,7 @@
 														"path": "[['ntceSpecFileNm9']"
 													},
 													"sink": {
-														"name": "ntcespecfilenm9",
+														"name": "ntce_spec_file_nm9",
 														"type": "String"
 													}
 												},
@@ -6789,7 +7081,7 @@
 														"path": "[['ntceSpecFileNm10']"
 													},
 													"sink": {
-														"name": "ntcespecfilenm10",
+														"name": "ntce_spec_file_nm10",
 														"type": "String"
 													}
 												},
@@ -6798,7 +7090,7 @@
 														"path": "[['rbidPermsnYn']"
 													},
 													"sink": {
-														"name": "rbidpermsnyn",
+														"name": "rbid_permsn_yn",
 														"type": "String"
 													}
 												},
@@ -6807,7 +7099,7 @@
 														"path": "[['prdctClsfcLmtYn']"
 													},
 													"sink": {
-														"name": "prdctclsfclmtyn",
+														"name": "prdct_clsfc_lmt_yn",
 														"type": "String"
 													}
 												},
@@ -6816,7 +7108,7 @@
 														"path": "[['mnfctYn']"
 													},
 													"sink": {
-														"name": "mnfctyn",
+														"name": "mnfct_yn",
 														"type": "String"
 													}
 												},
@@ -6825,7 +7117,7 @@
 														"path": "[['prearngPrceDcsnMthdNm']"
 													},
 													"sink": {
-														"name": "prearngprcedcsnmthdnm",
+														"name": "prearng_prce_dcsn_mthd_nm",
 														"type": "String"
 													}
 												},
@@ -6834,7 +7126,7 @@
 														"path": "[['totPrdprcNum']"
 													},
 													"sink": {
-														"name": "totprdprcnum",
+														"name": "tot_prdprc_num",
 														"type": "String"
 													}
 												},
@@ -6843,7 +7135,7 @@
 														"path": "[['drwtPrdprcNum']"
 													},
 													"sink": {
-														"name": "drwtprdprcnum",
+														"name": "drwt_prdprc_num",
 														"type": "String"
 													}
 												},
@@ -6852,7 +7144,7 @@
 														"path": "[['asignBdgtAmt']"
 													},
 													"sink": {
-														"name": "asignbdgtamt",
+														"name": "asign_bdgt_amt",
 														"type": "String"
 													}
 												},
@@ -6861,7 +7153,7 @@
 														"path": "[['presmptPrce']"
 													},
 													"sink": {
-														"name": "presmptprce",
+														"name": "presmpt_prce",
 														"type": "String"
 													}
 												},
@@ -6870,7 +7162,7 @@
 														"path": "[['opengPlce']"
 													},
 													"sink": {
-														"name": "opengplce",
+														"name": "openg_plce",
 														"type": "String"
 													}
 												},
@@ -6879,7 +7171,7 @@
 														"path": "[['bidNtceDtlUrl']"
 													},
 													"sink": {
-														"name": "bidntcedtlurl",
+														"name": "bid_ntce_dtl_url",
 														"type": "String"
 													}
 												},
@@ -6888,7 +7180,7 @@
 														"path": "[['bidNtceUrl']"
 													},
 													"sink": {
-														"name": "bidntceurl",
+														"name": "bid_ntce_url",
 														"type": "String"
 													}
 												},
@@ -6897,7 +7189,7 @@
 														"path": "[['bidPrtcptFeePaymntYn']"
 													},
 													"sink": {
-														"name": "bidprtcptfeepaymntyn",
+														"name": "bid_prtcpt_fee_paymnt_yn",
 														"type": "String"
 													}
 												},
@@ -6906,7 +7198,7 @@
 														"path": "[['bidPrtcptFee']"
 													},
 													"sink": {
-														"name": "bidprtcptfee",
+														"name": "bid_prtcpt_fee",
 														"type": "String"
 													}
 												},
@@ -6915,7 +7207,7 @@
 														"path": "[['bidGrntymnyPaymntYn']"
 													},
 													"sink": {
-														"name": "bidgrntymnypaymntyn",
+														"name": "bid_grntymny_paymnt_yn",
 														"type": "String"
 													}
 												},
@@ -6924,7 +7216,7 @@
 														"path": "[['crdtrNm']"
 													},
 													"sink": {
-														"name": "crdtrnm",
+														"name": "crdtr_nm",
 														"type": "String"
 													}
 												},
@@ -6933,7 +7225,7 @@
 														"path": "[['dtilPrdctClsfcNo']"
 													},
 													"sink": {
-														"name": "dtilprdctclsfcno",
+														"name": "dtil_prdct_clsfc_no",
 														"type": "String"
 													}
 												},
@@ -6942,7 +7234,7 @@
 														"path": "[['dtilPrdctClsfcNoNm']"
 													},
 													"sink": {
-														"name": "dtilprdctclsfcnonm",
+														"name": "dtil_prdct_clsfc_no_nm",
 														"type": "String"
 													}
 												},
@@ -6951,7 +7243,7 @@
 														"path": "[['prdctSpecNm']"
 													},
 													"sink": {
-														"name": "prdctspecnm",
+														"name": "prdct_spec_nm",
 														"type": "String"
 													}
 												},
@@ -6960,7 +7252,7 @@
 														"path": "[['prdctQty']"
 													},
 													"sink": {
-														"name": "prdctqty",
+														"name": "prdct_qty",
 														"type": "String"
 													}
 												},
@@ -6969,7 +7261,7 @@
 														"path": "[['prdctUnit']"
 													},
 													"sink": {
-														"name": "prdctunit",
+														"name": "prdct_unit",
 														"type": "String"
 													}
 												},
@@ -6978,7 +7270,7 @@
 														"path": "[['prdctUprc']"
 													},
 													"sink": {
-														"name": "prdctuprc",
+														"name": "prdct_uprc",
 														"type": "String"
 													}
 												},
@@ -6987,7 +7279,7 @@
 														"path": "[['dlvrTmlmtDt']"
 													},
 													"sink": {
-														"name": "dlvrtmlmtdt",
+														"name": "dlvr_tmlmt_dt",
 														"type": "String"
 													}
 												},
@@ -6996,7 +7288,7 @@
 														"path": "[['dlvrDaynum']"
 													},
 													"sink": {
-														"name": "dlvrdaynum",
+														"name": "dlvr_daynum",
 														"type": "String"
 													}
 												},
@@ -7005,7 +7297,7 @@
 														"path": "[['dlvryCndtnNm']"
 													},
 													"sink": {
-														"name": "dlvrycndtnnm",
+														"name": "dlvry_cndtn_nm",
 														"type": "String"
 													}
 												},
@@ -7014,7 +7306,7 @@
 														"path": "[['purchsObjPrdctList']"
 													},
 													"sink": {
-														"name": "purchsobjprdctlist",
+														"name": "purchs_obj_prdct_list",
 														"type": "String"
 													}
 												},
@@ -7023,7 +7315,7 @@
 														"path": "[['untyNtceNo']"
 													},
 													"sink": {
-														"name": "untyntceno",
+														"name": "unty_ntce_no",
 														"type": "String"
 													}
 												},
@@ -7032,7 +7324,7 @@
 														"path": "[['cmmnSpldmdMethdCd']"
 													},
 													"sink": {
-														"name": "cmmnspldmdmethdcd",
+														"name": "cmmn_spldmd_methd_cd",
 														"type": "String"
 													}
 												},
@@ -7041,7 +7333,7 @@
 														"path": "[['cmmnSpldmdMethdNm']"
 													},
 													"sink": {
-														"name": "cmmnspldmdmethdnm",
+														"name": "cmmn_spldmd_methd_nm",
 														"type": "String"
 													}
 												},
@@ -7050,7 +7342,7 @@
 														"path": "[['stdNtceDocUrl']"
 													},
 													"sink": {
-														"name": "stdntcedocurl",
+														"name": "std_ntce_doc_url",
 														"type": "String"
 													}
 												},
@@ -7059,7 +7351,7 @@
 														"path": "[['brffcBidprcPermsnYn']"
 													},
 													"sink": {
-														"name": "brffcbidprcpermsnyn",
+														"name": "brffc_bidprc_permsn_yn",
 														"type": "String"
 													}
 												},
@@ -7068,7 +7360,7 @@
 														"path": "[['dsgntCmptYn']"
 													},
 													"sink": {
-														"name": "dsgntcmptyn",
+														"name": "dsgnt_cmpt_yn",
 														"type": "String"
 													}
 												},
@@ -7077,7 +7369,7 @@
 														"path": "[['rsrvtnPrceReMkngMthdNm']"
 													},
 													"sink": {
-														"name": "rsrvtnprceremkngmthdnm",
+														"name": "rsrvtn_prce_re_mkng_mthd_nm",
 														"type": "String"
 													}
 												},
@@ -7086,7 +7378,7 @@
 														"path": "[['arsltApplDocRcptMthdNm']"
 													},
 													"sink": {
-														"name": "arsltappldocrcptmthdnm",
+														"name": "arslt_appl_doc_rcpt_mthd_nm",
 														"type": "String"
 													}
 												},
@@ -7095,7 +7387,7 @@
 														"path": "[['arsltApplDocRcptDt']"
 													},
 													"sink": {
-														"name": "arsltappldocrcptdt",
+														"name": "arslt_appl_doc_rcpt_dt",
 														"type": "String"
 													}
 												},
@@ -7104,7 +7396,7 @@
 														"path": "[['orderPlanUntyNo']"
 													},
 													"sink": {
-														"name": "orderplanuntyno",
+														"name": "order_plan_unty_no",
 														"type": "String"
 													}
 												},
@@ -7113,7 +7405,7 @@
 														"path": "[['sucsfbidLwltRate']"
 													},
 													"sink": {
-														"name": "sucsfbidlwltrate",
+														"name": "sucsfbid_lwlt_rate",
 														"type": "String"
 													}
 												},
@@ -7122,7 +7414,7 @@
 														"path": "[['rgstDt']"
 													},
 													"sink": {
-														"name": "rgstdt",
+														"name": "rgst_dt",
 														"type": "String"
 													}
 												},
@@ -7131,7 +7423,7 @@
 														"path": "[['bfSpecRgstNo']"
 													},
 													"sink": {
-														"name": "bfspecrgstno",
+														"name": "bf_spec_rgst_no",
 														"type": "String"
 													}
 												},
@@ -7140,7 +7432,7 @@
 														"path": "[['infoBizYn']"
 													},
 													"sink": {
-														"name": "infobizyn",
+														"name": "info_biz_yn",
 														"type": "String"
 													}
 												},
@@ -7149,7 +7441,7 @@
 														"path": "[['sucsfbidMthdCd']"
 													},
 													"sink": {
-														"name": "sucsfbidmthdcd",
+														"name": "sucsfbid_mthd_cd",
 														"type": "String"
 													}
 												},
@@ -7158,7 +7450,7 @@
 														"path": "[['sucsfbidMthdNm']"
 													},
 													"sink": {
-														"name": "sucsfbidmthdnm",
+														"name": "sucsfbid_mthd_nm",
 														"type": "String"
 													}
 												},
@@ -7167,7 +7459,7 @@
 														"path": "[['chgDt']"
 													},
 													"sink": {
-														"name": "chgdt",
+														"name": "chg_dt",
 														"type": "String"
 													}
 												},
@@ -7176,7 +7468,7 @@
 														"path": "[['linkInsttNm']"
 													},
 													"sink": {
-														"name": "linkinsttnm",
+														"name": "link_instt_nm",
 														"type": "String"
 													}
 												},
@@ -7185,7 +7477,7 @@
 														"path": "[['dminsttOfclEmailAdrs']"
 													},
 													"sink": {
-														"name": "dminsttofclemailadrs",
+														"name": "dminstt_ofcl_email_adrs",
 														"type": "String"
 													}
 												},
@@ -7194,7 +7486,7 @@
 														"path": "[['indstrytyLmtYn']"
 													},
 													"sink": {
-														"name": "indstrytylmtyn",
+														"name": "indstryty_lmt_yn",
 														"type": "String"
 													}
 												},
@@ -7203,7 +7495,7 @@
 														"path": "[['d2bMngDcmtgOprtnDt']"
 													},
 													"sink": {
-														"name": "d2bmngdcmtgoprtndt",
+														"name": "d2b_mng_dcmtg_oprtn_dt",
 														"type": "String"
 													}
 												},
@@ -7212,7 +7504,7 @@
 														"path": "[['d2bMngDcmtgOprtnPlce']"
 													},
 													"sink": {
-														"name": "d2bmngdcmtgoprtnplce",
+														"name": "d2b_mng_dcmtg_oprtn_plce",
 														"type": "String"
 													}
 												},
@@ -7221,7 +7513,7 @@
 														"path": "[['d2bMngRgnLmtYn']"
 													},
 													"sink": {
-														"name": "d2bmngrgnlmtyn",
+														"name": "d2b_mng_rgn_lmt_yn",
 														"type": "String"
 													}
 												},
@@ -7230,7 +7522,7 @@
 														"path": "[['d2bMngPblctPlceNm']"
 													},
 													"sink": {
-														"name": "d2bmngpblctplcenm",
+														"name": "d2b_mng_pblct_plce_nm",
 														"type": "String"
 													}
 												},
@@ -7239,7 +7531,7 @@
 														"path": "[['d2bMngCntrctKindNm']"
 													},
 													"sink": {
-														"name": "d2bmngcntrctkindnm",
+														"name": "d2b_mng_cntrct_kind_nm",
 														"type": "String"
 													}
 												},
@@ -7248,7 +7540,7 @@
 														"path": "[['d2bMngCntrybndDedtBgnDate']"
 													},
 													"sink": {
-														"name": "d2bmngcntrybnddedtbgndate",
+														"name": "d2b_mng_cntrybnd_dedt_bgn_date",
 														"type": "String"
 													}
 												},
@@ -7257,7 +7549,7 @@
 														"path": "[['d2bMngCntrybndDedtEndDate']"
 													},
 													"sink": {
-														"name": "d2bmngcntrybnddedtenddate",
+														"name": "d2b_mng_cntrybnd_dedt_end_date",
 														"type": "String"
 													}
 												},
@@ -7266,7 +7558,7 @@
 														"path": "[['d2bMngRsrvtnPrceBssOpenYn']"
 													},
 													"sink": {
-														"name": "d2bmngrsrvtnprcebssopenyn",
+														"name": "d2b_mng_rsrvtn_prce_bss_open_yn",
 														"type": "String"
 													}
 												},
@@ -7275,7 +7567,7 @@
 														"path": "[['d2bMngRrsrvtnPrceBssAplYn']"
 													},
 													"sink": {
-														"name": "d2bmngrrsrvtnprcebssaplyn",
+														"name": "d2b_mng_rrsrvtn_prce_bss_apl_yn",
 														"type": "String"
 													}
 												},
@@ -7284,7 +7576,7 @@
 														"path": "[['d2bMngBssamt']"
 													},
 													"sink": {
-														"name": "d2bmngbssamt",
+														"name": "d2b_mng_bssamt",
 														"type": "String"
 													}
 												},
@@ -7293,7 +7585,7 @@
 														"path": "[['d2bMngRgstEvalExmpYn']"
 													},
 													"sink": {
-														"name": "d2bmngrgstevalexmpyn",
+														"name": "d2b_mng_rgst_eval_exmp_yn",
 														"type": "String"
 													}
 												},
@@ -7302,7 +7594,7 @@
 														"path": "[['d2bMngCompCorpRsrchObjYn']"
 													},
 													"sink": {
-														"name": "d2bmngcompcorprsrchobjyn",
+														"name": "d2b_mng_comp_corp_rsrch_obj_yn",
 														"type": "String"
 													}
 												},
@@ -7311,7 +7603,7 @@
 														"path": "[['d2bMngOrgnlbdgtDedtBgnDate']"
 													},
 													"sink": {
-														"name": "d2bmngorgnlbdgtdedtbgndate",
+														"name": "d2b_mng_orgnlbdgt_dedt_bgn_date",
 														"type": "String"
 													}
 												},
@@ -7320,7 +7612,7 @@
 														"path": "[['d2bMngOrgnlbdgtDedtEndDate']"
 													},
 													"sink": {
-														"name": "d2bmngorgnlbdgtdedtenddate",
+														"name": "d2b_mng_orgnlbdgt_dedt_end_date",
 														"type": "String"
 													}
 												},
@@ -7329,7 +7621,7 @@
 														"path": "[['d2bMngAssmntUplmtRt']"
 													},
 													"sink": {
-														"name": "d2bmngassmntuplmtrt",
+														"name": "d2b_mng_assmnt_uplmt_rt",
 														"type": "String"
 													}
 												},
@@ -7338,7 +7630,7 @@
 														"path": "[['d2bMngAssmntLwstlmtRt']"
 													},
 													"sink": {
-														"name": "d2bmngassmntlwstlmtrt",
+														"name": "d2b_mng_assmnt_lwstlmt_rt",
 														"type": "String"
 													}
 												},
@@ -7347,7 +7639,7 @@
 														"path": "[['d2bMngStdIndstryClsfcCdList']"
 													},
 													"sink": {
-														"name": "d2bmngstdindstryclsfccdlist",
+														"name": "d2b_mng_std_indstry_clsfc_cd_list",
 														"type": "String"
 													}
 												},
@@ -7356,7 +7648,7 @@
 														"path": "[['d2bMngPrdctnAbltySbmsnClseDt']"
 													},
 													"sink": {
-														"name": "d2bmngprdctnabltysbmsnclsedt",
+														"name": "d2b_mng_prdctn_ablty_sbmsn_clse_dt",
 														"type": "String"
 													}
 												},
@@ -7365,7 +7657,7 @@
 														"path": "[['d2bMngProgrsSttusNm']"
 													},
 													"sink": {
-														"name": "d2bmngprogrssttusnm",
+														"name": "d2b_mng_progrs_sttus_nm",
 														"type": "String"
 													}
 												},
@@ -7374,7 +7666,7 @@
 														"path": "[['d2bMngExetTyNm']"
 													},
 													"sink": {
-														"name": "d2bmngexettynm",
+														"name": "d2b_mng_exet_ty_nm",
 														"type": "String"
 													}
 												},
@@ -7383,7 +7675,7 @@
 														"path": "[['d2bMngExetTyCd']"
 													},
 													"sink": {
-														"name": "d2bmngexettycd",
+														"name": "d2b_mng_exet_ty_cd",
 														"type": "String"
 													}
 												},
@@ -7392,7 +7684,7 @@
 														"path": "[['d2bMngPrdlstCd']"
 													},
 													"sink": {
-														"name": "d2bmngprdlstcd",
+														"name": "d2b_mng_prdlst_cd",
 														"type": "String"
 													}
 												},
@@ -7401,7 +7693,7 @@
 														"path": "[['d2bMngItemNo']"
 													},
 													"sink": {
-														"name": "d2bmngitemno",
+														"name": "d2b_mng_item_no",
 														"type": "String"
 													}
 												},
@@ -7410,7 +7702,7 @@
 														"path": "[['d2bMngNgttnStleNm']"
 													},
 													"sink": {
-														"name": "d2bmngngttnstlenm",
+														"name": "d2b_mng_ngttn_stle_nm",
 														"type": "String"
 													}
 												},
@@ -7419,7 +7711,7 @@
 														"path": "[['d2bMngNgttnPlanDate']"
 													},
 													"sink": {
-														"name": "d2bmngngttnplandate",
+														"name": "d2b_mng_ngttn_plan_date",
 														"type": "String"
 													}
 												},
@@ -7428,7 +7720,7 @@
 														"path": "[['d2bMngDmndYear']"
 													},
 													"sink": {
-														"name": "d2bmngdmndyear",
+														"name": "d2b_mng_dmnd_year",
 														"type": "String"
 													}
 												},
@@ -7437,7 +7729,7 @@
 														"path": "[['d2bMngDcsnNo']"
 													},
 													"sink": {
-														"name": "d2bmngdcsnno",
+														"name": "d2b_mng_dcsn_no",
 														"type": "String"
 													}
 												},
@@ -7446,7 +7738,7 @@
 														"path": "[['chgNtceRsn']"
 													},
 													"sink": {
-														"name": "chgntcersn",
+														"name": "chg_ntce_rsn",
 														"type": "String"
 													}
 												},
@@ -7455,7 +7747,7 @@
 														"path": "[['rbidOpengDt']"
 													},
 													"sink": {
-														"name": "rbidopengdt",
+														"name": "rbid_openg_dt",
 														"type": "String"
 													}
 												},
@@ -7627,7 +7919,7 @@
 							"source": {
 								"type": "AzurePostgreSqlSource",
 								"query": {
-									"value": "delete from  @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}       \n WHERE  REGEXP_REPLACE(ntceNticeDt, '[^0-9]','','g') BETWEEN '@{variables('strdt')}' AND '@{variables('enddt')}';\n \nselect 1 as success",
+									"value": "delete from  @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}       \n WHERE  REGEXP_REPLACE(ntce_ntice_dt, '[^0-9]','','g') BETWEEN '@{variables('strdt')}' AND '@{variables('enddt')}';\n \nselect 1 as success",
 									"type": "Expression"
 								},
 								"partitionOption": "None"
@@ -7742,7 +8034,7 @@
 														"path": "[['bidNtceNo']"
 													},
 													"sink": {
-														"name": "bidntceno",
+														"name": "bid_ntce_no",
 														"type": "String"
 													}
 												},
@@ -7751,7 +8043,7 @@
 														"path": "[['bidNtceOrd']"
 													},
 													"sink": {
-														"name": "bidntceord",
+														"name": "bid_ntce_ord",
 														"type": "String"
 													}
 												},
@@ -7760,7 +8052,7 @@
 														"path": "[['bidClsfcNo']"
 													},
 													"sink": {
-														"name": "bidclsfcno",
+														"name": "bid_clsfc_no",
 														"type": "String"
 													}
 												},
@@ -7769,7 +8061,7 @@
 														"path": "[['prdctSno']"
 													},
 													"sink": {
-														"name": "prdctsno",
+														"name": "prdct_sno",
 														"type": "String"
 													}
 												},
@@ -7778,7 +8070,7 @@
 														"path": "[['dminsttCd']"
 													},
 													"sink": {
-														"name": "dminsttcd",
+														"name": "dminstt_cd",
 														"type": "String"
 													}
 												},
@@ -7787,7 +8079,7 @@
 														"path": "[['dminsttNm']"
 													},
 													"sink": {
-														"name": "dminsttnm",
+														"name": "dminstt_nm",
 														"type": "String"
 													}
 												},
@@ -7796,7 +8088,7 @@
 														"path": "[['prdctClsfcNo']"
 													},
 													"sink": {
-														"name": "prdctclsfcno",
+														"name": "prdct_clsfc_no",
 														"type": "String"
 													}
 												},
@@ -7805,7 +8097,7 @@
 														"path": "[['prdctClsfcNoNm']"
 													},
 													"sink": {
-														"name": "prdctclsfcnonm",
+														"name": "prdct_clsfc_no_nm",
 														"type": "String"
 													}
 												},
@@ -7814,7 +8106,7 @@
 														"path": "[['dtilPrdctClsfcNo']"
 													},
 													"sink": {
-														"name": "dtilprdctclsfcno",
+														"name": "dtil_prdct_clsfc_no",
 														"type": "String"
 													}
 												},
@@ -7823,7 +8115,7 @@
 														"path": "[['dtilPrdctClsfcNoNm']"
 													},
 													"sink": {
-														"name": "dtilprdctclsfcnonm",
+														"name": "dtil_prdct_clsfc_no_nm",
 														"type": "String"
 													}
 												},
@@ -7832,7 +8124,7 @@
 														"path": "[['prdctSpecNm']"
 													},
 													"sink": {
-														"name": "prdctspecnm",
+														"name": "prdct_spec_nm",
 														"type": "String"
 													}
 												},
@@ -7868,7 +8160,7 @@
 														"path": "[['dlvrTmlmtDt']"
 													},
 													"sink": {
-														"name": "dlvrtmlmtdt",
+														"name": "dlvr_tmlmt_dt",
 														"type": "String"
 													}
 												},
@@ -7877,7 +8169,7 @@
 														"path": "[['dlvrDaynum']"
 													},
 													"sink": {
-														"name": "dlvrdaynum",
+														"name": "dlvr_daynum",
 														"type": "String"
 													}
 												},
@@ -7886,7 +8178,7 @@
 														"path": "[['dlvrPlce']"
 													},
 													"sink": {
-														"name": "dlvrplce",
+														"name": "dlvr_plce",
 														"type": "String"
 													}
 												},
@@ -7895,7 +8187,7 @@
 														"path": "[['dlvryCndtnNm']"
 													},
 													"sink": {
-														"name": "dlvrycndtnnm",
+														"name": "dlvry_cndtn_nm",
 														"type": "String"
 													}
 												},
@@ -7904,7 +8196,7 @@
 														"path": "[['ntceNticeDt']"
 													},
 													"sink": {
-														"name": "ntcenticedt",
+														"name": "ntce_ntice_dt",
 														"type": "String"
 													}
 												}
@@ -9889,148 +10181,32 @@
 			"dependsOn": []
 		},
 		{
-			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_MAS_SHOPPING_DELYVERY_DETAIL')]",
+			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_MAS_SHOPPING_DELYVERY_DETAIL_SUB')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
 			"properties": {
-				"description": "수요기관정보조회",
 				"activities": [
 					{
-						"name": "set strdt",
-						"description": "당일자",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "strdt",
-							"value": {
-								"value": "@if(equals(pipeline().parameters.pipstrdt,null),'20230101',pipeline().parameters.pipstrdt)",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "set enddt",
-						"description": "당일자",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "enddt",
-							"value": {
-								"value": "@if(equals(pipeline().parameters.pipenddt,null),'20230131',pipeline().parameters.pipenddt)",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "delete table",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "set strdt",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							},
-							{
-								"activity": "set enddt",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "delete from  @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}       \n WHERE  REGEXP_REPLACE(dlvr_req_rcpt_date, '[^0-9]','','g') BETWEEN '@{variables('strdt')}' AND '@{variables('enddt')}';\n \nselect 1 as success",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "get page",
-						"description": "대표 제품의 생성 기간동안 토탈 건수 ",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "delete table",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "JsonSource",
-								"storeSettings": {
-									"type": "HttpReadSettings",
-									"requestMethod": "GET"
-								},
-								"formatSettings": {
-									"type": "JsonReadSettings"
-								}
-							},
-							"dataset": {
-								"referenceName": "DTS_PPS_API_JSON",
-								"type": "DatasetReference",
-								"parameters": {
-									"params": {
-										"value": "@concat('/1230000/ShoppingMallPrdctInfoService06/',pipeline().parameters.service,'?type=json&inqryDiv=1&pageNo=1&numOfRows=1&inqryBgnDate=',variables('strdt'),'&inqryEndDate=',variables('enddt'),'&ServiceKey=',pipeline().parameters.Apikey)",
-										"type": "Expression"
-									}
-								}
-							}
-						}
-					},
-					{
-						"name": "ForEach1",
+						"name": "ForEach Copy data",
 						"type": "ForEach",
 						"dependsOn": [
 							{
-								"activity": "get page",
+								"activity": "Lookup1",
 								"dependencyConditions": [
-									"Succeeded"
+									"Completed"
 								]
 							}
 						],
 						"userProperties": [],
 						"typeProperties": {
 							"items": {
-								"value": "@range(1  \n      ,add(\n             div(\n                  int(activity('get page').output.firstRow.response.body.totalCount) \n                 ,int(pipeline().parameters.one_page_row)                  \n                )\n            ,if(\n                greater(\n                        mod(\n                            int(activity('get page').output.firstRow.response.body.totalCount) \n                        ,int(pipeline().parameters.one_page_row)   \n                            )\n                       ,0\n                       )\n                ,1,0\n            )           \n       )\n)",
+								"value": "@range(1  \n      ,add(\n             div(\n                  int(pipeline().parameters.tot_row) \n                 ,int(pipeline().parameters.one_page_row)                  \n                )\n            ,if(\n                greater(\n                        mod(\n                             int(pipeline().parameters.tot_row) \n                        ,int(pipeline().parameters.one_page_row)   \n                            )\n                       ,0\n                       )\n                ,1,0\n            )           \n       )\n)",
 								"type": "Expression"
 							},
-							"batchCount": 5,
+							"isSequential": true,
 							"activities": [
 								{
-									"name": "Copy data1_copy1",
+									"name": "Copy data1",
 									"type": "Copy",
 									"dependsOn": [],
 									"policy": {
@@ -10092,29 +10268,124 @@
 												},
 												{
 													"source": {
-														"path": "[['dlvrReqNm']"
+														"path": "[['prdctSno']"
 													},
 													"sink": {
-														"name": "dlvr_req_nm",
+														"name": "prdct_sno"
+													}
+												},
+												{
+													"source": {
+														"path": "[['prdctClsfcNo']"
+													},
+													"sink": {
+														"name": "prdct_clsfc_no"
+													}
+												},
+												{
+													"source": {
+														"path": "[['prdctClsfcNoNm']"
+													},
+													"sink": {
+														"name": "prdct_clsfc_no_nm"
+													}
+												},
+												{
+													"source": {
+														"path": "[['dtilPrdctClsfcNo']"
+													},
+													"sink": {
+														"name": "dtil_prdct_clsfc_no"
+													}
+												},
+												{
+													"source": {
+														"path": "[['dtilPrdctClsfcNoNm']"
+													},
+													"sink": {
+														"name": "dtil_prdct_clsfc_no_nm"
+													}
+												},
+												{
+													"source": {
+														"path": "[['prdctIdntNo']"
+													},
+													"sink": {
+														"name": "prdct_idnt_no"
+													}
+												},
+												{
+													"source": {
+														"path": "[['prdctIdntNoNm']"
+													},
+													"sink": {
+														"name": "prdct_idnt_no_nm"
+													}
+												},
+												{
+													"source": {
+														"path": "[['prdctUprc']"
+													},
+													"sink": {
+														"name": "prdct_uprc"
+													}
+												},
+												{
+													"source": {
+														"path": "[['prdctUnit']"
+													},
+													"sink": {
+														"name": "prdct_unit"
+													}
+												},
+												{
+													"source": {
+														"path": "[['prdctQty']"
+													},
+													"sink": {
+														"name": "prdct_qty"
+													}
+												},
+												{
+													"source": {
+														"path": "[['prdctAmt']"
+													},
+													"sink": {
+														"name": "prdct_amt"
+													}
+												},
+												{
+													"source": {
+														"path": "[['dlvrTmlmtDate']"
+													},
+													"sink": {
+														"name": "dlvr_tmlmt_date"
+													}
+												},
+												{
+													"source": {
+														"path": "[['cntrctCnclsStleNm']"
+													},
+													"sink": {
+														"name": "cntrct_cncls_stle_nm",
 														"type": "String"
 													}
 												},
 												{
 													"source": {
-														"path": "[['dlvrReqQty']"
+														"path": "[['exclcProdctYn']"
 													},
 													"sink": {
-														"name": "dlvr_req_qty",
+														"name": "exclc_prodct_yn",
 														"type": "String"
 													}
 												},
 												{
 													"source": {
-														"path": "[['dlvrReqAmt']"
+														"path": "[['optnDivCdNm']"
 													},
 													"sink": {
-														"name": "dlvr_req_amt",
-														"type": "String"
+														"name": "optn_div_cd_nm"
 													}
 												},
 												{
@@ -10140,7 +10411,8 @@
 														"path": "[['dmndInsttDivNm']"
 													},
 													"sink": {
-														"name": "dmnd_instt_div_nm"
+														"name": "dmnd_instt_div_nm",
+														"type": "String"
 													}
 												},
 												{
@@ -10163,64 +10435,43 @@
 												},
 												{
 													"source": {
-														"path": "[['corpEntrprsDivNm']"
+														"path": "[['fnlDlvrReqYn']"
 													},
 													"sink": {
-														"name": "corpentrprs_div_nm_nm",
+														"name": "fnl_dlvr_req_yn",
 														"type": "String"
 													}
 												},
 												{
 													"source": {
-														"path": "[['rprsntPrdctClsfcNo']"
+														"path": "[['incdecQty']"
 													},
 													"sink": {
-														"name": "rprsnt_prdct_clsfc_no",
-														"type": "String"
+														"name": "incdec_qty"
 													}
 												},
 												{
 													"source": {
-														"path": "[['rprsntPrdctClsfcNoNm']"
+														"path": "[['incdecAmt']"
 													},
 													"sink": {
-														"name": "rprsnt_prdct_clsfc_no_nm",
-														"type": "String"
+														"name": "incdec_amt"
 													}
 												},
 												{
 													"source": {
-														"path": "[['rprsntDtilPrdctClsfcNo']"
+														"path": "[['cntrctCorpBizno']"
 													},
 													"sink": {
-														"name": "rprsnt_dtil_prdct_clsfc_no",
-														"type": "String"
+														"name": "cntrct_corp_bizno"
 													}
 												},
 												{
 													"source": {
-														"path": "[['rprsntDtilPrdctClsfcNoNm']"
+														"path": "[['dlvrReqNm']"
 													},
 													"sink": {
-														"name": "rprsnt_dtil_prdct_clsfc_no_nm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['maxDlvrTmlmtDate']"
-													},
-													"sink": {
-														"name": "max_dlvr_tmlmt_date",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['cntrctCnclsStleNm']"
-													},
-													"sink": {
-														"name": "cntrct_cncls_stle_nm",
+														"name": "dlvr_req_nm",
 														"type": "String"
 													}
 												},
@@ -10253,47 +10504,60 @@
 												},
 												{
 													"source": {
-														"path": "[['exclcProdctYn']"
+														"path": "[['cnstwkMtrlDrctPurchsObjYn']"
 													},
 													"sink": {
-														"name": "exclc_prodct_yn",
+														"name": "cnstwk_mtrl_drct_purchs_obj_yn"
+													}
+												},
+												{
+													"source": {
+														"path": "[['IntlCntrctDlvrReqDate']"
+													},
+													"sink": {
+														"name": "intl_cntrct_dlvr_req_date"
+													}
+												},
+												{
+													"source": {
+														"path": "[['dlvrReqQty']"
+													},
+													"sink": {
+														"name": "dlvr_req_qty",
 														"type": "String"
 													}
 												},
 												{
 													"source": {
-														"path": "[['fnlDlvrReqYn']"
+														"path": "[['dlvrReqAmt']"
 													},
 													"sink": {
-														"name": "fnl_dlvr_req_yn",
+														"name": "dlvr_req_amt",
 														"type": "String"
 													}
 												},
 												{
 													"source": {
-														"path": "[['dlvrReqIncdecQty']"
+														"path": "[['smetprCmptProdctYn']"
 													},
 													"sink": {
-														"name": "dlvr_req_incdec_qty",
-														"type": "String"
+														"name": "smetpr_cmpt_prodct_yn"
 													}
 												},
 												{
 													"source": {
-														"path": "[['dlvrReqIncdecAmt']"
+														"path": "[['corpEntrprsDivNmNm']"
 													},
 													"sink": {
-														"name": "dlvr_req_incdec_amt",
-														"type": "String"
+														"name": "corp_entrprs_div_nm"
 													}
 												},
 												{
 													"source": {
-														"path": "[['corpBizno']"
+														"path": "[['brnofceNm']"
 													},
 													"sink": {
-														"name": "corp_bizno",
-														"type": "String"
+														"name": "brnofce_nm"
 													}
 												}
 											],
@@ -10307,7 +10571,7 @@
 											"type": "DatasetReference",
 											"parameters": {
 												"params": {
-													"value": "@concat('/1230000/ShoppingMallPrdctInfoService06/',pipeline().parameters.service,'?type=json&inqryDiv=1&pageNo=',item(),'&numOfRows=',pipeline().parameters.one_page_row,'&inqryBgnDate=',variables('strdt'),'&inqryEndDate=',variables('enddt'),'&ServiceKey=',pipeline().parameters.Apikey)",
+													"value": "@concat('/1230000/ShoppingMallPrdctInfoService06/',pipeline().parameters.service,'?type=json&inqryDiv=1&pageNo=',item(),'&numOfRows=',pipeline().parameters.one_page_row,'&inqryBgnDate='\n,pipeline().parameters.strdt,'&inqryEndDate=',pipeline().parameters.enddt,'&dtilPrdctClsfcNoNm=',pipeline().parameters.product,'&ServiceKey=',pipeline().parameters.Apikey)",
 													"type": "Expression"
 												}
 											}
@@ -10332,108 +10596,11 @@
 								}
 							]
 						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {},
-					"cancelAfter": {}
-				},
-				"parameters": {
-					"Apikey": {
-						"type": "string",
-						"defaultValue": "W26gwh49fADZe9fVLqkaAlzn5IPh6n9jf9FCHkThIs6UDblFv46xFoLaNzl011vFX8daAemoPlw4BubABfFBRg%3D%3D"
-					},
-					"service": {
-						"type": "string",
-						"defaultValue": "getDlvrReqInfoList01"
-					},
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "tb_mas_shopping_delivery"
-					},
-					"one_page_row": {
-						"type": "string",
-						"defaultValue": "999"
-					},
-					"pipstrdt": {
-						"type": "string"
-					},
-					"pipenddt": {
-						"type": "string"
-					}
-				},
-				"variables": {
-					"strdt": {
-						"type": "String"
-					},
-					"enddt": {
-						"type": "String"
-					}
-				},
-				"folder": {
-					"name": "Industry/외부/조달청/종합쇼핑몰 납품요구정보 현황"
-				},
-				"annotations": [],
-				"lastPublishTime": "2023-01-16T07:55:39Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_MAS_SUCCESSFUL_BID_LIST_STATUS_THINGS')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "낙찰된 목록 현황 물품조회",
-				"activities": [
-					{
-						"name": "set strdt",
-						"description": "당일자",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "strdt",
-							"value": {
-								"value": "@if(equals(pipeline().parameters.pipstrdt,null),'200201010000',pipeline().parameters.pipstrdt)",
-								"type": "Expression"
-							}
-						}
 					},
 					{
-						"name": "set enddt",
-						"description": "당일자",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "enddt",
-							"value": {
-								"value": "@if(equals(pipeline().parameters.pipenddt,null),'200212310000',pipeline().parameters.pipenddt)",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "delet table",
+						"name": "Lookup1",
 						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "set strdt",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							},
-							{
-								"activity": "set enddt",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
+						"dependsOn": [],
 						"policy": {
 							"timeout": "0.12:00:00",
 							"retry": 0,
@@ -10446,7 +10613,7 @@
 							"source": {
 								"type": "AzurePostgreSqlSource",
 								"query": {
-									"value": "delete from  @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}       \n WHERE  REGEXP_REPLACE(rgstDt, '[^0-9]','','g') BETWEEN '@{variables('strdt')}' AND '@{variables('enddt')}';\n \nselect 1 as success",
+									"value": "delete from  @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}       \n WHERE REPLACE(dlvr_req_rcpt_date,'-','') BETWEEN '@{pipeline().parameters.strdt}' AND '@{pipeline().parameters.enddt}' \n   AND dtil_prdct_clsfc_no_nm = '@{pipeline().parameters.product}';\n\nselect 1 as success",
 									"type": "Expression"
 								},
 								"partitionOption": "None"
@@ -10460,327 +10627,6 @@
 								}
 							}
 						}
-					},
-					{
-						"name": "get page",
-						"description": "대표 제품의 생성 기간동안 토탈 건수 ",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "delet table",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "JsonSource",
-								"storeSettings": {
-									"type": "HttpReadSettings",
-									"requestMethod": "GET"
-								},
-								"formatSettings": {
-									"type": "JsonReadSettings"
-								}
-							},
-							"dataset": {
-								"referenceName": "DTS_PPS_API_JSON",
-								"type": "DatasetReference",
-								"parameters": {
-									"params": {
-										"value": "@concat('/1230000/ScsbidInfoService/',pipeline().parameters.service,'?type=json&inqryDiv=1&pageNo=1&numOfRows=1&inqryBgnDt=',variables('strdt'),'&inqryEndDt=',variables('enddt'),'&ServiceKey=',pipeline().parameters.Apikey)",
-										"type": "Expression"
-									}
-								}
-							}
-						}
-					},
-					{
-						"name": "ForEach1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "get page",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@range(1  \n      ,add(\n             div(\n                  int(activity('get page').output.firstRow.response.body.totalCount) \n                 ,int(pipeline().parameters.one_page_row)                  \n                )\n            ,if(\n                greater(\n                        mod(\n                            int(activity('get page').output.firstRow.response.body.totalCount) \n                        ,int(pipeline().parameters.one_page_row)   \n                            )\n                       ,0\n                       )\n                ,1,0\n            )           \n       )\n)",
-								"type": "Expression"
-							},
-							"activities": [
-								{
-									"name": "Copy data1_copy1",
-									"type": "Copy",
-									"dependsOn": [],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "JsonSource",
-											"storeSettings": {
-												"type": "HttpReadSettings",
-												"requestMethod": "GET"
-											},
-											"formatSettings": {
-												"type": "JsonReadSettings"
-											}
-										},
-										"sink": {
-											"type": "AzurePostgreSQLSink",
-											"writeBatchSize": 1000000,
-											"writeBatchTimeout": "00:30:00",
-											"writeMethod": "CopyCommand"
-										},
-										"enableStaging": false,
-										"enableSkipIncompatibleRow": false,
-										"translator": {
-											"type": "TabularTranslator",
-											"mappings": [
-												{
-													"source": {
-														"path": "[['bidNtceNo']"
-													},
-													"sink": {
-														"name": "bidntceno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bidNtceOrd']"
-													},
-													"sink": {
-														"name": "bidntceord",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bidClsfcNo']"
-													},
-													"sink": {
-														"name": "bidclsfcno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['rbidNo']"
-													},
-													"sink": {
-														"name": "rbidno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['ntceDivCd']"
-													},
-													"sink": {
-														"name": "ntcedivcd",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bidNtceNm']"
-													},
-													"sink": {
-														"name": "bidntcenm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['prtcptCnum']"
-													},
-													"sink": {
-														"name": "prtcptcnum",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bidwinnrNm']"
-													},
-													"sink": {
-														"name": "bidwinnrnm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bidwinnrBizno']"
-													},
-													"sink": {
-														"name": "bidwinnrbizno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bidwinnrCeoNm']"
-													},
-													"sink": {
-														"name": "bidwinnrceonm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bidwinnrAdrs']"
-													},
-													"sink": {
-														"name": "bidwinnradrs",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bidwinnrTelNo']"
-													},
-													"sink": {
-														"name": "bidwinnrtelno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['sucsfbidAmt']"
-													},
-													"sink": {
-														"name": "sucsfbidamt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['sucsfbidRate']"
-													},
-													"sink": {
-														"name": "sucsfbidrate",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['rlOpengDt']"
-													},
-													"sink": {
-														"name": "rlopengdt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['dminsttCd']"
-													},
-													"sink": {
-														"name": "dminsttcd",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['dminsttNm']"
-													},
-													"sink": {
-														"name": "dminsttnm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['rgstDt']"
-													},
-													"sink": {
-														"name": "rgstdt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['fnlSucsfDate']"
-													},
-													"sink": {
-														"name": "fnlsucsfdate",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['fnlSucsfCorpOfcl']"
-													},
-													"sink": {
-														"name": "fnlsucsfcorpofcl",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['linkInsttNm']"
-													},
-													"sink": {
-														"name": "linkinsttnm",
-														"type": "String"
-													}
-												}
-											],
-											"collectionReference": "$['response']['body']['items']",
-											"mapComplexValuesToString": false
-										}
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_PPS_API_JSON",
-											"type": "DatasetReference",
-											"parameters": {
-												"params": {
-													"value": "@concat('/1230000/ScsbidInfoService/',pipeline().parameters.service,'?type=json&inqryDiv=1&pageNo=',item(),'&numOfRows=',pipeline().parameters.one_page_row,'&inqryBgnDt=',variables('strdt'),'&inqryEndDt=',variables('enddt'),'&ServiceKey=',pipeline().parameters.Apikey)",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_POSTGRESQL_SNK",
-											"type": "DatasetReference",
-											"parameters": {
-												"SinkSchema": {
-													"value": "@pipeline().parameters.SinkSchema",
-													"type": "Expression"
-												},
-												"SinkTable": {
-													"value": "@pipeline().parameters.SinkTable",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								}
-							]
-						}
 					}
 				],
 				"policy": {
@@ -10794,7 +10640,11 @@
 					},
 					"service": {
 						"type": "string",
-						"defaultValue": "getScsbidListSttusThng"
+						"defaultValue": "getDlvrReqDtlInfoList01"
+					},
+					"tot_row": {
+						"type": "string",
+						"defaultValue": "1"
 					},
 					"SinkSchema": {
 						"type": "string",
@@ -10802,32 +10652,31 @@
 					},
 					"SinkTable": {
 						"type": "string",
-						"defaultValue": "tb_mas_successful_bid_list_status_things"
+						"defaultValue": "tb_mas_shopping_delivery"
 					},
 					"one_page_row": {
 						"type": "string",
 						"defaultValue": "999"
 					},
-					"pipstrdt": {
+					"product": {
 						"type": "string"
 					},
-					"pipenddt": {
+					"strdt": {
+						"type": "string"
+					},
+					"enddt": {
 						"type": "string"
 					}
 				},
 				"variables": {
-					"strdt": {
-						"type": "String"
-					},
-					"enddt": {
+					"TEST": {
 						"type": "String"
 					}
 				},
 				"folder": {
-					"name": "Industry/외부/조달청"
+					"name": "Industry/외부/조달청/종합쇼핑몰 납품요구정보 현황"
 				},
-				"annotations": [],
-				"lastPublishTime": "2023-01-16T07:55:39Z"
+				"annotations": []
 			},
 			"dependsOn": []
 		}
