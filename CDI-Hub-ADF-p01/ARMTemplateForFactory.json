@@ -49,7 +49,11 @@
 		},
 		"HttpServer1_P03_properties_typeProperties_url": {
 			"type": "string",
-			"defaultValue": "http://openapi.mnd.go.kr"
+			"defaultValue": "https://openapi.mnd.go.kr"
+		},
+		"HttpServer1_test_properties_typeProperties_url": {
+			"type": "string",
+			"defaultValue": "https://openapi.mnd.go.kr/3130313632363038303933313532313334/json/DS_TB_MNDT_DATEBYMLSVC_7652/1/1"
 		},
 		"HttpServer_CUSTOMER_OPINION_properties_typeProperties_url": {
 			"type": "string",
@@ -53728,7 +53732,7 @@
 							"source": {
 								"type": "AzurePostgreSqlSource",
 								"query": {
-									"value": "SELECT\ndemandyear , dcsno , orntcode \nFROM \n(\nSELECT COALESCE (b.dcsno, 'xxxxx') AS b_dcsno \n     , a.dcsno AS dcsno\n     , a.orntcode  AS orntcode\n     , a.demandyear  AS demandyear\nFROM cd_ods.tb_d2b_cmpt_bid_notice_list a\n  LEFT OUTER join   cd_ods.tb_d2b_bid_item_detail b\non a.dcsno  = b.dcsno\n  AND a.demandyear = b.demandyear\n  AND a.orntcode = b.orntcode\nWHERE a.pblancdate LIKE '202208%'\n) a\nWHERE a.b_dcsno = 'xxxxx'\n;",
+									"value": "SELECT\ndemandyear , dcsno , orntcode \nFROM \n(\nSELECT COALESCE (b.dcsno, 'xxxxx') AS b_dcsno \n     , a.dcsno AS dcsno\n     , a.orntcode  AS orntcode\n     , a.demandyear  AS demandyear\nFROM cd_ods.tb_d2b_cmpt_bid_notice_list a\n  LEFT OUTER join   cd_ods.tb_d2b_bid_item_detail b\non a.dcsno  = b.dcsno\n  AND a.demandyear = b.demandyear\n  AND a.orntcode = b.orntcode\n) a\nWHERE a.b_dcsno = 'xxxxx'\n;",
 									"type": "Expression"
 								},
 								"partitionOption": "None"
@@ -53761,7 +53765,8 @@
 								"value": "@activity('Lookup1').output.value",
 								"type": "Expression"
 							},
-							"isSequential": true,
+							"isSequential": false,
+							"batchCount": 50,
 							"activities": [
 								{
 									"name": "Execute Pipeline1",
@@ -55193,6 +55198,94 @@
 								}
 							]
 						}
+					},
+					{
+						"name": "Lookup1_copy1",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "ForEach1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "SELECT\ndemandyear , dcsno , orntcode \nFROM \n(\nSELECT COALESCE (b.dcsno, 'xxxxx') AS b_dcsno \n     , a.dcsno AS dcsno\n     , a.orntcode  AS orntcode\n     , a.demandyear  AS demandyear\nFROM cd_ods.tb_d2b_cmpt_bid_notice_list a\n  LEFT OUTER join   cd_ods.tb_d2b_bid_item_detail b\non a.dcsno  = b.dcsno\n  AND a.demandyear = b.demandyear\n  AND a.orntcode = b.orntcode\n) a\nWHERE a.b_dcsno = 'xxxxx'\n;",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1_copy1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup1_copy1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup1').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Execute Pipeline1_copy1",
+									"type": "ExecutePipeline",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"pipeline": {
+											"referenceName": "PIP_API_INDUSTRY_D2B_BID_ITEM_DETAIL",
+											"type": "PipelineReference"
+										},
+										"waitOnCompletion": true,
+										"parameters": {
+											"pipdemandyear": {
+												"value": "@item().demandYear",
+												"type": "Expression"
+											},
+											"pipdcsno": {
+												"value": "@item().dcsNo",
+												"type": "Expression"
+											},
+											"piporntcode": {
+												"value": "@item().orntCode",
+												"type": "Expression"
+											}
+										}
+									}
+								}
+							]
+						}
 					}
 				],
 				"policy": {
@@ -55244,7 +55337,8 @@
 			"dependsOn": [
 				"[concat(variables('factoryId'), '/datasets/DTS_API_D2B')]",
 				"[concat(variables('factoryId'), '/datasets/DTS_POSTGRESQL_SNK')]",
-				"[concat(variables('factoryId'), '/pipelines/PIP_API_INDUSTRY_D2B_CMPT_BID_NOTICE_DETAIL')]"
+				"[concat(variables('factoryId'), '/pipelines/PIP_API_INDUSTRY_D2B_CMPT_BID_NOTICE_DETAIL')]",
+				"[concat(variables('factoryId'), '/pipelines/PIP_API_INDUSTRY_D2B_BID_ITEM_DETAIL')]"
 			]
 		},
 		{
@@ -79715,7 +79809,10 @@
 								"referenceName": "DTS_API_MND",
 								"type": "DatasetReference",
 								"parameters": {
-									"url": "/3130313632363038303933313532313334/json/DS_TB_MNDT_DATEBYMLSVC_ATC/1/1"
+									"url": {
+										"value": "@concat('/3130313632363038303933313532313334/json/DS_TB_MNDT_DATEBYMLSVC_ATC/1/1')",
+										"type": "Expression"
+									}
 								}
 							}
 						}
@@ -132033,6 +132130,37 @@
 			]
 		},
 		{
+			"name": "[concat(parameters('factoryName'), '/DTS_APSI_CPPI_KAMIS_copy1')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "REST_API_KAMIS",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"url": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "Source"
+				},
+				"annotations": [],
+				"type": "RestResource",
+				"typeProperties": {
+					"relativeUrl": {
+						"value": "@concat('https://openapi.mnd.go.kr/3130313632363038303933313532313334/json/DS_TB_MNDT_DATEBYMLSVC_7652/1/1')",
+						"type": "Expression"
+					}
+				},
+				"schema": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/linkedServices/REST_API_KAMIS')]"
+			]
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/DTS_BO_MEMBER_MST_D1')]",
 			"type": "Microsoft.DataFactory/factories/datasets",
 			"apiVersion": "2018-06-01",
@@ -133659,6 +133787,27 @@
 				"type": "HttpServer",
 				"typeProperties": {
 					"url": "[parameters('HttpServer1_P03_properties_typeProperties_url')]",
+					"enableServerCertificateValidation": false,
+					"authenticationType": "Anonymous"
+				},
+				"connectVia": {
+					"referenceName": "IR-SHIR-P01",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/integrationRuntimes/IR-SHIR-P01')]"
+			]
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/HttpServer1_test')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "HttpServer",
+				"typeProperties": {
+					"url": "[parameters('HttpServer1_test_properties_typeProperties_url')]",
 					"enableServerCertificateValidation": true,
 					"authenticationType": "Anonymous"
 				},
