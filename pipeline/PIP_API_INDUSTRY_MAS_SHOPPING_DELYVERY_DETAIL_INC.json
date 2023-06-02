@@ -4,184 +4,6 @@
 		"description": "수요기관정보조회",
 		"activities": [
 			{
-				"name": "ForEach1",
-				"type": "ForEach",
-				"dependsOn": [
-					{
-						"activity": "date list",
-						"dependencyConditions": [
-							"Succeeded"
-						]
-					}
-				],
-				"userProperties": [],
-				"typeProperties": {
-					"items": {
-						"value": "@activity('date list').output.value",
-						"type": "Expression"
-					},
-					"isSequential": true,
-					"activities": [
-						{
-							"name": "product cnt",
-							"description": "대표 제품의 생성 기간동안 토탈 건수 ",
-							"type": "Lookup",
-							"dependsOn": [
-								{
-									"activity": "delete",
-									"dependencyConditions": [
-										"Succeeded"
-									]
-								}
-							],
-							"policy": {
-								"timeout": "0.12:00:00",
-								"retry": 5,
-								"retryIntervalInSeconds": 30,
-								"secureOutput": false,
-								"secureInput": false
-							},
-							"userProperties": [],
-							"typeProperties": {
-								"source": {
-									"type": "JsonSource",
-									"storeSettings": {
-										"type": "HttpReadSettings",
-										"requestMethod": "GET"
-									},
-									"formatSettings": {
-										"type": "JsonReadSettings"
-									}
-								},
-								"dataset": {
-									"referenceName": "DTS_PPS_API_JSON",
-									"type": "DatasetReference",
-									"parameters": {
-										"params": {
-											"value": "@concat('/1230000/ShoppingMallPrdctInfoService06/',pipeline().parameters.service,'?type=json&inqryDiv=1&pageNo=1&numOfRows=1&inqryBgnDate=',item().strdt,'&inqryEndDate=',item().enddt,'&ServiceKey=',pipeline().parameters.Apikey)",
-											"type": "Expression"
-										}
-									}
-								}
-							}
-						},
-						{
-							"name": "delete",
-							"description": "증분구간 삭제",
-							"type": "Lookup",
-							"dependsOn": [],
-							"policy": {
-								"timeout": "0.12:00:00",
-								"retry": 5,
-								"retryIntervalInSeconds": 30,
-								"secureOutput": false,
-								"secureInput": false
-							},
-							"userProperties": [],
-							"typeProperties": {
-								"source": {
-									"type": "AzurePostgreSqlSource",
-									"query": {
-										"value": "delete from  @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}       \n WHERE REPLACE(dlvr_req_rcpt_date,'-','') BETWEEN '@{item().strdt}' AND '@{item().enddt}' \n  ;\n\nselect 1 as success",
-										"type": "Expression"
-									},
-									"partitionOption": "None"
-								},
-								"dataset": {
-									"referenceName": "DTS_POSTGRESQL_SNK",
-									"type": "DatasetReference",
-									"parameters": {
-										"SinkSchema": "1",
-										"SinkTable": "1"
-									}
-								}
-							}
-						},
-						{
-							"name": "delete2",
-							"description": "사용하는 품목군 이외 삭제",
-							"type": "Lookup",
-							"dependsOn": [
-								{
-									"activity": "Execute Pipeline1",
-									"dependencyConditions": [
-										"Succeeded"
-									]
-								}
-							],
-							"policy": {
-								"timeout": "0.12:00:00",
-								"retry": 5,
-								"retryIntervalInSeconds": 30,
-								"secureOutput": false,
-								"secureInput": false
-							},
-							"userProperties": [],
-							"typeProperties": {
-								"source": {
-									"type": "AzurePostgreSqlSource",
-									"query": {
-										"value": "delete from  @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}       \n WHERE REPLACE(dlvr_req_rcpt_date,'-','') BETWEEN '@{item().strdt}' AND '@{item().enddt}' \n   and dtil_prdct_clsfc_no !~ '^(501|502|503|504).*'\n  ;\n\nselect 1 as success",
-										"type": "Expression"
-									},
-									"partitionOption": "None"
-								},
-								"dataset": {
-									"referenceName": "DTS_POSTGRESQL_SNK",
-									"type": "DatasetReference",
-									"parameters": {
-										"SinkSchema": "1",
-										"SinkTable": "1"
-									}
-								}
-							}
-						},
-						{
-							"name": "Execute Pipeline1",
-							"type": "ExecutePipeline",
-							"dependsOn": [
-								{
-									"activity": "product cnt",
-									"dependencyConditions": [
-										"Succeeded"
-									]
-								}
-							],
-							"userProperties": [],
-							"typeProperties": {
-								"pipeline": {
-									"referenceName": "PIP_API_INDUSTRY_MAS_SHOPPING_DELYVERY_DETAIL_SUB",
-									"type": "PipelineReference"
-								},
-								"waitOnCompletion": true,
-								"parameters": {
-									"Apikey": {
-										"value": "@pipeline().parameters.Apikey",
-										"type": "Expression"
-									},
-									"service": {
-										"value": "@pipeline().parameters.service",
-										"type": "Expression"
-									},
-									"tot_row": {
-										"value": "@activity('product cnt').output.firstRow.response.body.totalCount",
-										"type": "Expression"
-									},
-									"SinkSchema": {
-										"value": "@pipeline().parameters.SinkSchema",
-										"type": "Expression"
-									},
-									"SinkTable": {
-										"value": "@pipeline().parameters.SinkTable",
-										"type": "Expression"
-									}
-								}
-							}
-						}
-					]
-				}
-			},
-			{
 				"name": "date list",
 				"description": "증분 일자 \n과거 m-2~ 현재기간동안 한달씩 수행되도록 ",
 				"type": "Lookup",
@@ -209,6 +31,51 @@
 						}
 					},
 					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "date list",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('date list').output.value",
+						"type": "Expression"
+					},
+					"isSequential": true,
+					"activities": [
+						{
+							"name": "Execute Pipeline1",
+							"type": "ExecutePipeline",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"pipeline": {
+									"referenceName": "PIP_API_INDUSTRY_MAS_SHOPPING_DELYVERY_DETAIL_SUB",
+									"type": "PipelineReference"
+								},
+								"waitOnCompletion": true,
+								"parameters": {
+									"strdt": {
+										"value": "@item().strdt",
+										"type": "Expression"
+									},
+									"enddt": {
+										"value": "@item().enddt",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					]
 				}
 			}
 		],
