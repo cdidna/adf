@@ -4,91 +4,13 @@
 		"description": "수요기관정보조회",
 		"activities": [
 			{
-				"name": "set strdt",
-				"description": "당일자",
-				"type": "SetVariable",
-				"dependsOn": [],
-				"userProperties": [],
-				"typeProperties": {
-					"variableName": "strdt",
-					"value": {
-						"value": "@if(equals(pipeline().parameters.pipstrdt,null),formatDateTime(addDays(addHours(utcNow(), 9),-3),'yyyyMMdd'),pipeline().parameters.pipstrdt)",
-						"type": "Expression"
-					}
-				}
-			},
-			{
-				"name": "set enddt",
-				"description": "당일자",
-				"type": "SetVariable",
-				"dependsOn": [],
-				"userProperties": [],
-				"typeProperties": {
-					"variableName": "enddt",
-					"value": {
-						"value": "@if(equals(pipeline().parameters.pipenddt,null),formatDateTime(addDays(addHours(utcNow(), 9),-3),'yyyyMMdd'),pipeline().parameters.pipenddt)",
-						"type": "Expression"
-					}
-				}
-			},
-			{
-				"name": "Lookup API Info",
-				"description": "API 정보를 가져오기 위해 LOOKUP 파일에test",
-				"type": "Lookup",
-				"dependsOn": [
-					{
-						"activity": "set strdt",
-						"dependencyConditions": [
-							"Succeeded"
-						]
-					},
-					{
-						"activity": "set enddt",
-						"dependencyConditions": [
-							"Succeeded"
-						]
-					}
-				],
-				"policy": {
-					"timeout": "7.00:00:00",
-					"retry": 0,
-					"retryIntervalInSeconds": 30,
-					"secureOutput": false,
-					"secureInput": false
-				},
-				"userProperties": [],
-				"typeProperties": {
-					"source": {
-						"type": "AzurePostgreSqlSource",
-						"query": "select distinct dtil_prdct_clsfc_no_nm as product\r\n  from cd_ods.vw_procurement_corporation_supply_product_info",
-						"partitionOption": "None"
-					},
-					"dataset": {
-						"referenceName": "DTS_POSTGRESQL_SNK",
-						"type": "DatasetReference",
-						"parameters": {
-							"SinkSchema": "1",
-							"SinkTable": "1"
-						}
-					},
-					"firstRowOnly": false
-				}
-			},
-			{
 				"name": "ForEach1",
 				"type": "ForEach",
-				"dependsOn": [
-					{
-						"activity": "Lookup API Info",
-						"dependencyConditions": [
-							"Succeeded"
-						]
-					}
-				],
+				"dependsOn": [],
 				"userProperties": [],
 				"typeProperties": {
 					"items": {
-						"value": "@activity('Lookup API Info').output.value",
+						"value": "@range(1,3)",
 						"type": "Expression"
 					},
 					"isSequential": true,
@@ -186,8 +108,69 @@
 									}
 								}
 							}
+						},
+						{
+							"name": "delete",
+							"description": "증분구간 삭제",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 5,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzurePostgreSqlSource",
+									"query": {
+										"value": "select now()",
+										"type": "Expression"
+									},
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "DTS_POSTGRESQL_SNK",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": "1",
+										"SinkTable": "1"
+									}
+								}
+							}
 						}
 					]
+				}
+			},
+			{
+				"name": "Lookup1",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": "select to_char(min(Base_date),'yyyymmdd') as strdt \n      ,to_char(max(Base_date),'yyyymmdd') as enddt \n  from cd_ods.aps_sdc_pw_mst \n where base_date between date_trunc('month', now() + interval '9 hour' - interval '2 month')\n                     and  now() + interval '9 hour'\n group by cmonth                     \n order by cmonth",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					},
+					"firstRowOnly": false
 				}
 			}
 		],
