@@ -6,7 +6,14 @@
 			{
 				"name": "ForEach1",
 				"type": "ForEach",
-				"dependsOn": [],
+				"dependsOn": [
+					{
+						"activity": "date list",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
 				"userProperties": [],
 				"typeProperties": {
 					"items": {
@@ -19,7 +26,14 @@
 							"name": "product cnt",
 							"description": "대표 제품의 생성 기간동안 토탈 건수 ",
 							"type": "Lookup",
-							"dependsOn": [],
+							"dependsOn": [
+								{
+									"activity": "delete",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
 							"policy": {
 								"timeout": "0.12:00:00",
 								"retry": 5,
@@ -44,67 +58,9 @@
 									"type": "DatasetReference",
 									"parameters": {
 										"params": {
-											"value": "@concat('/1230000/ShoppingMallPrdctInfoService06/',pipeline().parameters.service,'?type=json&inqryDiv=1&pageNo=1&numOfRows=1&inqryBgnDate=',variables('strdt'),'&inqryEndDate=',variables('enddt'),'&dtilPrdctClsfcNoNm=',item().product,'&ServiceKey=',pipeline().parameters.Apikey)",
+											"value": "@concat('/1230000/ShoppingMallPrdctInfoService06/',pipeline().parameters.service,'?type=json&inqryDiv=1&pageNo=1&numOfRows=1&inqryBgnDate=',item().strdt,'&inqryEndDate=',item().enddt,'&dtilPrdctClsfcNoNm=',item().product,'&ServiceKey=',pipeline().parameters.Apikey)",
 											"type": "Expression"
 										}
-									}
-								}
-							}
-						},
-						{
-							"name": "Execute Pipeline1",
-							"type": "ExecutePipeline",
-							"dependsOn": [
-								{
-									"activity": "product cnt",
-									"dependencyConditions": [
-										"Succeeded"
-									]
-								}
-							],
-							"userProperties": [],
-							"typeProperties": {
-								"pipeline": {
-									"referenceName": "PIP_API_INDUSTRY_MAS_SHOPPING_DELYVERY_DETAIL_SUB",
-									"type": "PipelineReference"
-								},
-								"waitOnCompletion": true,
-								"parameters": {
-									"Apikey": {
-										"value": "@pipeline().parameters.Apikey",
-										"type": "Expression"
-									},
-									"service": {
-										"value": "@pipeline().parameters.service",
-										"type": "Expression"
-									},
-									"tot_row": {
-										"value": "@activity('product cnt').output.firstRow.response.body.totalCount",
-										"type": "Expression"
-									},
-									"SinkSchema": {
-										"value": "@pipeline().parameters.SinkSchema",
-										"type": "Expression"
-									},
-									"SinkTable": {
-										"value": "@pipeline().parameters.SinkTable",
-										"type": "Expression"
-									},
-									"one_page_row": {
-										"value": "@pipeline().parameters.one_page_row",
-										"type": "Expression"
-									},
-									"product": {
-										"value": "@item().product",
-										"type": "Expression"
-									},
-									"strdt": {
-										"value": "@variables('strdt')",
-										"type": "Expression"
-									},
-									"enddt": {
-										"value": "@variables('enddt')",
-										"type": "Expression"
 									}
 								}
 							}
@@ -126,7 +82,7 @@
 								"source": {
 									"type": "AzurePostgreSqlSource",
 									"query": {
-										"value": "select now()",
+										"value": "delete from  @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}       \n WHERE REPLACE(dlvr_req_rcpt_date,'-','') BETWEEN '@{item().strdt}' AND '@{item().enddt}' \n  ;\n\nselect 1 as success",
 										"type": "Expression"
 									},
 									"partitionOption": "None"
@@ -140,12 +96,464 @@
 									}
 								}
 							}
+						},
+						{
+							"name": "delete2",
+							"description": "사용하는 품목군 이외 삭제",
+							"type": "Lookup",
+							"dependsOn": [
+								{
+									"activity": "ForEach Copy data",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 5,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzurePostgreSqlSource",
+									"query": {
+										"value": "delete from  @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}       \n WHERE REPLACE(dlvr_req_rcpt_date,'-','') BETWEEN '@{item().strdt}' AND '@{item().enddt}' \n   and dtil_prdct_clsfc_no !~ '^(501|502|503|504).*'\n  ;\n\nselect 1 as success",
+										"type": "Expression"
+									},
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "DTS_POSTGRESQL_SNK",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": "1",
+										"SinkTable": "1"
+									}
+								}
+							}
+						},
+						{
+							"name": "ForEach Copy data",
+							"type": "ForEach",
+							"dependsOn": [
+								{
+									"activity": "product cnt",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"items": {
+									"value": "@range(1  \n      ,add(\n             div(\n                  int(pipeline().parameters.tot_row) \n                 ,int(pipeline().parameters.one_page_row)                  \n                )\n            ,if(\n                greater(\n                        mod(\n                             int(pipeline().parameters.tot_row) \n                        ,int(pipeline().parameters.one_page_row)   \n                            )\n                       ,0\n                       )\n                ,1,0\n            )           \n       )\n)",
+									"type": "Expression"
+								},
+								"isSequential": false,
+								"batchCount": 30,
+								"activities": [
+									{
+										"name": "Copy data1",
+										"type": "Copy",
+										"dependsOn": [],
+										"policy": {
+											"timeout": "0.12:00:00",
+											"retry": 5,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"source": {
+												"type": "JsonSource",
+												"storeSettings": {
+													"type": "HttpReadSettings",
+													"requestMethod": "GET"
+												},
+												"formatSettings": {
+													"type": "JsonReadSettings"
+												}
+											},
+											"sink": {
+												"type": "AzurePostgreSQLSink",
+												"writeBatchSize": 1000000,
+												"writeBatchTimeout": "00:30:00",
+												"writeMethod": "CopyCommand"
+											},
+											"enableStaging": false,
+											"enableSkipIncompatibleRow": false,
+											"translator": {
+												"type": "TabularTranslator",
+												"mappings": [
+													{
+														"source": {
+															"path": "['dlvrReqNo']"
+														},
+														"sink": {
+															"name": "dlvr_req_no",
+															"type": "String"
+														}
+													},
+													{
+														"source": {
+															"path": "['dlvrReqChgOrd']"
+														},
+														"sink": {
+															"name": "dlvr_req_chg_ord",
+															"type": "String"
+														}
+													},
+													{
+														"source": {
+															"path": "['dlvrReqRcptDate']"
+														},
+														"sink": {
+															"name": "dlvr_req_rcpt_date",
+															"type": "String"
+														}
+													},
+													{
+														"source": {
+															"path": "['prdctSno']"
+														},
+														"sink": {
+															"name": "prdct_sno"
+														}
+													},
+													{
+														"source": {
+															"path": "['prdctClsfcNo']"
+														},
+														"sink": {
+															"name": "prdct_clsfc_no"
+														}
+													},
+													{
+														"source": {
+															"path": "['prdctClsfcNoNm']"
+														},
+														"sink": {
+															"name": "prdct_clsfc_no_nm"
+														}
+													},
+													{
+														"source": {
+															"path": "['dtilPrdctClsfcNo']"
+														},
+														"sink": {
+															"name": "dtil_prdct_clsfc_no"
+														}
+													},
+													{
+														"source": {
+															"path": "['dtilPrdctClsfcNoNm']"
+														},
+														"sink": {
+															"name": "dtil_prdct_clsfc_no_nm"
+														}
+													},
+													{
+														"source": {
+															"path": "['prdctIdntNo']"
+														},
+														"sink": {
+															"name": "prdct_idnt_no"
+														}
+													},
+													{
+														"source": {
+															"path": "['prdctIdntNoNm']"
+														},
+														"sink": {
+															"name": "prdct_idnt_no_nm"
+														}
+													},
+													{
+														"source": {
+															"path": "['prdctUprc']"
+														},
+														"sink": {
+															"name": "prdct_uprc"
+														}
+													},
+													{
+														"source": {
+															"path": "['prdctUnit']"
+														},
+														"sink": {
+															"name": "prdct_unit"
+														}
+													},
+													{
+														"source": {
+															"path": "['prdctQty']"
+														},
+														"sink": {
+															"name": "prdct_qty"
+														}
+													},
+													{
+														"source": {
+															"path": "['prdctAmt']"
+														},
+														"sink": {
+															"name": "prdct_amt"
+														}
+													},
+													{
+														"source": {
+															"path": "['dlvrTmlmtDate']"
+														},
+														"sink": {
+															"name": "dlvr_tmlmt_date"
+														}
+													},
+													{
+														"source": {
+															"path": "['cntrctCnclsStleNm']"
+														},
+														"sink": {
+															"name": "cntrct_cncls_stle_nm",
+															"type": "String"
+														}
+													},
+													{
+														"source": {
+															"path": "['exclcProdctYn']"
+														},
+														"sink": {
+															"name": "exclc_prodct_yn",
+															"type": "String"
+														}
+													},
+													{
+														"source": {
+															"path": "['optnDivCdNm']"
+														},
+														"sink": {
+															"name": "optn_div_cd_nm"
+														}
+													},
+													{
+														"source": {
+															"path": "['dminsttCd']"
+														},
+														"sink": {
+															"name": "dminstt_cd",
+															"type": "String"
+														}
+													},
+													{
+														"source": {
+															"path": "['dminsttNm']"
+														},
+														"sink": {
+															"name": "dminstt_nm",
+															"type": "String"
+														}
+													},
+													{
+														"source": {
+															"path": "['dmndInsttDivNm']"
+														},
+														"sink": {
+															"name": "dmnd_instt_div_nm",
+															"type": "String"
+														}
+													},
+													{
+														"source": {
+															"path": "['dminsttRgnNm']"
+														},
+														"sink": {
+															"name": "dminstt_rgn_nm",
+															"type": "String"
+														}
+													},
+													{
+														"source": {
+															"path": "['corpNm']"
+														},
+														"sink": {
+															"name": "corp_nm",
+															"type": "String"
+														}
+													},
+													{
+														"source": {
+															"path": "['fnlDlvrReqYn']"
+														},
+														"sink": {
+															"name": "fnl_dlvr_req_yn",
+															"type": "String"
+														}
+													},
+													{
+														"source": {
+															"path": "['incdecQty']"
+														},
+														"sink": {
+															"name": "incdec_qty"
+														}
+													},
+													{
+														"source": {
+															"path": "['incdecAmt']"
+														},
+														"sink": {
+															"name": "incdec_amt"
+														}
+													},
+													{
+														"source": {
+															"path": "['cntrctCorpBizno']"
+														},
+														"sink": {
+															"name": "cntrct_corp_bizno"
+														}
+													},
+													{
+														"source": {
+															"path": "['dlvrReqNm']"
+														},
+														"sink": {
+															"name": "dlvr_req_nm",
+															"type": "String"
+														}
+													},
+													{
+														"source": {
+															"path": "['cntrctNo']"
+														},
+														"sink": {
+															"name": "cntrct_no",
+															"type": "String"
+														}
+													},
+													{
+														"source": {
+															"path": "['cntrctChgOrd']"
+														},
+														"sink": {
+															"name": "cntrct_chg_ord",
+															"type": "String"
+														}
+													},
+													{
+														"source": {
+															"path": "['masYn']"
+														},
+														"sink": {
+															"name": "mas_yn",
+															"type": "String"
+														}
+													},
+													{
+														"source": {
+															"path": "['cnstwkMtrlDrctPurchsObjYn']"
+														},
+														"sink": {
+															"name": "cnstwk_mtrl_drct_purchs_obj_yn"
+														}
+													},
+													{
+														"source": {
+															"path": "['IntlCntrctDlvrReqDate']"
+														},
+														"sink": {
+															"name": "intl_cntrct_dlvr_req_date"
+														}
+													},
+													{
+														"source": {
+															"path": "['dlvrReqQty']"
+														},
+														"sink": {
+															"name": "dlvr_req_qty",
+															"type": "String"
+														}
+													},
+													{
+														"source": {
+															"path": "['dlvrReqAmt']"
+														},
+														"sink": {
+															"name": "dlvr_req_amt",
+															"type": "String"
+														}
+													},
+													{
+														"source": {
+															"path": "['smetprCmptProdctYn']"
+														},
+														"sink": {
+															"name": "smetpr_cmpt_prodct_yn"
+														}
+													},
+													{
+														"source": {
+															"path": "['corpEntrprsDivNmNm']"
+														},
+														"sink": {
+															"name": "corp_entrprs_div_nm"
+														}
+													},
+													{
+														"source": {
+															"path": "['brnofceNm']"
+														},
+														"sink": {
+															"name": "brnofce_nm"
+														}
+													}
+												],
+												"collectionReference": "$['response']['body']['items']",
+												"mapComplexValuesToString": false
+											}
+										},
+										"inputs": [
+											{
+												"referenceName": "DTS_PPS_API_JSON",
+												"type": "DatasetReference",
+												"parameters": {
+													"params": {
+														"value": "@concat('/1230000/ShoppingMallPrdctInfoService06/',pipeline().parameters.service,'?type=json&inqryDiv=1&pageNo=',item(),'&numOfRows=',pipeline().parameters.one_page_row,'&inqryBgnDate='\n,pipeline().parameters.strdt,'&inqryEndDate=',pipeline().parameters.enddt,'&ServiceKey=',pipeline().parameters.Apikey)",
+														"type": "Expression"
+													}
+												}
+											}
+										],
+										"outputs": [
+											{
+												"referenceName": "DTS_POSTGRESQL_SNK",
+												"type": "DatasetReference",
+												"parameters": {
+													"SinkSchema": {
+														"value": "@pipeline().parameters.SinkSchema",
+														"type": "Expression"
+													},
+													"SinkTable": {
+														"value": "@pipeline().parameters.SinkTable",
+														"type": "Expression"
+													}
+												}
+											}
+										]
+									}
+								]
+							}
 						}
 					]
 				}
 			},
 			{
-				"name": "Lookup1",
+				"name": "date list",
+				"description": "증분 일자 \n과거 m-2~ 현재기간동안 한달씩 수행되도록 ",
 				"type": "Lookup",
 				"dependsOn": [],
 				"policy": {
