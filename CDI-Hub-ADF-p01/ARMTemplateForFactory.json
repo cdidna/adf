@@ -97973,7 +97973,12 @@
 						"typeProperties": {
 							"source": {
 								"type": "OracleSource",
+								"oracleReaderQuery": {
+									"value": "SELECT *\n  FROM @{pipeline().parameters.SourceSchema}.@{pipeline().parameters.SourceTable}\nWHERE TRUNC(IF_DATE) = TRUNC(SYSDATE)",
+									"type": "Expression"
+								},
 								"partitionOption": "None",
+								"convertDecimalToInteger": false,
 								"queryTimeout": "02:00:00"
 							},
 							"sink": {
@@ -97981,7 +97986,7 @@
 								"writeBatchSize": 1000000,
 								"writeBatchTimeout": "00:30:00",
 								"preCopyScript": {
-									"value": "DELETE FROM @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}",
+									"value": "DELETE FROM @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}_temp",
 									"type": "Expression"
 								},
 								"writeMethod": "CopyCommand"
@@ -98266,12 +98271,50 @@
 										"type": "Expression"
 									},
 									"SinkTable": {
-										"value": "@pipeline().parameters.SinkTable",
+										"value": "@concat(pipeline().parameters.SinkTable,'_temp')",
 										"type": "Expression"
 									}
 								}
 							}
 						]
+					},
+					{
+						"name": "Lookup1",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "Copy data",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "INSERT INTO @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}\n(\n order_detail_id          \n  ,bid_detail_id            \n\t,bidid                    \n\t,docid                    \n\t,orgname                  \n\t,sheet                    \n\t,name                     \n\t,spec                     \n\t,unit                     \n\t,temp_cnt                 \n\t,comp_div                 \n\t,prod_cd                  \n\t,standard                 \n\t,work_dt                  \n\t,mapping_cd               \n\t,productlevel_cd          \n\t,price_cd                 \n\t,cnt               \n\t,chk_prod_id              \n\t,chk_prod_dt              \n\t,chk_prod_flag            \n\t,system_prod_ch_yn      \n)\nSELECT order_detail_id          \n    ,bid_detail_id            \n\t,bidid                    \n\t,docid                    \n\t,orgname                  \n\t,sheet                    \n\t,name                     \n\t,spec                     \n\t,unit                     \n\t,temp_cnt                 \n\t,comp_div                 \n\t,prod_cd                  \n\t,standard                 \n\t,work_dt                  \n\t,mapping_cd               \n\t,productlevel_cd          \n\t,price_cd                 \n\t,cnt               \n\t,chk_prod_id              \n\t,chk_prod_dt              \n\t,chk_prod_flag            \n\t,system_prod_ch_yn      \nFROM @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}_TEMP\nWHERE bidid NOT IN ( SELECT distinct bidid from @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable} );\n\nselect 1 as ss;\n",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							}
+						}
 					}
 				],
 				"policy": {
@@ -98304,7 +98347,8 @@
 			},
 			"dependsOn": [
 				"[concat(variables('factoryId'), '/datasets/DTS_ORACLE_SRC')]",
-				"[concat(variables('factoryId'), '/datasets/DTS_POSTGRESQL_SNK_P02')]"
+				"[concat(variables('factoryId'), '/datasets/DTS_POSTGRESQL_SNK_P02')]",
+				"[concat(variables('factoryId'), '/datasets/DTS_POSTGRESQL_SNK')]"
 			]
 		},
 		{
@@ -140279,8 +140323,7 @@
 						"frequency": "Day",
 						"interval": 1,
 						"startTime": "2023-06-20T05:40:00",
-						"timeZone": "Korea Standard Time",
-						"schedule": {}
+						"timeZone": "Korea Standard Time"
 					}
 				}
 			},
