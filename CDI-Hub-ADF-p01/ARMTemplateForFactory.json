@@ -115562,6 +115562,105 @@
 								}
 							}
 						]
+					},
+					{
+						"name": "Copy data_copy1",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Copy data",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "OracleSource",
+								"oracleReaderQuery": "    SELECT BID_ID\n          ,MAX(ITEM_FILE_NAME) AS ITEM_FILE_NAME\n     FROM  RPA_ODS.RPA_D2B \n     GROUP BY BID_ID",
+								"partitionOption": "None",
+								"queryTimeout": "02:00:00"
+							},
+							"sink": {
+								"type": "AzurePostgreSQLSink",
+								"writeBatchSize": 1000000,
+								"writeBatchTimeout": "00:30:00",
+								"preCopyScript": "truncate table\ncd_ods.tb_rpa_d2b_file",
+								"writeMethod": "CopyCommand"
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"mappings": [
+									{
+										"source": {
+											"name": "BID_ID",
+											"type": "String"
+										},
+										"sink": {
+											"name": "bid_id",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "ITEM_FILE_NAME"
+										},
+										"sink": {
+											"name": "item_file_name",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									}
+								],
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_ORACLE_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceSchema": {
+										"value": "@pipeline().parameters.SourceSchema",
+										"type": "Expression"
+									},
+									"SourceTable": {
+										"value": "@pipeline().parameters.SourceTable",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_POSTGRESQL_SNK_P02",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": {
+										"value": "@pipeline().parameters.SinkSchema",
+										"type": "Expression"
+									},
+									"SinkTable": {
+										"value": "@pipeline().parameters.SinkTable2",
+										"type": "Expression"
+									}
+								}
+							}
+						]
 					}
 				],
 				"policy": {
@@ -115584,6 +115683,10 @@
 					"SinkTable": {
 						"type": "string",
 						"defaultValue": "tb_rpa_d2b"
+					},
+					"SinkTable2": {
+						"type": "string",
+						"defaultValue": "tb_rpa_d2b_file"
 					}
 				},
 				"folder": {
@@ -130606,6 +130709,398 @@
 			]
 		},
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_NIELSEN_TO_PG_M')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "- 닐슨 SFTP ",
+				"activities": [
+					{
+						"name": "Lookup1",
+						"description": "닐슨데이터의 주차 csv 읽기 \nPER_yyyymm.csv",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "Set yyyymm",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true,
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"dataset": {
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": {
+										"value": "@concat(pipeline().parameters.AdlsDirectory,'/',variables('yyyymm'))",
+										"type": "Expression"
+									},
+									"FileName": "PER_202308.csv"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "Set yyyymm",
+						"description": "수행일 기준 전월 구하기\n포멧 : yyyymm",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "yyyymm",
+							"value": {
+								"value": "@formatDateTime(addDays(startOfMonth(addHours(utcNow(), 9)),-1),'yyyyMM')",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Set minWeek",
+						"description": "닐슨에서전송해온 데이터의 시작주차",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "Lookup1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "minWeek",
+							"value": {
+								"value": "@activity('Lookup1').output.value[0].TAG",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "Set MaxWeek",
+						"description": "닐슨에서 가져온 데이터의 마지막주",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "Lookup1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "maxWeek",
+							"value": {
+								"value": "@activity('Lookup1').output.value[add(activity('Lookup1').output.count,-1)].TAG",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "pg_tb_neilsen_data",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Set MaxWeek",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "Set minWeek",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true,
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "AzurePostgreSQLSink",
+								"writeBatchSize": 1000000,
+								"writeBatchTimeout": "00:30:00",
+								"writeMethod": "CopyCommand"
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"mappings": [
+									{
+										"source": {
+											"name": "MKT_TAG",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "mkt_tag",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "PROD_TAG",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "prod_tag",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "PER_TAG",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "per_tag",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "F000000000000000000100000000000000000000",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sales_unit",
+											"type": "Decimal",
+											"physicalType": "numeric"
+										}
+									},
+									{
+										"source": {
+											"name": "F000000000000000000100000000000000000001",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sales_unit_tot_prom",
+											"type": "Decimal",
+											"physicalType": "numeric"
+										}
+									},
+									{
+										"source": {
+											"name": "F000000000000000000100000000000000006318",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sales_unit_feature",
+											"type": "Decimal",
+											"physicalType": "numeric"
+										}
+									},
+									{
+										"source": {
+											"name": "F000000000000000000100000000000000006319",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sales_unit_tpr",
+											"type": "Decimal",
+											"physicalType": "numeric"
+										}
+									},
+									{
+										"source": {
+											"name": "F000000000000000000100000000000000006320",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sales_unit_freevolume",
+											"type": "Decimal",
+											"physicalType": "numeric"
+										}
+									},
+									{
+										"source": {
+											"name": "F000000000000000000100000000000000006321",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sales_unit_ftr_tpr",
+											"type": "Decimal",
+											"physicalType": "numeric"
+										}
+									},
+									{
+										"source": {
+											"name": "F000000000000000000100000000000000006322",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sales_unit_ftr_fvol",
+											"type": "Decimal",
+											"physicalType": "numeric"
+										}
+									},
+									{
+										"source": {
+											"name": "F000000000000000000100000000000000006323",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sales_unit_tpr_fvol",
+											"type": "Decimal",
+											"physicalType": "numeric"
+										}
+									},
+									{
+										"source": {
+											"name": "F000000000000000000100000000000000006324",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sales_unit_ftr_tpr_fvol",
+											"type": "Decimal",
+											"physicalType": "numeric"
+										}
+									},
+									{
+										"source": {
+											"name": "F000000000000000000200000000000000000000",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sales_volumns",
+											"type": "Decimal",
+											"physicalType": "numeric"
+										}
+									}
+								],
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": {
+										"value": "@concat(pipeline().parameters.AdlsDirectory,'/',variables('yyyymm'))",
+										"type": "Expression"
+									},
+									"FileName": {
+										"value": "@concat('DATA_',variables('yyyymm'),'.csv')",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "cd_ods",
+									"SinkTable": "tb_nielsen_data"
+								}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {},
+					"cancelAfter": {}
+				},
+				"parameters": {
+					"AdlsDirectory": {
+						"type": "string",
+						"defaultValue": "매출(주문)/외부/유통사MS정보/닐슨"
+					}
+				},
+				"variables": {
+					"yyyymm": {
+						"type": "String"
+					},
+					"minWeek": {
+						"type": "String"
+					},
+					"maxWeek": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "매출_주문/외부/닐슨"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-12-15T09:05:35Z"
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/DTS_ADLS_SNK')]",
+				"[concat(variables('factoryId'), '/datasets/DTS_POSTGRESQL_SNK')]"
+			]
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_PG_STORE_DATA')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -134203,7 +134698,14 @@
 					{
 						"name": "Copy data",
 						"type": "Copy",
-						"dependsOn": [],
+						"dependsOn": [
+							{
+								"activity": "Set yyyymm",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
 						"policy": {
 							"timeout": "0.12:00:00",
 							"retry": 0,
@@ -134233,7 +134735,7 @@
 								"type": "BinarySink",
 								"storeSettings": {
 									"type": "AzureBlobFSWriteSettings",
-									"copyBehavior": "FlattenHierarchy"
+									"copyBehavior": "PreserveHierarchy"
 								}
 							},
 							"enableStaging": false
@@ -134242,21 +134744,53 @@
 							{
 								"referenceName": "DTS_NIELSEN_SRC",
 								"type": "DatasetReference",
-								"parameters": {}
+								"parameters": {
+									"zipname": {
+										"value": "@concat('MDSPK_SFF_',variables('yyyymm'),'.zip')",
+										"type": "Expression"
+									}
+								}
 							}
 						],
 						"outputs": [
 							{
 								"referenceName": "DTS_NIELSEN_SNK",
 								"type": "DatasetReference",
-								"parameters": {}
+								"parameters": {
+									"yyyymm": {
+										"value": "@variables('yyyymm')",
+										"type": "Expression"
+									}
+								}
 							}
 						]
+					},
+					{
+						"name": "Set yyyymm",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "yyyymm",
+							"value": {
+								"value": "@formatDateTime(addDays(startOfMonth(addHours(utcNow(), 9)),-1),'yyyyMM')",
+								"type": "Expression"
+							}
+						}
 					}
 				],
 				"policy": {
 					"elapsedTimeMetric": {},
 					"cancelAfter": {}
+				},
+				"variables": {
+					"yyyymm": {
+						"type": "String"
+					}
 				},
 				"folder": {
 					"name": "매출_주문/외부/닐슨"
@@ -138606,6 +139140,11 @@
 					"referenceName": "LKS_ADLS_P01",
 					"type": "LinkedServiceReference"
 				},
+				"parameters": {
+					"yyyymm": {
+						"type": "string"
+					}
+				},
 				"folder": {
 					"name": "Sink"
 				},
@@ -138615,7 +139154,7 @@
 					"location": {
 						"type": "AzureBlobFSLocation",
 						"folderPath": {
-							"value": "@concat('매출(주문)/외부/유통사MS정보/닐슨/',formatDateTime(addHours(utcNow(), 9), 'yyyyMM'))",
+							"value": "@concat('매출(주문)/외부/유통사MS정보/닐슨/',dataset().yyyymm)",
 							"type": "Expression"
 						},
 						"fileSystem": "cdi-root"
@@ -138635,6 +139174,11 @@
 					"referenceName": "LKS_SFTP_P02",
 					"type": "LinkedServiceReference"
 				},
+				"parameters": {
+					"zipname": {
+						"type": "string"
+					}
+				},
 				"folder": {
 					"name": "Source"
 				},
@@ -138643,7 +139187,10 @@
 				"typeProperties": {
 					"location": {
 						"type": "SftpLocation",
-						"fileName": "MDSPK_SFF_202308.zip"
+						"fileName": {
+							"value": "@dataset().zipname",
+							"type": "Expression"
+						}
 					},
 					"compression": {
 						"type": "ZipDeflate",
