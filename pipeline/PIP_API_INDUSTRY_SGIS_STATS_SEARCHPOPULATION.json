@@ -4,34 +4,9 @@
 		"description": "인구통계정보조회",
 		"activities": [
 			{
-				"name": "set year",
-				"description": "당일자",
-				"type": "SetVariable",
-				"dependsOn": [],
-				"policy": {
-					"secureOutput": false,
-					"secureInput": false
-				},
-				"userProperties": [],
-				"typeProperties": {
-					"variableName": "year",
-					"value": {
-						"value": "@pipeline().parameters.pipYear",
-						"type": "Expression"
-					}
-				}
-			},
-			{
 				"name": "get accessToken",
 				"type": "Lookup",
-				"dependsOn": [
-					{
-						"activity": "set year",
-						"dependencyConditions": [
-							"Succeeded"
-						]
-					}
-				],
+				"dependsOn": [],
 				"policy": {
 					"timeout": "0.12:00:00",
 					"retry": 5,
@@ -66,14 +41,9 @@
 			{
 				"name": "Copy data1",
 				"type": "Copy",
-				"dependsOn": [
-					{
-						"activity": "get accessToken",
-						"dependencyConditions": [
-							"Succeeded"
-						]
-					}
-				],
+				"state": "Inactive",
+				"onInactiveMarkAs": "Succeeded",
+				"dependsOn": [],
 				"policy": {
 					"timeout": "0.12:00:00",
 					"retry": 0,
@@ -89,7 +59,7 @@
 							{
 								"name": "year",
 								"value": {
-									"value": "@variables('year')",
+									"value": "@item().year",
 									"type": "Expression"
 								}
 							}
@@ -194,7 +164,14 @@
 			{
 				"name": "Lookup1",
 				"type": "Lookup",
-				"dependsOn": [],
+				"dependsOn": [
+					{
+						"activity": "set accessToken",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
 				"policy": {
 					"timeout": "0.12:00:00",
 					"retry": 0,
@@ -224,6 +201,174 @@
 						}
 					},
 					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "set accessToken",
+				"description": "당일자",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "get accessToken",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "accessToken",
+					"value": {
+						"value": "@activity('get accessToken').output.firstRow.result.accessToken",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "ForEach1_copy1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Lookup1",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Lookup1').output.value",
+						"type": "Expression"
+					},
+					"isSequential": true,
+					"activities": [
+						{
+							"name": "Copy data1_copy1",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "JsonSource",
+									"additionalColumns": [
+										{
+											"name": "year",
+											"value": {
+												"value": "@item().year",
+												"type": "Expression"
+											}
+										}
+									],
+									"storeSettings": {
+										"type": "HttpReadSettings",
+										"requestMethod": "GET"
+									},
+									"formatSettings": {
+										"type": "JsonReadSettings"
+									}
+								},
+								"sink": {
+									"type": "AzurePostgreSQLSink",
+									"writeBatchSize": 1000000,
+									"writeBatchTimeout": "00:30:00",
+									"writeMethod": "CopyCommand"
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"mappings": [
+										{
+											"source": {
+												"path": "['adm_cd']"
+											},
+											"sink": {
+												"name": "adm_cd",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['adm_nm']"
+											},
+											"sink": {
+												"name": "adm_nm",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['avg_age']"
+											},
+											"sink": {
+												"name": "avg_age",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['population']"
+											},
+											"sink": {
+												"name": "population",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "$['year']"
+											},
+											"sink": {
+												"name": "year",
+												"type": "String"
+											}
+										}
+									],
+									"collectionReference": "$['result']",
+									"mapComplexValuesToString": false
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "DTS_API_SGIS",
+									"type": "DatasetReference",
+									"parameters": {
+										"url": {
+											"value": "@concat('/OpenAPI3/stats/searchpopulation.json?accessToken=',variables('accessToken'),'&year=',item().year,'&low_search=1')",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "DTS_POSTGRESQL_SNK_P02",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": {
+											"value": "@pipeline().parameters.SinkSchema",
+											"type": "Expression"
+										},
+										"SinkTable": {
+											"value": "@pipeline().parameters.SinkTable",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					]
 				}
 			}
 		],
