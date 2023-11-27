@@ -5,7 +5,14 @@
 			{
 				"name": "Copy Yesterday data",
 				"type": "Copy",
-				"dependsOn": [],
+				"dependsOn": [
+					{
+						"activity": "Copy Yesterday data_copy1",
+						"dependencyConditions": [
+							"Failed"
+						]
+					}
+				],
 				"policy": {
 					"timeout": "7.00:00:00",
 					"retry": 0,
@@ -112,6 +119,76 @@
 					},
 					"traceLevel": "Fine"
 				}
+			},
+			{
+				"name": "Copy Yesterday data_copy1",
+				"type": "Copy",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "MySqlSource",
+						"query": {
+							"value": "@concat('SELECT srd_id,\n\tsd_reviewid,\n\tsite,\n\tsite_id,\n\treplace(replace(replace(replace(replace(replace(srd_title, ''\\\\'', ''＼''),char(10), ''//LF//''), char(13),''//LF//''), ''\\\"'', ''＂''), ''\\0'',''''), '','',''//CM//'') as srd_title,\n    replace(replace(replace(replace(replace(replace(srd_content, ''\\\\'', ''＼''),char(10), ''//LF//''), char(13),''//LF//''), ''\\\"'', ''＂''), ''\\0'',''''), '','',''//CM//'') as srd_content,\n\tsrd_writer,\n\tsrd_writetime,\n\tsrd_rate,\n\tsrd_crawl_time\n\tFROM ',\npipeline().parameters.SourceTable,\n ' WHERE DATE(', pipeline().parameters.IncCol, ') = DATE_ADD(CURDATE(), INTERVAL 0 DAY)\nAND SITE !=''마켓컬리_STORE''')",
+							"type": "Expression"
+						}
+					},
+					"sink": {
+						"type": "DelimitedTextSink",
+						"storeSettings": {
+							"type": "AzureBlobFSWriteSettings"
+						},
+						"formatSettings": {
+							"type": "DelimitedTextWriteSettings",
+							"quoteAllText": true,
+							"fileExtension": ".csv"
+						}
+					},
+					"enableStaging": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"typeConversion": true,
+						"typeConversionSettings": {
+							"allowDataTruncation": true,
+							"treatBooleanAsNumber": false
+						}
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "DTS_RSN_SRC",
+						"type": "DatasetReference",
+						"parameters": {
+							"SourceTable": {
+								"value": "@pipeline().parameters.SourceTable",
+								"type": "Expression"
+							}
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "DTS_ADLS_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"AdlsDirectory": {
+								"value": "@pipeline().parameters.AdlsDirectory",
+								"type": "Expression"
+							},
+							"FileName": {
+								"value": "@concat('D_RSN_온라인몰_리뷰정보(중복제거)_', pipeline().parameters.SourceTable,'_', addDays(addHours(utcNow(), 9), -1, 'yyyyMMdd'),'.csv')",
+								"type": "Expression"
+							}
+						}
+					}
+				]
 			}
 		],
 		"parameters": {
