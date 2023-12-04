@@ -679,11 +679,11 @@
 													"type": "Expression"
 												},
 												"StartYM": {
-													"value": "@formatDateTime(addDays(addHours(utcNow(), 9),int('-2')),'yyyyMMdd')",
+													"value": "@variables('date')",
 													"type": "Expression"
 												},
 												"EndYM": {
-													"value": "@formatDateTime(addDays(addHours(utcNow(), 9),int('-2')),'yyyyMMdd')",
+													"value": "@variables('date')",
 													"type": "Expression"
 												},
 												"ApiKey": {
@@ -699,11 +699,11 @@
 											"type": "DatasetReference",
 											"parameters": {
 												"AdlsDirectory": {
-													"value": "@concat(pipeline().parameters.AdlsDirectoryOri,'/',formatDateTime(addDays(addHours(utcNow(), 9),int('-2')),'yyyyMMdd'))",
+													"value": "@concat(pipeline().parameters.AdlsDirectoryOri,'/',variables('date'))",
 													"type": "Expression"
 												},
 												"FileName": {
-													"value": "@concat(pipeline().parameters.FileName, '_', replace(item().CAllNAME , '/', '_'),'_',formatDateTime(addDays(addHours(utcNow(), 9),int('-2')),'yyyyMMdd'), '.csv')",
+													"value": "@concat(pipeline().parameters.FileName, '_', replace(item().CAllNAME , '/', '_'),'_',variables('date'), '.csv')",
 													"type": "Expression"
 												}
 											}
@@ -717,7 +717,14 @@
 						"name": "Lookup API Info",
 						"description": "API 정보를 가져오기 위해 LOOKUP 파일에서CATEGORY, CALLNAME을 읽어옵니다.",
 						"type": "Lookup",
-						"dependsOn": [],
+						"dependsOn": [
+							{
+								"activity": "Set variable1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
 						"policy": {
 							"timeout": "7.00:00:00",
 							"retry": 0,
@@ -783,7 +790,7 @@
 									"maxConcurrentConnections": 1,
 									"recursive": true,
 									"wildcardFolderPath": {
-										"value": "@concat(pipeline().parameters.AdlsDirectoryOri,'/',formatDateTime(addDays(addHours(utcNow(), 9),int('-2')),'yyyyMMdd'))",
+										"value": "@concat(pipeline().parameters.AdlsDirectoryOri,'/',variables('date'))",
 										"type": "Expression"
 									},
 									"wildcardFileName": "*",
@@ -844,9 +851,849 @@
 										"type": "Expression"
 									},
 									"FileName": {
-										"value": "@concat(pipeline().parameters.FileName,'_', formatDateTime(addDays(addHours(utcNow(), 9),int('-2')),'yyyyMMdd'),'.csv')\n\n",
+										"value": "@concat(pipeline().parameters.FileName,'_', variables('date'), '.csv')",
 										"type": "Expression"
 									}
+								}
+							}
+						]
+					},
+					{
+						"name": "Set variable1",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "date",
+							"value": {
+								"value": "@formatDateTime(addDays(addHours(utcNow(), 9),int('-1')),'yyyyMMdd')",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "pg insert",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Merge Data",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true,
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "AzurePostgreSQLSink",
+								"writeBatchSize": 1000000,
+								"writeBatchTimeout": "00:30:00",
+								"preCopyScript": {
+									"value": "delete\n    from  cd_ods.tb_asos_weather_day\n   where tm = '@{variables('date')}'",
+									"type": "Expression"
+								},
+								"writeMethod": "CopyCommand"
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"mappings": [
+									{
+										"source": {
+											"name": "stnId",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "stnid",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "stnNm",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "stnnm",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "tm",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "tm",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgTa",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgta",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "minTa",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "minta",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "minTaHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "mintahrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "maxTa",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "maxta",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "maxTaHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "maxtahrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "mi10MaxRn",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "mi10maxrn",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "mi10MaxRnHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "mi10maxrnhrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "hr1MaxRn",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "hr1maxrn",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "hr1MaxRnHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "hr1maxrnhrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "sumRnDur",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sumrndur",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "sumRn",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sumrn",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "maxInsWs",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "maxinsws",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "maxInsWsWd",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "maxinswswd",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "maxInsWsHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "maxinswshrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "maxWs",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "maxws",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "maxWsWd",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "maxwswd",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "maxWsHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "maxwshrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgWs",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgws",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "hr24SumRws",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "hr24sumrws",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "maxWd",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "maxwd",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgTd",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgtd",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "minRhm",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "minrhm",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "minRhmHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "minrhmhrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgRhm",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgrhm",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgPv",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgpv",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgPa",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgpa",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "maxPs",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "maxps",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "maxPsHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "maxpshrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "minPs",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "minps",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "minPsHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "minpshrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgPs",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgps",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "ssDur",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "ssdur",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "sumSsHr",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sumsshr",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "hr1MaxIcsrHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "hr1maxicsrhrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "hr1MaxIcsr",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "hr1maxicsr",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "sumGsr",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sumgsr",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "ddMefs",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "ddmefs",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "ddMefsHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "ddmefshrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "ddMes",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "ddmes",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "ddMesHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "ddmeshrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "sumDpthFhsc",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sumdpthfhsc",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgTca",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgtca",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgLmac",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avglmac",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgTs",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgts",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "minTg",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "mintg",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgCm5Te",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgcm5te",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgCm10Te",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgcm10te",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgCm20Te",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgcm20te",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgCm30Te",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgcm30te",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgM05Te",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgm05te",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgM10Te",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgm10te",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgM15Te",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgm15te",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgM30Te",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgm30te",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgM50Te",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgm50te",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "sumLrgEv",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sumlrgev",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "sumSmlEv",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sumsmlev",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "n99Rn",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "n99rn",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "iscs",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "iscs",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "sumFogDur",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sumfogdur",
+											"physicalType": "character varying"
+										}
+									}
+								],
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": {
+										"value": "@pipeline().parameters.AdlsDirectory",
+										"type": "Expression"
+									},
+									"FileName": {
+										"value": "@concat(pipeline().parameters.FileName,'_', variables('date'),'.csv')",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_POSTGRESQL_SNK_P02",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "cd_ods",
+									"SinkTable": "tb_asos_weather_day"
 								}
 							}
 						]
@@ -879,6 +1726,11 @@
 					"Apikey": {
 						"type": "string",
 						"defaultValue": "W26gwh49fADZe9fVLqkaAlzn5IPh6n9jf9FCHkThIs6UDblFv46xFoLaNzl011vFX8daAemoPlw4BubABfFBRg%3D%3D"
+					}
+				},
+				"variables": {
+					"date": {
+						"type": "String"
 					}
 				},
 				"folder": {
@@ -2620,6 +3472,875 @@
 										"value": "@concat(pipeline().parameters.FileName,'_', pipeline().parameters.StartYM,'_',pipeline().parameters.EndYM,'.csv')\n\n",
 										"type": "Expression"
 									}
+								}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"AdlsDirectory": {
+						"type": "string",
+						"defaultValue": "Industry/외부/날씨데이터"
+					},
+					"FileName": {
+						"type": "string",
+						"defaultValue": "일별날씨데이터"
+					},
+					"AdlsDirectoryConf": {
+						"type": "string",
+						"defaultValue": "Industry/외부/날씨데이터/conf"
+					},
+					"ConfFile": {
+						"type": "string",
+						"defaultValue": "날씨데이터_일별날씨데이터_conf"
+					},
+					"AdlsDirectoryOri": {
+						"type": "string",
+						"defaultValue": "Industry/외부/날씨데이터/일별날씨데이터"
+					},
+					"Apikey": {
+						"type": "string",
+						"defaultValue": "W26gwh49fADZe9fVLqkaAlzn5IPh6n9jf9FCHkThIs6UDblFv46xFoLaNzl011vFX8daAemoPlw4BubABfFBRg%3D%3D"
+					},
+					"StartYM": {
+						"type": "string",
+						"defaultValue": "20221225"
+					},
+					"EndYM": {
+						"type": "string",
+						"defaultValue": "20230626"
+					}
+				},
+				"folder": {
+					"name": "Industry/외부/날씨데이터"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-12-30T02:16:24Z"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_KMA_WEATHER_D_M_MULTI_copy1')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "기상청 날씨 수동 파이프라인",
+				"activities": [
+					{
+						"name": "pg insert",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true,
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "AzurePostgreSQLSink",
+								"writeBatchSize": 1000000,
+								"writeBatchTimeout": "00:30:00",
+								"preCopyScript": {
+									"value": "delete\n    from  cd_ods.tb_asos_weather_day\n   where tm between '@{pipeline().parameters.StartYM}'\n               and '@{pipeline().parameters.EndYM}'",
+									"type": "Expression"
+								},
+								"writeMethod": "CopyCommand"
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"mappings": [
+									{
+										"source": {
+											"name": "stnId",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "stnid",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "stnNm",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "stnnm",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "tm",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "tm",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgTa",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgta",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "minTa",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "minta",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "minTaHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "mintahrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "maxTa",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "maxta",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "maxTaHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "maxtahrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "mi10MaxRn",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "mi10maxrn",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "mi10MaxRnHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "mi10maxrnhrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "hr1MaxRn",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "hr1maxrn",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "hr1MaxRnHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "hr1maxrnhrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "sumRnDur",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sumrndur",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "sumRn",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sumrn",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "maxInsWs",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "maxinsws",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "maxInsWsWd",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "maxinswswd",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "maxInsWsHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "maxinswshrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "maxWs",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "maxws",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "maxWsWd",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "maxwswd",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "maxWsHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "maxwshrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgWs",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgws",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "hr24SumRws",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "hr24sumrws",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "maxWd",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "maxwd",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgTd",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgtd",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "minRhm",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "minrhm",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "minRhmHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "minrhmhrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgRhm",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgrhm",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgPv",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgpv",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgPa",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgpa",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "maxPs",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "maxps",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "maxPsHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "maxpshrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "minPs",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "minps",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "minPsHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "minpshrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgPs",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgps",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "ssDur",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "ssdur",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "sumSsHr",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sumsshr",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "hr1MaxIcsrHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "hr1maxicsrhrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "hr1MaxIcsr",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "hr1maxicsr",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "sumGsr",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sumgsr",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "ddMefs",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "ddmefs",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "ddMefsHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "ddmefshrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "ddMes",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "ddmes",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "ddMesHrmt",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "ddmeshrmt",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "sumDpthFhsc",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sumdpthfhsc",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgTca",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgtca",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgLmac",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avglmac",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgTs",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgts",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "minTg",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "mintg",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgCm5Te",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgcm5te",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgCm10Te",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgcm10te",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgCm20Te",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgcm20te",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgCm30Te",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgcm30te",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgM05Te",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgm05te",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgM10Te",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgm10te",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgM15Te",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgm15te",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgM30Te",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgm30te",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "avgM50Te",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "avgm50te",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "sumLrgEv",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sumlrgev",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "sumSmlEv",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sumsmlev",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "n99Rn",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "n99rn",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "iscs",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "iscs",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "sumFogDur",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "sumfogdur",
+											"physicalType": "character varying"
+										}
+									}
+								],
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": {
+										"value": "@pipeline().parameters.AdlsDirectory",
+										"type": "Expression"
+									},
+									"FileName": {
+										"value": "@concat(pipeline().parameters.FileName,'_', pipeline().parameters.StartYM,'_',pipeline().parameters.EndYM,'.csv')",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_POSTGRESQL_SNK_P02",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "cd_ods",
+									"SinkTable": "tb_asos_weather_day"
 								}
 							}
 						]
@@ -12031,462 +13752,6 @@
 							"variableName": "enddt",
 							"value": {
 								"value": "@if(equals(pipeline().parameters.pipenddt,null),'200212310000',pipeline().parameters.pipenddt)",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "delet table",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "set strdt",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							},
-							{
-								"activity": "set enddt",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "delete from  @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}       \n WHERE  REGEXP_REPLACE(rgstDt, '[^0-9]','','g') BETWEEN '@{variables('strdt')}' AND '@{variables('enddt')}';\n \nselect 1 as success",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "get page",
-						"description": "대표 제품의 생성 기간동안 토탈 건수 ",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "delet table",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "JsonSource",
-								"storeSettings": {
-									"type": "HttpReadSettings",
-									"requestMethod": "GET"
-								},
-								"formatSettings": {
-									"type": "JsonReadSettings"
-								}
-							},
-							"dataset": {
-								"referenceName": "DTS_PPS_API_JSON",
-								"type": "DatasetReference",
-								"parameters": {
-									"params": {
-										"value": "@concat('/1230000/ScsbidInfoService/',pipeline().parameters.service,'?type=json&inqryDiv=1&pageNo=1&numOfRows=1&inqryBgnDt=',variables('strdt'),'&inqryEndDt=',variables('enddt'),'&ServiceKey=',pipeline().parameters.Apikey)",
-										"type": "Expression"
-									}
-								}
-							}
-						}
-					},
-					{
-						"name": "ForEach1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "get page",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@range(1  \n      ,add(\n             div(\n                  int(activity('get page').output.firstRow.response.body.totalCount) \n                 ,int(pipeline().parameters.one_page_row)                  \n                )\n            ,if(\n                greater(\n                        mod(\n                            int(activity('get page').output.firstRow.response.body.totalCount) \n                        ,int(pipeline().parameters.one_page_row)   \n                            )\n                       ,0\n                       )\n                ,1,0\n            )           \n       )\n)",
-								"type": "Expression"
-							},
-							"activities": [
-								{
-									"name": "Copy data1_copy1",
-									"type": "Copy",
-									"dependsOn": [],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "JsonSource",
-											"storeSettings": {
-												"type": "HttpReadSettings",
-												"requestMethod": "GET"
-											},
-											"formatSettings": {
-												"type": "JsonReadSettings"
-											}
-										},
-										"sink": {
-											"type": "AzurePostgreSQLSink",
-											"writeBatchSize": 1000000,
-											"writeBatchTimeout": "00:30:00",
-											"writeMethod": "CopyCommand"
-										},
-										"enableStaging": false,
-										"enableSkipIncompatibleRow": false,
-										"translator": {
-											"type": "TabularTranslator",
-											"mappings": [
-												{
-													"source": {
-														"path": "[['bidNtceNo']"
-													},
-													"sink": {
-														"name": "bidntceno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bidNtceOrd']"
-													},
-													"sink": {
-														"name": "bidntceord",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bidClsfcNo']"
-													},
-													"sink": {
-														"name": "bidclsfcno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['rbidNo']"
-													},
-													"sink": {
-														"name": "rbidno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['ntceDivCd']"
-													},
-													"sink": {
-														"name": "ntcedivcd",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bidNtceNm']"
-													},
-													"sink": {
-														"name": "bidntcenm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['prtcptCnum']"
-													},
-													"sink": {
-														"name": "prtcptcnum",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bidwinnrNm']"
-													},
-													"sink": {
-														"name": "bidwinnrnm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bidwinnrBizno']"
-													},
-													"sink": {
-														"name": "bidwinnrbizno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bidwinnrCeoNm']"
-													},
-													"sink": {
-														"name": "bidwinnrceonm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bidwinnrAdrs']"
-													},
-													"sink": {
-														"name": "bidwinnradrs",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bidwinnrTelNo']"
-													},
-													"sink": {
-														"name": "bidwinnrtelno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['sucsfbidAmt']"
-													},
-													"sink": {
-														"name": "sucsfbidamt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['sucsfbidRate']"
-													},
-													"sink": {
-														"name": "sucsfbidrate",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['rlOpengDt']"
-													},
-													"sink": {
-														"name": "rlopengdt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['dminsttCd']"
-													},
-													"sink": {
-														"name": "dminsttcd",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['dminsttNm']"
-													},
-													"sink": {
-														"name": "dminsttnm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['rgstDt']"
-													},
-													"sink": {
-														"name": "rgstdt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['fnlSucsfDate']"
-													},
-													"sink": {
-														"name": "fnlsucsfdate",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['fnlSucsfCorpOfcl']"
-													},
-													"sink": {
-														"name": "fnlsucsfcorpofcl",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['linkInsttNm']"
-													},
-													"sink": {
-														"name": "linkinsttnm",
-														"type": "String"
-													}
-												}
-											],
-											"collectionReference": "$['response']['body']['items']",
-											"mapComplexValuesToString": false
-										}
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_PPS_API_JSON",
-											"type": "DatasetReference",
-											"parameters": {
-												"params": {
-													"value": "@concat('/1230000/ScsbidInfoService/',pipeline().parameters.service,'?type=json&inqryDiv=1&pageNo=',item(),'&numOfRows=',pipeline().parameters.one_page_row,'&inqryBgnDt=',variables('strdt'),'&inqryEndDt=',variables('enddt'),'&ServiceKey=',pipeline().parameters.Apikey)",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_POSTGRESQL_SNK",
-											"type": "DatasetReference",
-											"parameters": {
-												"SinkSchema": {
-													"value": "@pipeline().parameters.SinkSchema",
-													"type": "Expression"
-												},
-												"SinkTable": {
-													"value": "@pipeline().parameters.SinkTable",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								}
-							]
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"Apikey": {
-						"type": "string",
-						"defaultValue": "W26gwh49fADZe9fVLqkaAlzn5IPh6n9jf9FCHkThIs6UDblFv46xFoLaNzl011vFX8daAemoPlw4BubABfFBRg%3D%3D"
-					},
-					"service": {
-						"type": "string",
-						"defaultValue": "getScsbidListSttusThng"
-					},
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "tb_mas_successful_bid_list_status_things"
-					},
-					"one_page_row": {
-						"type": "string",
-						"defaultValue": "999"
-					},
-					"pipstrdt": {
-						"type": "string"
-					},
-					"pipenddt": {
-						"type": "string"
-					}
-				},
-				"variables": {
-					"strdt": {
-						"type": "String"
-					},
-					"enddt": {
-						"type": "String"
-					}
-				},
-				"folder": {
-					"name": "Industry/외부/조달청"
-				},
-				"annotations": [],
-				"lastPublishTime": "2023-01-16T07:55:39Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_MAS_SUCCESSFUL_BID_LIST_STATUS_THINGS_INC')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "낙찰된 목록 현황 물품조회",
-				"activities": [
-					{
-						"name": "set strdt",
-						"description": "당일자",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "strdt",
-							"value": {
-								"value": "@concat(formatDateTime(adddays(addHours(utcNow(), 9), -7), 'yyyyMMdd'),'0000')",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "set enddt",
-						"description": "당일자",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "enddt",
-							"value": {
-								"value": "@concat(formatDateTime(adddays(addHours(utcNow(), 9), -1), 'yyyyMMdd'),'0000')",
 								"type": "Expression"
 							}
 						}
