@@ -1,0 +1,170 @@
+{
+	"name": "PIP_API_INDUSTRY_KAMIS_D_PG",
+	"properties": {
+		"activities": [
+			{
+				"name": "Lookup1",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "select cmonth2 as cmonth\n      ,TO_CHAR(min(BASE_DATE),'yyyymmdd') as sdate\n      ,TO_CHAR(max(BASE_DATE),'yyyymmdd') as edate\n   from cd_ods.aps_sdc_pw_mst\n  where cmonth2 between '@{pipeline().parameters.smonth}' and '@{pipeline().parameters.emonth}'\n   group by cmonth2 \n   order by cmonth2",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Lookup1",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"activities": [
+						{
+							"name": "Copy data1",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "DelimitedTextSource",
+									"storeSettings": {
+										"type": "AzureBlobFSReadSettings",
+										"recursive": true,
+										"enablePartitionDiscovery": false
+									},
+									"formatSettings": {
+										"type": "DelimitedTextReadSettings"
+									}
+								},
+								"sink": {
+									"type": "AzurePostgreSQLSink",
+									"writeBatchSize": 1000000,
+									"writeBatchTimeout": "00:30:00",
+									"preCopyScript": {
+										"value": "delete \n  from cd_ods.tb_kamis_daily_price\nwhere regday between '@{item().sdate}' and '@{item().edate}'",
+										"type": "Expression"
+									},
+									"writeMethod": "CopyCommand"
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"typeConversion": true,
+									"typeConversionSettings": {
+										"allowDataTruncation": true,
+										"treatBooleanAsNumber": false
+									}
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "DTS_ADLS_SNK",
+									"type": "DatasetReference",
+									"parameters": {
+										"AdlsDirectory": {
+											"value": "@pipeline().parameters.AdlsDirectory",
+											"type": "Expression"
+										},
+										"FileName": {
+											"value": "@concat(pipeline().parameters.FileName,'_',item().cmonth,'.csv')",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "DTS_POSTGRESQL_SNK_P02",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": "cd_ods",
+										"SinkTable": "tb_kamis_daily_price"
+									}
+								}
+							]
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"AdlsDirectory": {
+				"type": "string",
+				"defaultValue": "Industry/외부/농수산식품/도소매가격정보"
+			},
+			"FileName": {
+				"type": "string",
+				"defaultValue": "도소매가격정보"
+			},
+			"AdlsDirectoryConf": {
+				"type": "string",
+				"defaultValue": "Industry/외부/농수산식품/conf"
+			},
+			"ConfFile": {
+				"type": "string",
+				"defaultValue": "도소매_conf"
+			},
+			"AdlsDirectoryOri": {
+				"type": "string",
+				"defaultValue": "Industry/외부/농수산식품/도소매가격정보_원본"
+			},
+			"Apikey": {
+				"type": "string",
+				"defaultValue": "fabd919e-b1b9-4ef8-b9bc-c3e82b728bf2"
+			},
+			"smonth": {
+				"type": "string"
+			},
+			"emonth": {
+				"type": "string"
+			}
+		},
+		"variables": {
+			"regday": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "Industry/외부/농수산식품"
+		},
+		"annotations": [],
+		"lastPublishTime": "2023-01-16T07:55:39Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}
