@@ -13,6 +13,164 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_RSN_BEST_RANKING_DATA_FULL')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "- 초기 적재시, 월별로 모든 파일 Sink\n- 증분컬럼이 DATE 형식",
+				"activities": [
+					{
+						"name": "Lookup Date",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "MySqlSource",
+								"query": {
+									"value": "@concat('SELECT DISTINCT(DATE(', pipeline().parameters.IncCol, ')) STARTDT FROM ', pipeline().parameters.SourceTable, ' ORDER BY STARTDT')",
+									"type": "Expression"
+								}
+							},
+							"dataset": {
+								"referenceName": "DTS_RSN_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceTable": {
+										"value": "@pipeline().parameters.SourceTable",
+										"type": "Expression"
+									}
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach Copy data",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup Date",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup Date').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Copy data All date",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "MySqlSource",
+											"query": {
+												"value": "@concat('SELECT * FROM ', pipeline().parameters.SourceTable, ' WHERE DATE(', pipeline().parameters.IncCol, ') = ','DATE(''', item().STARTDT, ''')')",
+												"type": "Expression"
+											}
+										},
+										"sink": {
+											"type": "DelimitedTextSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "DelimitedTextWriteSettings",
+												"quoteAllText": true,
+												"fileExtension": ".csv"
+											}
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_RSN_SRC",
+											"type": "DatasetReference",
+											"parameters": {
+												"SourceTable": {
+													"value": "@pipeline().parameters.SourceTable",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_ADLS_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"AdlsDirectory": {
+													"value": "@pipeline().parameters.AdlsDirectory",
+													"type": "Expression"
+												},
+												"FileName": {
+													"value": "@concat('W_RSN_네이버베스트_쇼핑카테고리랭킹정보_', pipeline().parameters.SourceTable,'_',formatDateTime(item().STARTDT, 'yyyyMMdd'),'.csv')",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SourceTable": {
+						"type": "string",
+						"defaultValue": "BEST_RANKING_DATA"
+					},
+					"AdlsDirectory": {
+						"type": "string",
+						"defaultValue": "트렌드/외부/베스트상품"
+					},
+					"IncCol": {
+						"type": "string",
+						"defaultValue": "brd_crawl_time"
+					}
+				},
+				"folder": {
+					"name": "트렌드/외부/RSN"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-10-31T07:52:58Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_RSN_BEST_RANKING_DATA_INC')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -2397,196 +2555,6 @@
 					},
 					"dd": {
 						"type": "Array"
-					}
-				},
-				"folder": {
-					"name": "고객/외부/온라인몰정보"
-				},
-				"annotations": [],
-				"lastPublishTime": "2023-02-02T06:27:34Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_RSN_STORE_REVIEW_DATA_INC_kury_imsi_csv')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "Lookup1",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "Set variable1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "select a.page\n    from (\n          select generate_series(1,10)  as page\n          ) a                  \n  order by a.page  ;",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK_P02",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "Set variable1",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "date",
-							"value": {
-								"value": "@formatDateTime(addDays(addHours(utcNow(), 9),-1),'yyyyMMdd')",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "ForEach1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup1').output.value",
-								"type": "Expression"
-							},
-							"isSequential": true,
-							"activities": [
-								{
-									"name": "Copy data",
-									"type": "Copy",
-									"dependsOn": [],
-									"policy": {
-										"timeout": "7.00:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "AzurePostgreSqlSource",
-											"query": {
-												"value": "select srd_id\n    ,sd_reviewid\n    ,site\n    ,site_id\n    ,srd_title\n    ,srd_content\n    ,srd_writer\n    ,srd_writetime\n    ,srd_rate\n    ,srd_crawl_time\n      from  cd_ods.tb_rsn_market_full \n     where rnum between 1 + ( 1000000 * ( @{item().page} -1 ) )  and 1000000 * @{item().page}",
-												"type": "Expression"
-											},
-											"partitionOption": "None"
-										},
-										"sink": {
-											"type": "DelimitedTextSink",
-											"storeSettings": {
-												"type": "AzureBlobFSWriteSettings"
-											},
-											"formatSettings": {
-												"type": "DelimitedTextWriteSettings",
-												"quoteAllText": true,
-												"fileExtension": ".csv"
-											}
-										},
-										"enableStaging": false,
-										"translator": {
-											"type": "TabularTranslator",
-											"typeConversion": true,
-											"typeConversionSettings": {
-												"allowDataTruncation": true,
-												"treatBooleanAsNumber": false
-											}
-										}
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_POSTGRESQL_SNK_P02",
-											"type": "DatasetReference",
-											"parameters": {
-												"SinkSchema": "1",
-												"SinkTable": "1"
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_ADLS_SNK",
-											"type": "DatasetReference",
-											"parameters": {
-												"AdlsDirectory": {
-													"value": "@pipeline().parameters.AdlsDirectory",
-													"type": "Expression"
-												},
-												"FileName": {
-													"value": "@concat('마켓컬리_',variables('date'),'_',item().page, '.csv')",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								}
-							]
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"AdlsDirectory": {
-						"type": "string",
-						"defaultValue": "고객/외부/온라인몰정보/마켓컬리일괄"
-					}
-				},
-				"variables": {
-					"prev_start": {
-						"type": "String",
-						"defaultValue": "@startOfMonth(addToTime(addHours(utcNow(), 9), -1, 'Month'), 'yyyyMMdd')"
-					},
-					"prev_end": {
-						"type": "String",
-						"defaultValue": "@adddays(startOfMonth(addHours(utcNow(), 9)), -1, 'yyyyMMdd')"
-					},
-					"dd": {
-						"type": "Array"
-					},
-					"ㄴ": {
-						"type": "String"
-					},
-					"date": {
-						"type": "String"
 					}
 				},
 				"folder": {
