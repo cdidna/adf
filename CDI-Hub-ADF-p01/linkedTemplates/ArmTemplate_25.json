@@ -13,6 +13,86 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_PG_STORE_DATA')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Copy data1",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true,
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "AzurePostgreSQLSink",
+								"writeBatchSize": 1000000,
+								"writeBatchTimeout": "00:30:00",
+								"preCopyScript": "truncate table cd_mart.dm_cm_rsn_store_data_master_t;",
+								"writeMethod": "CopyCommand"
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": "고객/외부/온라인몰정보/RSN_온라인몰_상품정보(중복제거)",
+									"FileName": "D_RSN_온라인몰_상품정보(중복제거)_STORE_DATA.csv"
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_POSTGRESQL_SNK_P02",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "cd_mart",
+									"SinkTable": "dm_cm_rsn_store_data_master_t"
+								}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"folder": {
+					"name": "고객/외부/온라인몰정보"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-01-25T01:23:44Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_PG_STORE_SEARCH')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -439,12 +519,18 @@
 								"type": "DataFlowReference",
 								"parameters": {},
 								"datasetParameters": {
-									"source1": {},
+									"source1": {
+										"date": {
+											"value": "@pipeline().parameters.date",
+											"type": "Expression"
+										}
+									},
 									"sink1": {
 										"SinkSchema": "cd_portal",
 										"SinkTable": "tb_search_keyword"
 									}
-								}
+								},
+								"linkedServiceParameters": {}
 							},
 							"staging": {},
 							"compute": {
@@ -457,6 +543,12 @@
 				],
 				"policy": {
 					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"date": {
+						"type": "string",
+						"defaultValue": "-1"
+					}
 				},
 				"folder": {
 					"name": "트렌드/외부/RSN"
@@ -725,10 +817,25 @@
 								"type": "DataFlowReference",
 								"parameters": {},
 								"datasetParameters": {
-									"source1": {},
+									"source1": {
+										"date": {
+											"value": "@pipeline().parameters.date",
+											"type": "Expression"
+										}
+									},
 									"sink1": {
 										"SinkSchema": "@pipeline().parameters.SinkSchema",
 										"SinkTable": "@pipeline().parameters.SinkTable"
+									}
+								},
+								"linkedServiceParameters": {
+									"source1": {
+										"schemaLinkedService": {
+											"date": {
+												"value": "@pipeline().parameters.date",
+												"type": "Expression"
+											}
+										}
 									}
 								}
 							},
@@ -764,6 +871,10 @@
 					"SinkTable": {
 						"type": "string",
 						"defaultValue": "tb_search_keyword"
+					},
+					"date": {
+						"type": "string",
+						"defaultValue": "-1"
 					}
 				},
 				"variables": {
@@ -809,7 +920,7 @@
 							"source": {
 								"type": "MySqlSource",
 								"query": {
-									"value": "@concat('SELECT * FROM ', pipeline().parameters.SourceTable, ' WHERE DATE(', pipeline().parameters.IncCol, ') = DATE_ADD(CURDATE(), INTERVAL 0 DAY)')",
+									"value": "@concat('SELECT * FROM ', pipeline().parameters.SourceTable, ' WHERE DATE(', pipeline().parameters.IncCol, ') = DATE_ADD(CURDATE(), INTERVAL ',pipeline().parameters.date,' DAY)')",
 									"type": "Expression"
 								}
 							},
@@ -888,10 +999,22 @@
 								"type": "DataFlowReference",
 								"parameters": {},
 								"datasetParameters": {
-									"source1": {},
+									"source1": {
+										"date": {
+											"value": "@pipeline().parameters.date",
+											"type": "Expression"
+										}
+									},
 									"sink1": {
 										"SinkSchema": "@pipeline().parameters.SinkSchema",
 										"SinkTable": "@pipeline().parameters.SinkTable"
+									}
+								},
+								"linkedServiceParameters": {
+									"source1": {
+										"schemaLinkedService": {
+											"date": "@pipeline().parameters.date"
+										}
 									}
 								}
 							},
@@ -927,6 +1050,10 @@
 					"SinkTable": {
 						"type": "string",
 						"defaultValue": "tb_search_keyword"
+					},
+					"date": {
+						"type": "string",
+						"defaultValue": "-1"
 					}
 				},
 				"variables": {
@@ -2379,121 +2506,6 @@
 				},
 				"annotations": [],
 				"lastPublishTime": "2023-02-02T08:52:47Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_RSN_STORE_REVIEW_DATA_INC_TEST')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "Copy Yesterday data",
-						"type": "Copy",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "7.00:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "MySqlSource",
-								"query": {
-									"value": "@concat('SELECT srd_id,\n\tsd_reviewid,\n\tsite,\n\tsite_id,\n\treplace(replace(replace(srd_title,char(10), ''//LF//''), char(13),''//LF//''), ''\\\"'', ''＂'') as srd_title,\n    replace(replace(replace(replace(srd_content,char(10), ''//LF//''), char(13),''//LF//''), ''\\\"'', ''＂''), ''\\0'','''') as srd_content,\n\tsrd_writer,\n\tsrd_writetime,\n\tsrd_rate,\n\tsrd_crawl_time\n\tFROM ',\npipeline().parameters.SourceTable,\n ' WHERE srd_content like ''병이 네모나서%''')",
-									"type": "Expression"
-								}
-							},
-							"sink": {
-								"type": "DelimitedTextSink",
-								"storeSettings": {
-									"type": "AzureBlobFSWriteSettings"
-								},
-								"formatSettings": {
-									"type": "DelimitedTextWriteSettings",
-									"quoteAllText": true,
-									"fileExtension": ".csv"
-								}
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"typeConversion": true,
-								"typeConversionSettings": {
-									"allowDataTruncation": true,
-									"treatBooleanAsNumber": false
-								}
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_RSN_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceTable": {
-										"value": "@pipeline().parameters.SourceTable",
-										"type": "Expression"
-									}
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_ADLS_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"AdlsDirectory": {
-										"value": "@pipeline().parameters.AdlsDirectory",
-										"type": "Expression"
-									},
-									"FileName": {
-										"value": "D_RSN_온라인몰_리뷰정보(중복제거)_00000000.csv",
-										"type": "Expression"
-									}
-								}
-							}
-						]
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SourceTable": {
-						"type": "string",
-						"defaultValue": "STORE_REVIEW_DATA"
-					},
-					"AdlsDirectory": {
-						"type": "string",
-						"defaultValue": "고객/외부/온라인몰정보/RSN_온라인몰_리뷰정보(중복제거)"
-					},
-					"IncCol": {
-						"type": "string",
-						"defaultValue": "srd_crawl_time"
-					}
-				},
-				"variables": {
-					"prev_start": {
-						"type": "String",
-						"defaultValue": "@startOfMonth(addToTime(addHours(utcNow(), 9), -1, 'Month'), 'yyyyMMdd')"
-					},
-					"prev_end": {
-						"type": "String",
-						"defaultValue": "@adddays(startOfMonth(addHours(utcNow(), 9)), -1, 'yyyyMMdd')"
-					},
-					"dd": {
-						"type": "Array"
-					}
-				},
-				"folder": {
-					"name": "고객/외부/온라인몰정보"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-12-15T08:49:47Z"
 			},
 			"dependsOn": []
 		}
