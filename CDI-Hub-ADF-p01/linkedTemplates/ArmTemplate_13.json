@@ -3989,6 +3989,665 @@
 			"dependsOn": []
 		},
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_APIS_DAYS_STATISITCS_D')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "set strdt",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "strDate",
+							"value": {
+								"value": "@if(equals(pipeline().parameters.pip_strdt, '') , formatDateTime(addDays(addHours(utcNow(), 9),int('-1'),'yyyyMMdd')),pipeline().parameters.pip_strdt)",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "set enddt",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "endDate",
+							"value": {
+								"value": "@if(equals(pipeline().parameters.pip_enddt, '') , formatDateTime(addDays(addHours(utcNow(), 9),int('-1'),'yyyyMMdd')),pipeline().parameters.pip_enddt)",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "getPage",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "set strdt",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "set enddt",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "JsonSource",
+								"storeSettings": {
+									"type": "HttpReadSettings",
+									"requestMethod": "GET"
+								},
+								"formatSettings": {
+									"type": "JsonReadSettings"
+								}
+							},
+							"dataset": {
+								"referenceName": "DTS_PPS_API_JSON",
+								"type": "DatasetReference",
+								"parameters": {
+									"params": {
+										"value": "@concat('/1360000/FmlandWthrInfoService/getDayStatistics?ServiceKey=',pipeline().parameters.Apikey,'&pageNo=1&numOfRows=',pipeline().parameters.onepage,'&dataType=json&ST_YMD=',variables('strDate'),'&ED_YMD=',variables('endDate'),'&AREA_ID=999999999&PA_CROP_SPE_ID=PA999999')",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					},
+					{
+						"name": "ForEach Copy data",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "delete",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@range(1  \n      ,add(\n             div(\n                  int(activity('getPage').output.firstRow.response.body.totalCount) \n                 ,int(pipeline().parameters.onepage)                  \n                )\n            ,if(\n                greater(\n                        mod(\n                             int(activity('getPage').output.firstRow.response.body.totalCount) \n                        ,int(pipeline().parameters.onepage)   \n                            )\n                       ,0\n                       )\n                ,1,0\n            )           \n       )\n)",
+								"type": "Expression"
+							},
+							"isSequential": false,
+							"batchCount": 1,
+							"activities": [
+								{
+									"name": "copy data",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "JsonSource",
+											"storeSettings": {
+												"type": "HttpReadSettings",
+												"requestMethod": "GET"
+											},
+											"formatSettings": {
+												"type": "JsonReadSettings"
+											}
+										},
+										"sink": {
+											"type": "AzurePostgreSQLSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"enableSkipIncompatibleRow": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"path": "[['ymd']"
+													},
+													"sink": {
+														"name": "ymd",
+														"type": "DateTime"
+													}
+												},
+												{
+													"source": {
+														"path": "[['areaId']"
+													},
+													"sink": {
+														"name": "areaid",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['areaName']"
+													},
+													"sink": {
+														"name": "areaname",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['paCropName']"
+													},
+													"sink": {
+														"name": "pacropname",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['paCropSpeId']"
+													},
+													"sink": {
+														"name": "pacropspeid",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['paCropSpeName']"
+													},
+													"sink": {
+														"name": "pacropspename",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['dayAvgTa']"
+													},
+													"sink": {
+														"name": "dayavgta",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['dayMaxTa']"
+													},
+													"sink": {
+														"name": "daymaxta",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['dayMinTa']"
+													},
+													"sink": {
+														"name": "dayminta",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['dayAvgRhm']"
+													},
+													"sink": {
+														"name": "dayavgrhm",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['dayMinRhm']"
+													},
+													"sink": {
+														"name": "dayminrhm",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['daySumRn']"
+													},
+													"sink": {
+														"name": "daysumrn",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['dayAvgWs']"
+													},
+													"sink": {
+														"name": "dayavgws",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['daySumSs']"
+													},
+													"sink": {
+														"name": "daysumss",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['wmCount']"
+													},
+													"sink": {
+														"name": "wmcount",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['wmCd']"
+													},
+													"sink": {
+														"name": "wmcd",
+														"type": "String"
+													}
+												}
+											],
+											"collectionReference": "$['response']['body']['items']['item']",
+											"mapComplexValuesToString": true
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_PPS_API_JSON",
+											"type": "DatasetReference",
+											"parameters": {
+												"params": {
+													"value": "@concat('/1360000/FmlandWthrInfoService/getDayStatistics?ServiceKey=',pipeline().parameters.Apikey,'%3D%3D&pageNo=',item(),'&numOfRows=',pipeline().parameters.onepage,'&dataType=json&ST_YMD=',variables('strDate'),'&ED_YMD=',variables('strDate'),'&AREA_ID=999999999&PA_CROP_SPE_ID=PA999999')",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": {
+													"value": "@pipeline().parameters.sinkSchema",
+													"type": "Expression"
+												},
+												"SinkTable": {
+													"value": "@pipeline().parameters.sinkTable",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					},
+					{
+						"name": "delete",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "getPage",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "DELETE FROM @{pipeline().parameters.sinkSchema}.@{pipeline().parameters.sinkTable} \nWHERE YMD BETWEEN DATE('@{variables('strDate')}')\n            AND  DATE('@{variables('endDate')}');\n\nselect 1 s            ",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK_P02",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							}
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"Apikey": {
+						"type": "string",
+						"defaultValue": "rj5HeIJYh3E2HRvmEw3P3%2BeVDZoZj074w7IIt%2BpcAaujPSI9CTx0U88XSd6C9eWwkBMUncCaG4w%2FtYRT898jcw%3D%3D"
+					},
+					"pip_strdt": {
+						"type": "string"
+					},
+					"pip_enddt": {
+						"type": "string"
+					},
+					"onepage": {
+						"type": "string",
+						"defaultValue": "10000"
+					},
+					"sinkSchema": {
+						"type": "string",
+						"defaultValue": "cd_ods"
+					},
+					"sinkTable": {
+						"type": "string",
+						"defaultValue": "tb_apis_weather_daystatistics"
+					}
+				},
+				"variables": {
+					"strDate": {
+						"type": "String"
+					},
+					"endDate": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "Industry/외부/날씨데이터"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-12-23T07:55:31Z"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_APIS_EXCHANGE_RATE_D')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "getmonth",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "select CMONTH2 as cmonth      \n       from CD_ODS.APS_SDC_PW_MST\n       where CMONTH2 >= '201701'\n         and BASE_DATE  <= DATE(NOW()) - interval '1 MONTHS'\n      group by cmonth2 \n      order by cmonth \n      ",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK_P02",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "getmonth",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('getmonth').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "delete",
+									"type": "Lookup",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzurePostgreSqlSource",
+											"query": {
+												"value": "DELETE FROM @{pipeline().parameters.sinkSchema}.@{pipeline().parameters.sinkTable} \nWHERE yyyymm = '@{item().cmonth}';\n\nselect 1 s            ",
+												"type": "Expression"
+											},
+											"partitionOption": "None"
+										},
+										"dataset": {
+											"referenceName": "DTS_POSTGRESQL_SNK_P02",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": "1",
+												"SinkTable": "1"
+											}
+										}
+									}
+								},
+								{
+									"name": "copy data_copy1",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "delete",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "JsonSource",
+											"additionalColumns": [
+												{
+													"name": "yyyymm",
+													"value": {
+														"value": "@item().cmonth",
+														"type": "Expression"
+													}
+												}
+											],
+											"storeSettings": {
+												"type": "HttpReadSettings",
+												"requestMethod": "GET"
+											},
+											"formatSettings": {
+												"type": "JsonReadSettings"
+											}
+										},
+										"sink": {
+											"type": "AzurePostgreSQLSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"enableSkipIncompatibleRow": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"path": "[['baseCrcd']"
+													},
+													"sink": {
+														"name": "basecrcd",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['cocuCd']"
+													},
+													"sink": {
+														"name": "cocucd",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['spcfMmavBltnXrt']"
+													},
+													"sink": {
+														"name": "spcfmmavbltnxrt",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['spcfYavrBltnXrt']"
+													},
+													"sink": {
+														"name": "spcfyavrbltnxrt",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['cmonth']"
+													},
+													"sink": {
+														"name": "yyyymm",
+														"type": "String"
+													}
+												}
+											],
+											"collectionReference": "$['avrgXrtGrid']",
+											"mapComplexValuesToString": true
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_PPS_API_JSON",
+											"type": "DatasetReference",
+											"parameters": {
+												"params": {
+													"value": "@concat('/B190021/mmavXrtInfoInq/getmmavXrtInfoInq?serviceKey=',pipeline().parameters.Apikey,'&inqYm=',item().cmonth,'&cocuCd=KRW')",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": {
+													"value": "@pipeline().parameters.sinkSchema",
+													"type": "Expression"
+												},
+												"SinkTable": {
+													"value": "@pipeline().parameters.sinkTable",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"Apikey": {
+						"type": "string",
+						"defaultValue": "rj5HeIJYh3E2HRvmEw3P3%2BeVDZoZj074w7IIt%2BpcAaujPSI9CTx0U88XSd6C9eWwkBMUncCaG4w%2FtYRT898jcw%3D%3D"
+					},
+					"sinkSchema": {
+						"type": "string",
+						"defaultValue": "cd_ods"
+					},
+					"sinkTable": {
+						"type": "string",
+						"defaultValue": "tb_apis_exchange_rate_mavg"
+					}
+				},
+				"variables": {
+					"strDate": {
+						"type": "String"
+					},
+					"endDate": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "Industry/외부/은행"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-12-23T07:55:31Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_APIS_KOTRA_NATIONALINFO')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -5035,389 +5694,6 @@
 					"SinkTable": {
 						"type": "string",
 						"defaultValue": "tb_at_cmp_master_t"
-					}
-				},
-				"folder": {
-					"name": "Industry/외부/도매시장"
-				},
-				"annotations": [],
-				"lastPublishTime": "2023-01-16T07:55:39Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_AT_CODE_GOOD')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "품목 코드 마스",
-				"activities": [
-					{
-						"name": "pageNum",
-						"description": "페이지 갯수",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 5,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "JsonSource",
-								"storeSettings": {
-									"type": "HttpReadSettings",
-									"requestMethod": "GET"
-								},
-								"formatSettings": {
-									"type": "JsonReadSettings"
-								}
-							},
-							"dataset": {
-								"referenceName": "DTS_API_AT",
-								"type": "DatasetReference",
-								"parameters": {
-									"params": {
-										"value": "@concat('/openApi/code/good.do?serviceKey=',pipeline().parameters.ApiKey,'&apiType=json&pageNo=1')",
-										"type": "Expression"
-									}
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "delete data",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@range(1  \n      ,add(\n             div(\n                  int(activity('pageNum').output.value[0].totCnt)\n                 ,int(pipeline().parameters.one_page_row)\n                )\n            ,if(\n                greater(\n                        mod(\n                               int(activity('pageNum').output.value[0].totCnt)\n                              ,int(pipeline().parameters.one_page_row)\n                         )\n                       ,0\n                       )\n                ,1,0\n            )   \n       )\n)",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"batchCount": 10,
-							"activities": [
-								{
-									"name": "Copy data1",
-									"type": "Copy",
-									"dependsOn": [],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 5,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "JsonSource",
-											"storeSettings": {
-												"type": "HttpReadSettings",
-												"requestMethod": "GET"
-											},
-											"formatSettings": {
-												"type": "JsonReadSettings"
-											}
-										},
-										"sink": {
-											"type": "AzurePostgreSQLSink",
-											"writeBatchSize": 1000000,
-											"writeBatchTimeout": "00:30:00",
-											"writeMethod": "CopyCommand"
-										},
-										"enableStaging": false,
-										"translator": {
-											"type": "TabularTranslator",
-											"mappings": [
-												{
-													"source": {
-														"path": "[['large']"
-													},
-													"sink": {
-														"name": "large",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['mid']"
-													},
-													"sink": {
-														"name": "mid",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['small']"
-													},
-													"sink": {
-														"name": "small",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['largeName']"
-													},
-													"sink": {
-														"name": "largename",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['midName']"
-													},
-													"sink": {
-														"name": "midname",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['goodName']"
-													},
-													"sink": {
-														"name": "goodname",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['gubn']"
-													},
-													"sink": {
-														"name": "gubn",
-														"type": "String"
-													}
-												}
-											],
-											"collectionReference": "$['data']"
-										}
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_API_AT",
-											"type": "DatasetReference",
-											"parameters": {
-												"params": {
-													"value": "@concat('/openApi/code/good.do?serviceKey=',pipeline().parameters.ApiKey,'&apiType=json&pageNo=',item())",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_POSTGRESQL_SNK_P02",
-											"type": "DatasetReference",
-											"parameters": {
-												"SinkSchema": {
-													"value": "@pipeline().parameters.SinkSchema",
-													"type": "Expression"
-												},
-												"SinkTable": {
-													"value": "@pipeline().parameters.SinkTable",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								}
-							]
-						}
-					},
-					{
-						"name": "delete data",
-						"description": "데이터 삭제",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "pageNum",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "delete from @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable};\n\nselect 1 as success",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK_P02",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"ApiKey": {
-						"type": "string",
-						"defaultValue": "EDCC40BADEB8467BB2CD68B11A369A83"
-					},
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "tb_at_good_master_t"
-					},
-					"one_page_row": {
-						"type": "string",
-						"defaultValue": "1000"
-					}
-				},
-				"folder": {
-					"name": "Industry/외부/도매시장"
-				},
-				"annotations": [],
-				"lastPublishTime": "2023-01-16T07:55:39Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_AT_CODE_WHSAL')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "수요기관정보조회",
-				"activities": [
-					{
-						"name": "Copy data1",
-						"type": "Copy",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 5,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "JsonSource",
-								"storeSettings": {
-									"type": "HttpReadSettings",
-									"requestMethod": "GET"
-								},
-								"formatSettings": {
-									"type": "JsonReadSettings"
-								}
-							},
-							"sink": {
-								"type": "AzurePostgreSQLSink",
-								"writeBatchSize": 1000000,
-								"writeBatchTimeout": "00:30:00",
-								"writeMethod": "CopyCommand"
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"mappings": [
-									{
-										"source": {
-											"path": "[['codeId']"
-										},
-										"sink": {
-											"name": "codeid",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['codeName']"
-										},
-										"sink": {
-											"name": "codename",
-											"type": "String"
-										}
-									}
-								],
-								"collectionReference": "$['data']"
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_API_AT",
-								"type": "DatasetReference",
-								"parameters": {
-									"params": {
-										"value": "@concat('/openApi/code/whsal.do?serviceKey=',pipeline().parameters.ApiKey,'&apiType=json&pageNo=1')",
-										"type": "Expression"
-									}
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_POSTGRESQL_SNK_P02",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": {
-										"value": "@pipeline().parameters.SinkSchema",
-										"type": "Expression"
-									},
-									"SinkTable": {
-										"value": "@pipeline().parameters.SinkTable",
-										"type": "Expression"
-									}
-								}
-							}
-						]
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"ApiKey": {
-						"type": "string",
-						"defaultValue": "EDCC40BADEB8467BB2CD68B11A369A83"
-					},
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "tb_at_whsal_master_t"
 					}
 				},
 				"folder": {

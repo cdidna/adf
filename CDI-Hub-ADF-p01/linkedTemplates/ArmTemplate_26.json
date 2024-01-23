@@ -13,6 +13,278 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_RSN_STORE_PRICE_DATA_FULL')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Lookup Date",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "MySqlSource",
+								"query": {
+									"value": "@concat('SELECT DISTINCT(DATE(', pipeline().parameters.IncCol, ')) STARTDT FROM ', pipeline().parameters.SourceTable, ' ORDER BY STARTDT')",
+									"type": "Expression"
+								}
+							},
+							"dataset": {
+								"referenceName": "DTS_RSN_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceTable": {
+										"value": "@pipeline().parameters.SourceTable",
+										"type": "Expression"
+									}
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach Copy data",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup Date",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup Date').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Copy data All date",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "MySqlSource",
+											"query": {
+												"value": "@concat('SELECT * FROM ', pipeline().parameters.SourceTable, ' WHERE DATE(', pipeline().parameters.IncCol, ') = ','DATE(''', item().STARTDT, ''')')",
+												"type": "Expression"
+											}
+										},
+										"sink": {
+											"type": "DelimitedTextSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "DelimitedTextWriteSettings",
+												"quoteAllText": true,
+												"fileExtension": ".csv"
+											}
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_RSN_SRC",
+											"type": "DatasetReference",
+											"parameters": {
+												"SourceTable": {
+													"value": "@pipeline().parameters.SourceTable",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_ADLS_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"AdlsDirectory": {
+													"value": "@pipeline().parameters.AdlsDirectory",
+													"type": "Expression"
+												},
+												"FileName": {
+													"value": "@concat('D_RSN_온라인몰_일일가격변동정보_', pipeline().parameters.SourceTable,'_',formatDateTime(item().STARTDT, 'yyyyMMdd'),'.csv')",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SourceTable": {
+						"type": "string",
+						"defaultValue": "STORE_PRICE_DATA"
+					},
+					"AdlsDirectory": {
+						"type": "string",
+						"defaultValue": "고객/외부/온라인몰정보/RSN_온라인몰_일일가격변동정보"
+					},
+					"IncCol": {
+						"type": "string",
+						"defaultValue": "spd_crawl_time"
+					}
+				},
+				"folder": {
+					"name": "고객/외부/온라인몰정보"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-12-12T10:42:17Z"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_RSN_STORE_PRICE_DATA_INC')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Copy Yesterday data",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "MySqlSource",
+								"query": {
+									"value": "@concat('SELECT * FROM ', pipeline().parameters.SourceTable, ' WHERE DATE(', pipeline().parameters.IncCol, ') = DATE_ADD(CURDATE(), INTERVAL -1 DAY)')",
+									"type": "Expression"
+								}
+							},
+							"sink": {
+								"type": "DelimitedTextSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								},
+								"formatSettings": {
+									"type": "DelimitedTextWriteSettings",
+									"quoteAllText": true,
+									"fileExtension": ".csv"
+								}
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_RSN_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceTable": {
+										"value": "@pipeline().parameters.SourceTable",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": {
+										"value": "@pipeline().parameters.AdlsDirectory",
+										"type": "Expression"
+									},
+									"FileName": {
+										"value": "@concat('D_RSN_온라인몰_일일가격변동정보_', pipeline().parameters.SourceTable,'_', addDays(addHours(utcNow(), 9), -1, 'yyyyMMdd'),'.csv')",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SourceTable": {
+						"type": "string",
+						"defaultValue": "STORE_PRICE_DATA"
+					},
+					"AdlsDirectory": {
+						"type": "string",
+						"defaultValue": "고객/외부/온라인몰정보/RSN_온라인몰_일일가격변동정보"
+					},
+					"IncCol": {
+						"type": "string",
+						"defaultValue": "spd_crawl_time"
+					}
+				},
+				"variables": {
+					"prev_start": {
+						"type": "String",
+						"defaultValue": "@startOfMonth(addToTime(addHours(utcNow(), 9), -1, 'Month'), 'yyyyMMdd')"
+					},
+					"prev_end": {
+						"type": "String",
+						"defaultValue": "@adddays(startOfMonth(addHours(utcNow(), 9)), -1, 'yyyyMMdd')"
+					},
+					"dd": {
+						"type": "Array"
+					}
+				},
+				"folder": {
+					"name": "고객/외부/온라인몰정보"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-12-15T08:49:47Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_RSN_STORE_REVIEW_DATA_FULL')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -2562,202 +2834,6 @@
 				},
 				"annotations": [],
 				"lastPublishTime": "2022-12-15T09:05:35Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_SFTP_NIELSEN_FULL_TEST')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "- 닐슨 SFTP ",
-				"activities": [
-					{
-						"name": "Copy data",
-						"type": "Copy",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "BinarySource",
-								"storeSettings": {
-									"type": "SftpReadSettings",
-									"recursive": true,
-									"deleteFilesAfterCompletion": false,
-									"disableChunking": false
-								},
-								"formatSettings": {
-									"type": "BinaryReadSettings"
-								}
-							},
-							"sink": {
-								"type": "BinarySink",
-								"storeSettings": {
-									"type": "AzureBlobFSWriteSettings",
-									"copyBehavior": "PreserveHierarchy"
-								}
-							},
-							"enableStaging": false
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_NIELSEN_SRC_01",
-								"type": "DatasetReference",
-								"parameters": {
-									"zipname": {
-										"value": "@concat('Dummy_PUSH_Test_checksum_25679.txt.gz')",
-										"type": "Expression"
-									}
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_NIELSEN_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"yyyymm": {
-										"value": "202312",
-										"type": "Expression"
-									}
-								}
-							}
-						]
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"variables": {
-					"yyyymm": {
-						"type": "String"
-					}
-				},
-				"folder": {
-					"name": "매출_주문/외부/닐슨"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-12-15T09:05:35Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/mergeTest')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "Merge Data",
-						"description": "cdi-root / Industry / 외부 / 식품산업통계정에 통합본을 저장합니다.",
-						"type": "Copy",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "7.00:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "DelimitedTextSource",
-								"storeSettings": {
-									"type": "AzureBlobFSReadSettings",
-									"maxConcurrentConnections": 1,
-									"recursive": true,
-									"wildcardFolderPath": {
-										"value": "@concat(pipeline().parameters.AdlsDirectoryOri,'/',formatDateTime(addHours(utcNow(), 9), 'yyyyMMdd'))",
-										"type": "Expression"
-									},
-									"wildcardFileName": "*",
-									"enablePartitionDiscovery": false
-								},
-								"formatSettings": {
-									"type": "DelimitedTextReadSettings"
-								}
-							},
-							"sink": {
-								"type": "DelimitedTextSink",
-								"storeSettings": {
-									"type": "AzureBlobFSWriteSettings",
-									"maxConcurrentConnections": 1,
-									"copyBehavior": "MergeFiles"
-								},
-								"formatSettings": {
-									"type": "DelimitedTextWriteSettings",
-									"quoteAllText": true,
-									"fileExtension": ".txt"
-								}
-							},
-							"enableStaging": false,
-							"enableSkipIncompatibleRow": true,
-							"validateDataConsistency": true,
-							"translator": {
-								"type": "TabularTranslator",
-								"typeConversion": true,
-								"typeConversionSettings": {
-									"allowDataTruncation": true,
-									"treatBooleanAsNumber": false
-								}
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_ADLS_SNK_MERGE_REQ",
-								"type": "DatasetReference",
-								"parameters": {
-									"AdlsDirectory": "@pipeline().parameters.AdlsDirectory",
-									"FileName": "@pipeline().parameters.FileName"
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_ADLS_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"AdlsDirectory": "@pipeline().parameters.AdlsDirectory",
-									"FileName": "@concat(pipeline().parameters.FileName,'_', formatDateTime(addHours(utcNow(), 9), 'yyyyMMdd'),'bb_.csv')"
-								}
-							}
-						]
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"AdlsDirectory": {
-						"type": "string",
-						"defaultValue": "Industry/외부/식품산업통계정보"
-					},
-					"FileName": {
-						"type": "string",
-						"defaultValue": "식품원료별사용량"
-					},
-					"AdlsDirectoryOri": {
-						"type": "string",
-						"defaultValue": "Industry/외부/식품산업통계정보/식품원료별사용량"
-					},
-					"AdlsDirectoryLog": {
-						"type": "string",
-						"defaultValue": "Industry/외부/식품산업통계정보/log"
-					}
-				},
-				"folder": {
-					"name": "Industry/외부/식품산업통계정보"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-12-15T09:12:20Z"
 			},
 			"dependsOn": []
 		}
