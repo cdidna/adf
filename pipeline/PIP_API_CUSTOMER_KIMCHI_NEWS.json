@@ -5,7 +5,14 @@
 			{
 				"name": "token",
 				"type": "Lookup",
-				"dependsOn": [],
+				"dependsOn": [
+					{
+						"activity": "select_keyword",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
 				"policy": {
 					"timeout": "0.12:00:00",
 					"retry": 0,
@@ -34,57 +41,16 @@
 				}
 			},
 			{
-				"name": "Lookup1_copy1",
+				"name": "select_keyword",
 				"type": "Lookup",
 				"dependsOn": [
 					{
-						"activity": "token",
+						"activity": "set date",
 						"dependencyConditions": [
 							"Succeeded"
 						]
 					}
 				],
-				"policy": {
-					"timeout": "0.12:00:00",
-					"retry": 0,
-					"retryIntervalInSeconds": 30,
-					"secureOutput": false,
-					"secureInput": false
-				},
-				"userProperties": [],
-				"typeProperties": {
-					"source": {
-						"type": "JsonSource",
-						"storeSettings": {
-							"type": "HttpReadSettings",
-							"requestMethod": "GET",
-							"additionalHeaders": {
-								"value": "@{concat('Authorization : Bearer ',activity('token').output.value[0].access_token)}",
-								"type": "Expression"
-							},
-							"requestTimeout": ""
-						},
-						"formatSettings": {
-							"type": "JsonReadSettings"
-						}
-					},
-					"dataset": {
-						"referenceName": "DTS_VIVE_API",
-						"type": "DatasetReference",
-						"parameters": {
-							"param": {
-								"value": "@concat('/dataplus/social/GetKeywordDocuments?source=news&startDate=20231201&endDate=20240118&period=0&rowPerPage=1000&keyword=김치')",
-								"type": "Expression"
-							}
-						}
-					},
-					"firstRowOnly": false
-				}
-			},
-			{
-				"name": "Lookup2",
-				"type": "Lookup",
-				"dependsOn": [],
 				"policy": {
 					"timeout": "0.12:00:00",
 					"retry": 0,
@@ -112,8 +78,235 @@
 					},
 					"firstRowOnly": false
 				}
+			},
+			{
+				"name": "set date",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "date",
+					"value": {
+						"value": "@if(equals(pipeline().parameters.pip_date, '') , formatDateTime(addDays(addHours(utcNow(), 9),int('-1'),'yyyyMMdd')),pipeline().parameters.pip_date)",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "token",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('select_keyword').output.value",
+						"type": "Expression"
+					},
+					"isSequential": false,
+					"batchCount": 3,
+					"activities": [
+						{
+							"name": "Copy data",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "JsonSource",
+									"additionalColumns": [
+										{
+											"name": "date",
+											"value": {
+												"value": "@variables('date')",
+												"type": "Expression"
+											}
+										},
+										{
+											"name": "gubun",
+											"value": {
+												"value": "@item().gubun",
+												"type": "Expression"
+											}
+										},
+										{
+											"name": "keyword",
+											"value": {
+												"value": "@item().keyword",
+												"type": "Expression"
+											}
+										},
+										{
+											"name": "inculde_keyword",
+											"value": {
+												"value": "@item().inculde_keyword",
+												"type": "Expression"
+											}
+										}
+									],
+									"storeSettings": {
+										"type": "HttpReadSettings",
+										"requestMethod": "GET"
+									},
+									"formatSettings": {
+										"type": "JsonReadSettings"
+									}
+								},
+								"sink": {
+									"type": "AzurePostgreSQLSink",
+									"writeBatchSize": 1000000,
+									"writeBatchTimeout": "00:30:00",
+									"writeMethod": "CopyCommand"
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"mappings": [
+										{
+											"source": {
+												"path": "['sequence']"
+											},
+											"sink": {
+												"name": "sequence"
+											}
+										},
+										{
+											"source": {
+												"path": "['title']"
+											},
+											"sink": {
+												"name": "title"
+											}
+										},
+										{
+											"source": {
+												"path": "['url']"
+											},
+											"sink": {
+												"name": "url"
+											}
+										},
+										{
+											"source": {
+												"path": "['writerName']"
+											},
+											"sink": {
+												"name": "writerName"
+											}
+										},
+										{
+											"source": {
+												"path": "['documentDate']"
+											},
+											"sink": {
+												"name": "documentDate"
+											}
+										},
+										{
+											"source": {
+												"path": "$['date']"
+											},
+											"sink": {
+												"name": "date"
+											}
+										},
+										{
+											"source": {
+												"path": "$['gubun']"
+											},
+											"sink": {
+												"name": "gubun"
+											}
+										},
+										{
+											"source": {
+												"path": "$['keyword']"
+											},
+											"sink": {
+												"name": "keyword"
+											}
+										},
+										{
+											"source": {
+												"path": "$['inculde_keyword']"
+											},
+											"sink": {
+												"name": "inculde_keyword"
+											}
+										}
+									],
+									"collectionReference": "$['value']['data']['documentList']",
+									"mapComplexValuesToString": false
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "DTS_VIVE_API",
+									"type": "DatasetReference",
+									"parameters": {
+										"param": {
+											"value": "@concat('/dataplus/social/GetKeywordDocuments?source=news&startDate=',variables('date'),'&endDate=',variables('date'),'&period=0&rowPerPage=1000&keyword=',item().keyword,'&includeKeyword=',item().inculde_keyword)",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "DTS_POSTGRESQL_SNK_P02",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": {
+											"value": "@pipeline().parameters.SinkSckema",
+											"type": "Expression"
+										},
+										"SinkTable": {
+											"value": "@pipeline().parameters.SinkTable",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					]
+				}
 			}
 		],
+		"parameters": {
+			"SinkSckema": {
+				"type": "string",
+				"defaultValue": "cd_ods"
+			},
+			"SinkTable": {
+				"type": "string",
+				"defaultValue": "tb_kimchi_boh_news_data_t"
+			},
+			"pip_date": {
+				"type": "string"
+			}
+		},
+		"variables": {
+			"date": {
+				"type": "String"
+			}
+		},
 		"folder": {
 			"name": "고객/외부/김치 NEWS"
 		},
