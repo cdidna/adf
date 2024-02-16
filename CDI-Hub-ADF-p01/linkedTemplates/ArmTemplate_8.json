@@ -13,281 +13,6 @@
 	},
 	"resources": [
 		{
-			"name": "[concat(parameters('factoryName'), '/PIP_API_CUSTOMER_TOPKEYWORD_TWITTER_M')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "소셜 고객 의견 데이터 Top키워드 블로그",
-				"activities": [
-					{
-						"name": "API REQ INFO",
-						"description": "API 호출 정보를 가져오기 위해 설정 파일에서 Date을 읽어옵니다.",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "7.00:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "DelimitedTextSource",
-								"storeSettings": {
-									"type": "AzureBlobFSReadSettings",
-									"recursive": true,
-									"enablePartitionDiscovery": false
-								},
-								"formatSettings": {
-									"type": "DelimitedTextReadSettings"
-								}
-							},
-							"dataset": {
-								"referenceName": "DTS_ADLS_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"AdlsDirectory": {
-										"value": "@pipeline().parameters.AdlsDirectoryConf",
-										"type": "Expression"
-									},
-									"FileName": {
-										"value": "@concat(pipeline().parameters.ConfFile,'.csv')",
-										"type": "Expression"
-									}
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach Copy data",
-						"description": "cdi-root / 고객/외부/Top키워드/블로그 위치에 항목별로 복사합니다.",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "API REQ INFO",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('API REQ INFO').output.value",
-								"type": "Expression"
-							},
-							"isSequential": true,
-							"activities": [
-								{
-									"name": "API REQ",
-									"description": "각 API 호출",
-									"type": "Copy",
-									"dependsOn": [],
-									"policy": {
-										"timeout": "7.00:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "BinarySource",
-											"storeSettings": {
-												"type": "HttpReadSettings",
-												"requestMethod": "GET"
-											},
-											"formatSettings": {
-												"type": "BinaryReadSettings"
-											}
-										},
-										"sink": {
-											"type": "BinarySink",
-											"storeSettings": {
-												"type": "AzureBlobFSWriteSettings",
-												"maxConcurrentConnections": 1,
-												"copyBehavior": "FlattenHierarchy"
-											}
-										},
-										"enableStaging": false
-									},
-									"inputs": [
-										{
-											"referenceName": "CUSTOMER_OPINION_JsonGz",
-											"type": "DatasetReference",
-											"parameters": {
-												"channel": {
-													"value": "@pipeline().parameters.Channel",
-													"type": "Expression"
-												},
-												"date": {
-													"value": "@formatDateTime(addDays(addHours(utcNow(), 9),int(item().date)),'yyyyMMdd')",
-													"type": "Expression"
-												},
-												"authkey": {
-													"value": "@pipeline().parameters.Apikey",
-													"type": "Expression"
-												},
-												"category1": {
-													"value": "@pipeline().parameters.Category1",
-													"type": "Expression"
-												},
-												"category2": {
-													"value": "@pipeline().parameters.Category2",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_ADLS_SNK_BINARYGz_P01",
-											"type": "DatasetReference",
-											"parameters": {
-												"AdlsDirectory": {
-													"value": "@concat(pipeline().parameters.AdlsDirectory,'/원본')",
-													"type": "Expression"
-												},
-												"FileName": {
-													"value": "@concat(pipeline().parameters.FileName,'_',formatDateTime(addDays(addHours(utcNow(), 9),int(item().date)),'yyyyMMdd'), '.json')",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								},
-								{
-									"name": "Copy data",
-									"description": "데이터 이관",
-									"type": "Copy",
-									"dependsOn": [
-										{
-											"activity": "API REQ",
-											"dependencyConditions": [
-												"Succeeded"
-											]
-										}
-									],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "JsonSource",
-											"storeSettings": {
-												"type": "AzureBlobFSReadSettings",
-												"recursive": true,
-												"enablePartitionDiscovery": false
-											},
-											"formatSettings": {
-												"type": "JsonReadSettings"
-											}
-										},
-										"sink": {
-											"type": "DelimitedTextSink",
-											"storeSettings": {
-												"type": "AzureBlobFSWriteSettings"
-											},
-											"formatSettings": {
-												"type": "DelimitedTextWriteSettings",
-												"quoteAllText": true,
-												"fileExtension": ".txt"
-											}
-										},
-										"enableStaging": false
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_ADLS_JSON_SRC_P1",
-											"type": "DatasetReference",
-											"parameters": {
-												"AdlsDirectory": {
-													"value": "@concat(pipeline().parameters.AdlsDirectory,'/원본')",
-													"type": "Expression"
-												},
-												"FileName": {
-													"value": "@concat(pipeline().parameters.FileName,'_',formatDateTime(addDays(addHours(utcNow(), 9),int(item().date)),'yyyyMMdd'), '.json')",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_ADLS_SNK",
-											"type": "DatasetReference",
-											"parameters": {
-												"AdlsDirectory": {
-													"value": "@concat(pipeline().parameters.AdlsDirectory)",
-													"type": "Expression"
-												},
-												"FileName": {
-													"value": "@concat(pipeline().parameters.FileName,'_',formatDateTime(addDays(addHours(utcNow(), 9),int(item().date)),'yyyyMMdd'), '.csv')",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								}
-							]
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"AdlsDirectory": {
-						"type": "string",
-						"defaultValue": "고객/외부/Top키워드/트위터"
-					},
-					"FileName": {
-						"type": "string",
-						"defaultValue": "Top키워드_트위터"
-					},
-					"AdlsDirectoryConf": {
-						"type": "string",
-						"defaultValue": "고객/외부/Top키워드/conf"
-					},
-					"ConfFile": {
-						"type": "string",
-						"defaultValue": "Top키워드_COM_MANUAL_conf"
-					},
-					"Apikey": {
-						"type": "string",
-						"defaultValue": "50151fed78146d9974fc10b335738ef395cc6d0c20998505442c7d1c75642242"
-					},
-					"Channel": {
-						"type": "string",
-						"defaultValue": "ko.twitter"
-					},
-					"Category1": {
-						"type": "string",
-						"defaultValue": "top_keyword"
-					},
-					"Category2": {
-						"type": "string",
-						"defaultValue": "TOP_KEYWORD"
-					}
-				},
-				"folder": {
-					"name": "고객/외부/Top키워드"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-12-15T13:28:38Z"
-			},
-			"dependsOn": []
-		},
-		{
 			"name": "[concat(parameters('factoryName'), '/PIP_API_CUSTOMER_TOPKEYWORD_TWITTER_M_csv')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -5269,6 +4994,333 @@
 					"SinkTable": {
 						"type": "string",
 						"defaultValue": "tb_garak_importquantity_aftersettlement"
+					}
+				},
+				"variables": {
+					"date": {
+						"type": "String"
+					},
+					"url": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "Industry/외부/서울특별시_농수산식품공사"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-01-16T07:55:39Z"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_GARAK_PRICEBYITEMGRADE_INTERMEDIARY')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "유통정보(중도매인거래) - 품목별등급별가격",
+				"activities": [
+					{
+						"name": "Lookup1",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": "select to_char(now(),'YYYYMMDD') as date\n,to_char(now() - INTERVAL '1 day','YYYYMMDD') as date_p\n,to_char(now() - INTERVAL '7 day','YYYYMMDD') as date_p7\n,'garak' as market\nFROM cd_ods.tb_garak_pricebyitemgrade_intermediary\nunion\nselect \nto_char(now(),'YYYYMMDD') as date\n,to_char(now() - INTERVAL '1 day','YYYYMMDD') as date_p\n,to_char(now() - INTERVAL '7 day','YYYYMMDD') as date_p7\n,'yanggok' as market\nFROM cd_ods.tb_garak_pricebyitemgrade_intermediary\norder by date;",
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK_P02",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": {
+										"value": "@pipeline().parameters.SinkSchema",
+										"type": "Expression"
+									},
+									"SinkTable": {
+										"value": "@pipeline().parameters.SinkTable",
+										"type": "Expression"
+									}
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup1').output.value",
+								"type": "Expression"
+							},
+							"isSequential": false,
+							"batchCount": 15,
+							"activities": [
+								{
+									"name": "Copy data1",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "JsonSource",
+											"additionalColumns": [
+												{
+													"name": "date",
+													"value": {
+														"value": "@item().date",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "date_p",
+													"value": {
+														"value": "@item().date_p",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "date_p7",
+													"value": {
+														"value": "@item().date_p7",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "market",
+													"value": {
+														"value": "@item().market",
+														"type": "Expression"
+													}
+												}
+											],
+											"storeSettings": {
+												"type": "HttpReadSettings",
+												"requestMethod": "GET"
+											},
+											"formatSettings": {
+												"type": "JsonReadSettings"
+											}
+										},
+										"sink": {
+											"type": "AzurePostgreSQLSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"path": "[['PUM_NM']"
+													},
+													"sink": {
+														"name": "pum_nm",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['G_NAME']"
+													},
+													"sink": {
+														"name": "g_name",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['U_NAME']"
+													},
+													"sink": {
+														"name": "u_name",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['MI_P']"
+													},
+													"sink": {
+														"name": "mi_p",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['MA_P']"
+													},
+													"sink": {
+														"name": "ma_p",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['AV_P']"
+													},
+													"sink": {
+														"name": "av_p",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['PAV_P']"
+													},
+													"sink": {
+														"name": "pav_p",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['FLUC']"
+													},
+													"sink": {
+														"name": "fluc",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['D_MARK']"
+													},
+													"sink": {
+														"name": "d_mark",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['J_7']"
+													},
+													"sink": {
+														"name": "j_7",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['J_7_MARK']"
+													},
+													"sink": {
+														"name": "j_7_mark",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['date']"
+													},
+													"sink": {
+														"name": "date",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['date_p']"
+													},
+													"sink": {
+														"name": "date_p",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['date_p7']"
+													},
+													"sink": {
+														"name": "date_p7",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['market']"
+													},
+													"sink": {
+														"name": "market",
+														"type": "String"
+													}
+												}
+											],
+											"collectionReference": "$['resultData']",
+											"mapComplexValuesToString": false
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_API_GARAK",
+											"type": "DatasetReference",
+											"parameters": {
+												"url": {
+													"value": "@concat('/publicdata/dataJsonOpen.do?id=3606&passwd=days2023!&dataid=data38&pagesize=1000&pageidx=1&portal.templet=false&market=',item().market,'&s_date=',item().date,'&s_date_p=',item().date_p,'&s_date_p7=',item().date_p7)",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK_P02",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": {
+													"value": "@pipeline().parameters.SinkSchema",
+													"type": "Expression"
+												},
+												"SinkTable": {
+													"value": "@pipeline().parameters.SinkTable",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SinkSchema": {
+						"type": "string",
+						"defaultValue": "cd_ods"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "tb_garak_pricebyitemgrade_intermediary"
 					}
 				},
 				"variables": {
