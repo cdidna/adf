@@ -14,10 +14,139 @@
 				"typeProperties": {
 					"variableName": "month",
 					"value": {
-						"value": "@formatDateTime(addDays(startOfMonth(addHours(utcNow(), 9)),int('-1')),'yyyyMM')",
+						"value": "@if(equals(pipeline().parameters.pip_month, null),formatDateTime(addDays(startOfMonth(addHours(utcNow(), 9)),int('-1')),'yyyyMM'),pipeline().parameters.pip_month);",
 						"type": "Expression"
 					}
 				}
+			},
+			{
+				"name": "Copy data",
+				"type": "Copy",
+				"dependsOn": [
+					{
+						"activity": "Set variable1",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "7.00:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "OracleSource",
+						"oracleReaderQuery": {
+							"value": "SELECT MONTH\n      ,ITEM\n      ,AP_WGT\n      ,AP_AMT\t\n FROM @{pipeline().parameters.SourceSchema}.@{pipeline().parameters.SourceTable}\nWHERE MONTH >= '@{variables('month')}'",
+							"type": "Expression"
+						},
+						"partitionOption": "None",
+						"convertDecimalToInteger": false,
+						"queryTimeout": "02:00:00"
+					},
+					"sink": {
+						"type": "AzurePostgreSQLSink",
+						"writeBatchSize": 1000000,
+						"writeBatchTimeout": "00:30:00",
+						"preCopyScript": {
+							"value": "DELETE @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}\nWHERE MONTH >= @{variables('month')}",
+							"type": "Expression"
+						},
+						"writeMethod": "CopyCommand"
+					},
+					"enableStaging": false,
+					"translator": {
+						"type": "TabularTranslator",
+						"mappings": [
+							{
+								"source": {
+									"name": "MONTH",
+									"type": "String"
+								},
+								"sink": {
+									"name": "month",
+									"type": "String",
+									"physicalType": "character varying"
+								}
+							},
+							{
+								"source": {
+									"name": "ITEM",
+									"type": "String"
+								},
+								"sink": {
+									"name": "item",
+									"type": "String",
+									"physicalType": "character varying"
+								}
+							},
+							{
+								"source": {
+									"name": "AP_WGT",
+									"type": "Double"
+								},
+								"sink": {
+									"name": "ap_wgt",
+									"type": "Decimal",
+									"physicalType": "numeric"
+								}
+							},
+							{
+								"source": {
+									"name": "AP_AMT",
+									"type": "Double"
+								},
+								"sink": {
+									"name": "ap_amt",
+									"type": "Decimal",
+									"physicalType": "numeric"
+								}
+							}
+						],
+						"typeConversion": true,
+						"typeConversionSettings": {
+							"allowDataTruncation": true,
+							"treatBooleanAsNumber": false
+						}
+					}
+				},
+				"inputs": [
+					{
+						"referenceName": "DTS_ORACLE_SRC",
+						"type": "DatasetReference",
+						"parameters": {
+							"SourceSchema": {
+								"value": "@pipeline().parameters.SourceSchema",
+								"type": "Expression"
+							},
+							"SourceTable": {
+								"value": "@pipeline().parameters.SourceTable",
+								"type": "Expression"
+							}
+						}
+					}
+				],
+				"outputs": [
+					{
+						"referenceName": "DTS_POSTGRESQL_SNK_P02",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": {
+								"value": "@pipeline().parameters.SinkSchema",
+								"type": "Expression"
+							},
+							"SinkTable": {
+								"value": "@pipeline().parameters.SinkTable",
+								"type": "Expression"
+							}
+						}
+					}
+				]
 			}
 		],
 		"parameters": {
