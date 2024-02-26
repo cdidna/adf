@@ -2945,72 +2945,11 @@
 				"description": "수요기관정보조회",
 				"activities": [
 					{
-						"name": "set begin_Date",
-						"description": "시작일자",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "begin_Date",
-							"value": {
-								"value": "@pipeline().parameters.begin_Date",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "get page",
-						"description": "대표 제품의 생성 기간동안 토탈 건수 ",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "set begin_Date",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "JsonSource",
-								"storeSettings": {
-									"type": "HttpReadSettings",
-									"requestMethod": "GET"
-								},
-								"formatSettings": {
-									"type": "JsonReadSettings"
-								}
-							},
-							"dataset": {
-								"referenceName": "DTS_PPS_API_JSON",
-								"type": "DatasetReference",
-								"parameters": {
-									"params": {
-										"value": "@concat('/1390802/AgriWeather/WeatherObsrInfo/InsttWeather/getWeatherTenMinList?serviceKey=rj5HeIJYh3E2HRvmEw3P3%2BeVDZoZj074w7IIt%2BpcAaujPSI9CTx0U88XSd6C9eWwkBMUncCaG4w%2FtYRT898jcw%3D%3D&Page_No=1&Page_Size=1&date=',variables('begin_Date'), '&time=0800')",
-										"type": "Expression"
-									}
-								}
-							}
-						}
-					},
-					{
 						"name": "ForEach1",
 						"type": "ForEach",
 						"dependsOn": [
 							{
-								"activity": "get page",
+								"activity": "Lookup1",
 								"dependencyConditions": [
 									"Succeeded"
 								]
@@ -3019,9 +2958,10 @@
 						"userProperties": [],
 						"typeProperties": {
 							"items": {
-								"value": "@range(1  \n      ,add(\n             div(\n                  int(activity('get page').output.firstRow.response.body.total_Count) \n                 ,int('100')                  \n                )\n            ,if(\n                greater(\n                        mod(\n                            int(activity('get page').output.firstRow.response.body.total_Count) \n                        ,int('100')   \n                            )\n                       ,0\n                       )\n                ,1,0\n            )           \n       )\n)",
+								"value": "@activity('Lookup1').output.value",
 								"type": "Expression"
 							},
+							"batchCount": 20,
 							"activities": [
 								{
 									"name": "Copy data1_copy1_copy1_copy1_copy1",
@@ -3038,6 +2978,22 @@
 									"typeProperties": {
 										"source": {
 											"type": "XmlSource",
+											"additionalColumns": [
+												{
+													"name": "obsr_spot_code",
+													"value": {
+														"value": "@item().obsr_spot_code",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "date_time",
+													"value": {
+														"value": "@item().date",
+														"type": "Expression"
+													}
+												}
+											],
 											"storeSettings": {
 												"type": "HttpReadSettings",
 												"requestMethod": "GET"
@@ -3064,15 +3020,6 @@
 													},
 													"sink": {
 														"name": "obsr_spot_nm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['date_Time']"
-													},
-													"sink": {
-														"name": "date_time",
 														"type": "String"
 													}
 												},
@@ -3393,10 +3340,19 @@
 												},
 												{
 													"source": {
-														"path": "$['obsr_spot_code_s']"
+														"path": "$['obsr_spot_code']"
 													},
 													"sink": {
 														"name": "obsr_spot_code",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['date_time']"
+													},
+													"sink": {
+														"name": "date_time",
 														"type": "String"
 													}
 												}
@@ -3411,7 +3367,7 @@
 											"type": "DatasetReference",
 											"parameters": {
 												"url": {
-													"value": "@concat('/1390802/AgriWeather/WeatherObsrInfo/InsttWeather/getWeatherTenMinList?serviceKey=rj5HeIJYh3E2HRvmEw3P3%2BeVDZoZj074w7IIt%2BpcAaujPSI9CTx0U88XSd6C9eWwkBMUncCaG4w%2FtYRT898jcw%3D%3D&Page_No=',item(),'&Page_Size=100&date=',variables('begin_Date'), '&time=0800')",
+													"value": "@concat('/1390802/AgriWeather/WeatherObsrInfo/InsttWeather/getWeatherTenMinList?serviceKey=rj5HeIJYh3E2HRvmEw3P3%2BeVDZoZj074w7IIt%2BpcAaujPSI9CTx0U88XSd6C9eWwkBMUncCaG4w%2FtYRT898jcw%3D%3D&Page_No=1&Page_Size=1&date=',item().date, '&time=0800','&obsr_spot_code=',item().obsr_spot_code)",
 													"type": "Expression"
 												}
 											}
@@ -3435,6 +3391,38 @@
 									]
 								}
 							]
+						}
+					},
+					{
+						"name": "Lookup1",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "select obsr_spot_code,  to_char(now(),'yyyy-mm-dd') as date      \n   from  cd_ods.tb_apis_agri_weather_spot_code_t\n   ;                                             \n",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
 						}
 					}
 				],
