@@ -1,0 +1,417 @@
+{
+	"name": "PIP_API_CUSTOMER_KIMCHI_NEWS_SIN",
+	"properties": {
+		"activities": [
+			{
+				"name": "token",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "select_keyword",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "JsonSource",
+						"storeSettings": {
+							"type": "HttpReadSettings",
+							"requestMethod": "POST",
+							"requestTimeout": ""
+						},
+						"formatSettings": {
+							"type": "JsonReadSettings"
+						}
+					},
+					"dataset": {
+						"referenceName": "DTS_VIVE_API_TOKEN",
+						"type": "DatasetReference"
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "select_keyword",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "set date",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "end date",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "select a.gubun \n      ,a.keyword\n      ,string_agg(a.inculde_keyword,',') as inculde_keyword\n      ,a.inculde_keyword_and\n      ,inculde_keyword_add||string_agg(a.inculde_keyword,',')||inculde_keyword_add2  as api_inculde_keyword\n      ,string_agg(a.db_inculde_keyword,',') as db_inculde_keyword\n  from (\n\t    select gubun\n\t          ,keyword\t\t        \n\t          ,inculde_keyword_and\n\t          ,inculde_keyword\n\t          ,case when length(inculde_keyword_and) !=0 then inculde_keyword_and||'&&(' else '' end  inculde_keyword_add\n              ,case when length(inculde_keyword_and) !=0 then ')' else '' end inculde_keyword_add2\n\t          ,replace(inculde_keyword,'''','''''')  as db_inculde_keyword\n\t          ,row_number() over (partition by gubun, keyword, inculde_keyword_and)/20 as cnt \n\t      from cd_portal.tb_kimchi_roh_news_keyword2 \n\t\t) a \n where a.gubun = '김치'\n group by a.gubun \n      ,a.keyword\n      ,a.inculde_keyword_and\n      ,a.inculde_keyword_add\n      ,a.inculde_keyword_add2\n order by keyword",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK_P02",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "delete table",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('select_keyword').output.value",
+						"type": "Expression"
+					},
+					"isSequential": false,
+					"batchCount": 7,
+					"activities": [
+						{
+							"name": "Copy data",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 2,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "JsonSource",
+									"additionalColumns": [
+										{
+											"name": "gubun",
+											"value": {
+												"value": "@item().gubun",
+												"type": "Expression"
+											}
+										},
+										{
+											"name": "keyword",
+											"value": {
+												"value": "@item().keyword",
+												"type": "Expression"
+											}
+										},
+										{
+											"name": "inculde_keyword",
+											"value": {
+												"value": "@item().inculde_keyword",
+												"type": "Expression"
+											}
+										},
+										{
+											"name": "inculde_keyword_and",
+											"value": {
+												"value": "@item().inculde_keyword_and",
+												"type": "Expression"
+											}
+										}
+									],
+									"storeSettings": {
+										"type": "HttpReadSettings",
+										"requestMethod": "GET",
+										"additionalHeaders": {
+											"value": "@{concat('Authorization : Bearer ',activity('token').output.value[0].access_token)}",
+											"type": "Expression"
+										},
+										"requestTimeout": ""
+									},
+									"formatSettings": {
+										"type": "JsonReadSettings"
+									}
+								},
+								"sink": {
+									"type": "AzurePostgreSQLSink",
+									"writeBatchSize": 1000000,
+									"writeBatchTimeout": "00:30:00",
+									"writeMethod": "CopyCommand"
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"mappings": [
+										{
+											"source": {
+												"path": "['date']"
+											},
+											"sink": {
+												"name": "date",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['title']"
+											},
+											"sink": {
+												"name": "title",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['content']"
+											},
+											"sink": {
+												"name": "content",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['url']"
+											},
+											"sink": {
+												"name": "url",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['writerName']"
+											},
+											"sink": {
+												"name": "writername",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['documentDate']"
+											},
+											"sink": {
+												"name": "documentdate",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['writerRealName']"
+											},
+											"sink": {
+												"name": "writerrealname",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "$['gubun']"
+											},
+											"sink": {
+												"name": "gubun",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "$['keyword']"
+											},
+											"sink": {
+												"name": "keyword",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "$['inculde_keyword']"
+											},
+											"sink": {
+												"name": "inculde_keyword",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "$['inculde_keyword_and']"
+											},
+											"sink": {
+												"name": "inculde_keyword_and",
+												"type": "String"
+											}
+										}
+									],
+									"collectionReference": "$['data']['documentList']",
+									"mapComplexValuesToString": true
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "DTS_VIVE_API",
+									"type": "DatasetReference",
+									"parameters": {
+										"param": {
+											"value": "@concat('/dataplus/social/GetKeywordDocuments?source=news&startDate=',variables('date'),'&endDate=',variables('date2'),'&period=0&rowPerPage=3000&keyword=',item().keyword,'&includeKeyword=',item().api_inculde_keyword)",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "DTS_POSTGRESQL_SNK_P02",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": {
+											"value": "@pipeline().parameters.SinkSckema",
+											"type": "Expression"
+										},
+										"SinkTable": {
+											"value": "@pipeline().parameters.SinkTable",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					]
+				}
+			},
+			{
+				"name": "set date",
+				"description": "당일자",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "date",
+					"value": {
+						"value": "@if(equals(pipeline().parameters.pip_date,null),formatDateTime(addDays(addHours(utcNow(), 9),-1),'yyyyMMdd'),pipeline().parameters.pip_date)",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "end date",
+				"description": "당일자",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "date2",
+					"value": {
+						"value": "@if(equals(pipeline().parameters.pip_date2,null),formatDateTime(addHours(utcNow(), 9),'yyyyMMdd'),pipeline().parameters.pip_date2)",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "delete table",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "token",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "delete from @{pipeline().parameters.SinkSckema}.@{pipeline().parameters.SinkTable}\n where date between '@{variables('date')}' and '@{variables('date2')}'\n   ",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK_P02",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					},
+					"firstRowOnly": false
+				}
+			}
+		],
+		"parameters": {
+			"SinkSckema": {
+				"type": "string",
+				"defaultValue": "cd_ods"
+			},
+			"SinkTable": {
+				"type": "string",
+				"defaultValue": "tb_kimchi_roh_news_data_temp2"
+			},
+			"pip_date": {
+				"type": "string"
+			},
+			"pip_date2": {
+				"type": "string"
+			}
+		},
+		"variables": {
+			"date": {
+				"type": "String"
+			},
+			"date2": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "고객/외부/김치 NEWS"
+		},
+		"annotations": []
+	}
+}
