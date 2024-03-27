@@ -69,7 +69,7 @@
 					"source": {
 						"type": "AzurePostgreSqlSource",
 						"query": {
-							"value": "select a.gubun\n      ,a.keyword\n      ,a.inculde_keyword\n      ,a.inculde_keyword_and\n      ,a.seq      \n      ,a.inculde_keyword_add||a.db_inculde_keyword||inculde_keyword_add2 as db_inculde_keyword\n      ,a.inculde_keyword_add||a.api_inculde_keyword||inculde_keyword_add2 as api_inculde_keyword\n  from (\n         select gubun  \n               ,keyword \n               ,seq\n               ,case when length(inculde_keyword_and) !=0 then inculde_keyword_and||'&&(' else '' end  inculde_keyword_add\n               ,case when length(inculde_keyword_and) !=0 then ')' else '' end inculde_keyword_add2\n               ,replace(inculde_keyword,'''','''''') as db_inculde_keyword\n               ,replace(inculde_keyword,',','||')    as api_inculde_keyword\n               ,inculde_keyword\n               ,inculde_keyword_and\n          from  cd_portal.tb_kimchi_roh_news_keyword       \n       ) a",
+							"value": "select a.gubun \n      ,a.keyword\n      ,string_agg(a.inculde_keyword,',') as inculde_keyword\n      ,a.inculde_keyword_and\n      ,inculde_keyword_add||string_agg(a.inculde_keyword,'||')||inculde_keyword_add2  as api_inculde_keyword\n      ,string_agg(a.db_inculde_keyword,',') as db_inculde_keyword\n  from (\n\t    select gubun\n\t          ,keyword\t\t        \n\t          ,inculde_keyword_and\n\t          ,inculde_keyword\n\t          ,case when length(inculde_keyword_and) !=0 then inculde_keyword_and||'&&(' else '' end  inculde_keyword_add\n              ,case when length(inculde_keyword_and) !=0 then ')' else '' end inculde_keyword_add2\n\t          ,replace(inculde_keyword,'''','''''')  as db_inculde_keyword\n\t          ,row_number() over (partition by gubun, keyword, inculde_keyword_and)/20 as cnt \n\t      from cd_portal.tb_kimchi_roh_news_keyword2 \n\t\t) a \n where a.gubun = '김치'\n group by a.gubun \n      ,a.keyword\n      ,a.inculde_keyword_and\n      ,a.inculde_keyword_add\n      ,a.inculde_keyword_add2\n order by keyword",
 							"type": "Expression"
 						},
 						"partitionOption": "None"
@@ -90,7 +90,7 @@
 				"type": "ForEach",
 				"dependsOn": [
 					{
-						"activity": "token",
+						"activity": "delete table",
 						"dependencyConditions": [
 							"Succeeded"
 						]
@@ -143,13 +143,6 @@
 											}
 										},
 										{
-											"name": "seq",
-											"value": {
-												"value": "@item().seq",
-												"type": "Expression"
-											}
-										},
-										{
 											"name": "inculde_keyword_and",
 											"value": {
 												"value": "@item().inculde_keyword_and",
@@ -174,10 +167,6 @@
 									"type": "AzurePostgreSQLSink",
 									"writeBatchSize": 1000000,
 									"writeBatchTimeout": "00:30:00",
-									"preCopyScript": {
-										"value": "delete from @{pipeline().parameters.SinkSckema}.@{pipeline().parameters.SinkTable}\n where date between '@{variables('date')}' and '@{variables('date2')}'\n  and keyword =  '@{item().seq}'\n   ",
-										"type": "Expression"
-									},
 									"writeMethod": "CopyCommand"
 								},
 								"enableStaging": false,
@@ -272,15 +261,6 @@
 											"sink": {
 												"name": "inculde_keyword",
 												"type": "String"
-											}
-										},
-										{
-											"source": {
-												"path": "$['seq']"
-											},
-											"sink": {
-												"name": "seq",
-												"type": "Int32"
 											}
 										},
 										{
@@ -387,7 +367,10 @@
 				"typeProperties": {
 					"source": {
 						"type": "AzurePostgreSqlSource",
-						"query": "SELECT cd_ods.kimchi_roh_news_data('@{variables('date')}' , '@{variables('date2')}' ) AS rtn",
+						"query": {
+							"value": "SELECT cd_ods.kimchi_roh_news_data('@{variables('date')}' , '@{variables('date2')}' ) AS rtn",
+							"type": "Expression"
+						},
 						"partitionOption": "None"
 					},
 					"dataset": {
@@ -398,6 +381,45 @@
 							"SinkTable": "1"
 						}
 					}
+				}
+			},
+			{
+				"name": "delete table",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "token",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "delete from @{pipeline().parameters.SinkSckema}.@{pipeline().parameters.SinkTable}\n where date between '@{variables('date')}' and '@{variables('date2')}';\n\n select 1 as su\n   ",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK_P02",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					},
+					"firstRowOnly": false
 				}
 			}
 		],
