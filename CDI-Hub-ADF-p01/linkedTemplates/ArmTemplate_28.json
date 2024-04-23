@@ -13,6 +13,110 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_M_CD_VOC_T_CODE_FULL')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Copy data",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "OracleSource",
+								"partitionOption": "None",
+								"queryTimeout": "02:00:00"
+							},
+							"sink": {
+								"type": "DelimitedTextSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								},
+								"formatSettings": {
+									"type": "DelimitedTextWriteSettings",
+									"quoteAllText": true,
+									"fileExtension": ".csv"
+								}
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_ORACLE_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceSchema": {
+										"value": "@pipeline().parameters.SourceSchema",
+										"type": "Expression"
+									},
+									"SourceTable": {
+										"value": "@pipeline().parameters.SourceTable",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": {
+										"value": "@pipeline().parameters.AdlsDirectory",
+										"type": "Expression"
+									},
+									"FileName": {
+										"value": "@concat('M_', pipeline().parameters.SourceSchema,'.', pipeline().parameters.SourceTable, '.csv')",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SourceSchema": {
+						"type": "string",
+						"defaultValue": "CD_VOC"
+					},
+					"SourceTable": {
+						"type": "string",
+						"defaultValue": "T_CODE"
+					},
+					"AdlsDirectory": {
+						"type": "string",
+						"defaultValue": "고객/내부/VOC"
+					}
+				},
+				"folder": {
+					"name": "고객/내부/VOC"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-09-01T06:37:12Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_M_CD_VOC_T_IMPROVE_ACTION_FULL')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -2573,12 +2677,6 @@
 								"dependencyConditions": [
 									"Succeeded"
 								]
-							},
-							{
-								"activity": "Set filename",
-								"dependencyConditions": [
-									"Succeeded"
-								]
 							}
 						],
 						"policy": {
@@ -2599,6 +2697,13 @@
 											"value": "@variables('yyyymm')",
 											"type": "Expression"
 										}
+									},
+									{
+										"name": "data_type",
+										"value": {
+											"value": "@pipeline().parameters.pip_fileNm",
+											"type": "Expression"
+										}
 									}
 								],
 								"storeSettings": {
@@ -2615,7 +2720,7 @@
 								"writeBatchSize": 1000000,
 								"writeBatchTimeout": "00:30:00",
 								"preCopyScript": {
-									"value": "DELETE FROM cd_ods.tb_nielsen_offline_fct\nWHERE ifyyyymm = '@{variables('yyyymm')}'",
+									"value": "DELETE FROM cd_ods.tb_nielsen_offline_fct\nWHERE ifyyyymm = '@{variables('yyyymm')}'\n  AND category = '@{pipeline().parameters.pip_fileNm}'",
 									"type": "Expression"
 								},
 								"writeMethod": "CopyCommand"
@@ -2624,6 +2729,17 @@
 							"translator": {
 								"type": "TabularTranslator",
 								"mappings": [
+									{
+										"source": {
+											"name": "data_type",
+											"type": "String"
+										},
+										"sink": {
+											"name": "data_type",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
 									{
 										"source": {
 											"name": "fact_column",
@@ -2701,7 +2817,7 @@
 										"type": "Expression"
 									},
 									"FileName": {
-										"value": "@concat('KR_DAESANG_KIMCHI_MT_FullHistory_facts_ref_',variables('fileNm'),'.txt')",
+										"value": "@concat('KR_DAESANG_',pipeline().parameters.pip_fileNm,'_facts_ref_',pipeline().parameters.pip_fileNumber,'.txt')",
 										"type": "Expression"
 									}
 								}
@@ -2717,24 +2833,6 @@
 								}
 							}
 						]
-					},
-					{
-						"name": "Set filename",
-						"description": "수행일 기준 전월 구하기\n포멧 : yyyymm",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "fileNm",
-							"value": {
-								"value": "@if(equals(pipeline().parameters.pip_fileNm,null), formatDateTime(addDays(startOfMonth(addHours(utcNow(), 9)),-34),'yyyyMM'),pipeline().parameters.pip_fileNm)",
-								"type": "Expression"
-							}
-						}
 					},
 					{
 						"name": "pg_tb_nielsen_per",
@@ -2765,6 +2863,13 @@
 											"value": "@variables('yyyymm')",
 											"type": "Expression"
 										}
+									},
+									{
+										"name": "data_type",
+										"value": {
+											"value": "@pipeline().parameters.pip_fileNm",
+											"type": "Expression"
+										}
 									}
 								],
 								"storeSettings": {
@@ -2781,7 +2886,7 @@
 								"writeBatchSize": 1000000,
 								"writeBatchTimeout": "00:30:00",
 								"preCopyScript": {
-									"value": "DELETE FROM cd_ods.tb_nielsen_offline_per_temp",
+									"value": "DELETE FROM cd_ods.tb_nielsen_offline_per_temp\nwhere category = '@{pipeline().parameters.pip_fileNm}'",
 									"type": "Expression"
 								},
 								"writeMethod": "CopyCommand"
@@ -2790,6 +2895,17 @@
 							"translator": {
 								"type": "TabularTranslator",
 								"mappings": [
+									{
+										"source": {
+											"name": "data_type",
+											"type": "String"
+										},
+										"sink": {
+											"name": "data_type",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
 									{
 										"source": {
 											"name": "period_id",
@@ -2880,7 +2996,7 @@
 										"type": "Expression"
 									},
 									"FileName": {
-										"value": "@concat('KR_DAESANG_KIMCHI_MT_FullHistory_period_dim_',variables('fileNm'),'.txt')",
+										"value": "@concat('KR_DAESANG_',pipeline().parameters.pip_fileNm,'_period_dim_',pipeline().parameters.pip_fileNumber,'.txt')",
 										"type": "Expression"
 									}
 								}
@@ -2926,6 +3042,13 @@
 											"value": "@variables('yyyymm')",
 											"type": "Expression"
 										}
+									},
+									{
+										"name": "data_type",
+										"value": {
+											"value": "@pipeline().parameters.pip_fileNm",
+											"type": "Expression"
+										}
 									}
 								],
 								"storeSettings": {
@@ -2942,7 +3065,7 @@
 								"writeBatchSize": 1000000,
 								"writeBatchTimeout": "00:30:00",
 								"preCopyScript": {
-									"value": "DELETE FROM cd_ods.tb_nielsen_offline_mkt_temp",
+									"value": "DELETE FROM cd_ods.tb_nielsen_offline_mkt_temp\nwhere category = '@{pipeline().parameters.pip_fileNm}'",
 									"type": "Expression"
 								},
 								"writeMethod": "CopyCommand"
@@ -2951,6 +3074,17 @@
 							"translator": {
 								"type": "TabularTranslator",
 								"mappings": [
+									{
+										"source": {
+											"name": "data_type",
+											"type": "String"
+										},
+										"sink": {
+											"name": "data_type",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
 									{
 										"source": {
 											"name": "market_id",
@@ -3041,7 +3175,7 @@
 										"type": "Expression"
 									},
 									"FileName": {
-										"value": "@concat('KR_DAESANG_KIMCHI_MT_FullHistory_market_dim_',variables('fileNm'),'.txt')",
+										"value": "@concat('KR_DAESANG_',pipeline().parameters.pip_fileNm,'_market_dim_',pipeline().parameters.pip_fileNumber,'.txt')",
 										"type": "Expression"
 									}
 								}
@@ -3087,6 +3221,13 @@
 											"value": "@variables('yyyymm')",
 											"type": "Expression"
 										}
+									},
+									{
+										"name": "data_type",
+										"value": {
+											"value": "@pipeline().parameters.pip_fileNm",
+											"type": "Expression"
+										}
 									}
 								],
 								"storeSettings": {
@@ -3103,7 +3244,7 @@
 								"writeBatchSize": 1000000,
 								"writeBatchTimeout": "00:30:00",
 								"preCopyScript": {
-									"value": "DELETE FROM cd_ods.tb_nielsen_offline_prod_temp",
+									"value": "DELETE FROM cd_ods.tb_nielsen_offline_prod_temp\nwhere category = '@{pipeline().parameters.pip_fileNm}'",
 									"type": "Expression"
 								},
 								"writeMethod": "CopyCommand"
@@ -3112,6 +3253,17 @@
 							"translator": {
 								"type": "TabularTranslator",
 								"mappings": [
+									{
+										"source": {
+											"name": "data_type",
+											"type": "String"
+										},
+										"sink": {
+											"name": "data_type",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
 									{
 										"source": {
 											"name": "product_id",
@@ -3274,7 +3426,7 @@
 										"type": "Expression"
 									},
 									"FileName": {
-										"value": "@concat('KR_DAESANG_KIMCHI_MT_FullHistory_product_dim_',variables('fileNm'),'.txt')",
+										"value": "@concat('KR_DAESANG_',pipeline().parameters.pip_fileNm,'_product_dim_',pipeline().parameters.pip_fileNumber,'.txt')",
 										"type": "Expression"
 									}
 								}
@@ -3292,7 +3444,7 @@
 						]
 					},
 					{
-						"name": "pg_tb_nielsen_data_copy",
+						"name": "pg_tb_nielsen_data",
 						"type": "Copy",
 						"dependsOn": [
 							{
@@ -3320,6 +3472,13 @@
 											"value": "@variables('yyyymm')",
 											"type": "Expression"
 										}
+									},
+									{
+										"name": "data_type",
+										"value": {
+											"value": "@pipeline().parameters.pip_fileNm",
+											"type": "Expression"
+										}
 									}
 								],
 								"storeSettings": {
@@ -3336,7 +3495,7 @@
 								"writeBatchSize": 1000000,
 								"writeBatchTimeout": "00:30:00",
 								"preCopyScript": {
-									"value": "DELETE FROM cd_ods.tb_nielsen_offline_data_temp",
+									"value": "DELETE FROM cd_ods.tb_nielsen_offline_data_temp\nwhere category = '@{pipeline().parameters.pip_fileNm}'",
 									"type": "Expression"
 								},
 								"writeMethod": "CopyCommand"
@@ -3345,6 +3504,17 @@
 							"translator": {
 								"type": "TabularTranslator",
 								"mappings": [
+									{
+										"source": {
+											"name": "data_type",
+											"type": "String"
+										},
+										"sink": {
+											"name": "data_type",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
 									{
 										"source": {
 											"name": "market_id",
@@ -3389,8 +3559,8 @@
 										},
 										"sink": {
 											"name": "dol",
-											"type": "Decimal",
-											"physicalType": "numeric"
+											"type": "String",
+											"physicalType": "character varying"
 										}
 									},
 									{
@@ -3401,8 +3571,8 @@
 										},
 										"sink": {
 											"name": "e",
-											"type": "Decimal",
-											"physicalType": "numeric"
+											"type": "String",
+											"physicalType": "character varying"
 										}
 									},
 									{
@@ -3413,8 +3583,8 @@
 										},
 										"sink": {
 											"name": "u",
-											"type": "Decimal",
-											"physicalType": "numeric"
+											"type": "String",
+											"physicalType": "character varying"
 										}
 									},
 									{
@@ -3425,8 +3595,8 @@
 										},
 										"sink": {
 											"name": "bdol",
-											"type": "Decimal",
-											"physicalType": "numeric"
+											"type": "String",
+											"physicalType": "character varying"
 										}
 									},
 									{
@@ -3437,8 +3607,8 @@
 										},
 										"sink": {
 											"name": "be",
-											"type": "Decimal",
-											"physicalType": "numeric"
+											"type": "String",
+											"physicalType": "character varying"
 										}
 									},
 									{
@@ -3449,8 +3619,8 @@
 										},
 										"sink": {
 											"name": "bu",
-											"type": "Decimal",
-											"physicalType": "numeric"
+											"type": "String",
+											"physicalType": "character varying"
 										}
 									},
 									{
@@ -3461,8 +3631,92 @@
 										},
 										"sink": {
 											"name": "ap_dol",
-											"type": "Decimal",
-											"physicalType": "numeric"
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FEATPON_DOL",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "featpon_dol",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FEATPR_DOL",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "featpr_dol",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FEATOLY_DOL",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "featoly_dol",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FEATFRE_DOL",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "featfre_dol",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FRVOPLY_DOL",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "frvoply_dol",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "TPRFRV_DOL",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "tprfrv_dol",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "TPRONY_DOL",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "tprony_dol",
+											"type": "String",
+											"physicalType": "character varying"
 										}
 									},
 									{
@@ -3473,8 +3727,92 @@
 										},
 										"sink": {
 											"name": "ap_e",
-											"type": "Decimal",
-											"physicalType": "numeric"
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FEATPON_E",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "featpon_e",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FEATPR_E",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "featpr_e",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FEATOLY_E",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "featoly_e",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FEATFRE_E",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "featfre_e",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FRVOPLY_E",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "frvoply_e",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "TPRFRV_E",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "tprfrv_e",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "TPRONY_E",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "tprony_e",
+											"type": "String",
+											"physicalType": "character varying"
 										}
 									},
 									{
@@ -3485,8 +3823,92 @@
 										},
 										"sink": {
 											"name": "ap_u",
-											"type": "Decimal",
-											"physicalType": "numeric"
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FEATPON_U",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "featpon_u",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FEATPR_U",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "featpr_u",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FEATOLY_U",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "featoly_u",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FRVOPLY_U",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "frvoply_u",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "TPRFRV_U",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "tprfrv_u",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "TPRONY_U",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "tprony_u",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FEATFRE_U",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "featfre_u",
+											"type": "String",
+											"physicalType": "character varying"
 										}
 									},
 									{
@@ -3497,8 +3919,8 @@
 										},
 										"sink": {
 											"name": "num_dist",
-											"type": "Decimal",
-											"physicalType": "numeric"
+											"type": "String",
+											"physicalType": "character varying"
 										}
 									},
 									{
@@ -3509,8 +3931,8 @@
 										},
 										"sink": {
 											"name": "num_dist_reach",
-											"type": "Decimal",
-											"physicalType": "numeric"
+											"type": "String",
+											"physicalType": "character varying"
 										}
 									},
 									{
@@ -3521,8 +3943,8 @@
 										},
 										"sink": {
 											"name": "dol_ccv_non_reach_context",
-											"type": "Decimal",
-											"physicalType": "numeric"
+											"type": "String",
+											"physicalType": "character varying"
 										}
 									},
 									{
@@ -3533,8 +3955,8 @@
 										},
 										"sink": {
 											"name": "dol_ccv_reach_context",
-											"type": "Decimal",
-											"physicalType": "numeric"
+											"type": "String",
+											"physicalType": "character varying"
 										}
 									},
 									{
@@ -3545,8 +3967,8 @@
 										},
 										"sink": {
 											"name": "num_stores_selling_smpl",
-											"type": "Decimal",
-											"physicalType": "numeric"
+											"type": "String",
+											"physicalType": "character varying"
 										}
 									},
 									{
@@ -3557,8 +3979,8 @@
 										},
 										"sink": {
 											"name": "num_stores_selling_smpl_reach",
-											"type": "Decimal",
-											"physicalType": "numeric"
+											"type": "String",
+											"physicalType": "character varying"
 										}
 									},
 									{
@@ -3569,20 +3991,104 @@
 										},
 										"sink": {
 											"name": "ap_num_dist",
-											"type": "Decimal",
-											"physicalType": "numeric"
+											"type": "String",
+											"physicalType": "character varying"
 										}
 									},
 									{
 										"source": {
-											"name": "AP_NUM_DIST_REACH",
+											"name": "NP_NUM_DIST_REACH",
 											"type": "String",
 											"physicalType": "String"
 										},
 										"sink": {
-											"name": "ap_num_dist_reach",
-											"type": "Decimal",
-											"physicalType": "numeric"
+											"name": "np_num_dist_reach",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FEATPON_NUM_DIST",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "featpon_num_dist",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FEATPR_NUM_DIST",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "featpr_num_dist",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FEATOLY_NUM_DIST",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "featoly_num_dist",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FRVOPLY_NUM_DIST",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "frvoply_num_dist",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "TPRONY_NUM_DIST",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "tprony_num_dist",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "TPRFRV_NUM_DIST",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "tprfrv_num_dist",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FEATFRE_NUM_DIST",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "featfre_num_dist",
+											"type": "String",
+											"physicalType": "character varying"
 										}
 									},
 									{
@@ -3593,20 +4099,104 @@
 										},
 										"sink": {
 											"name": "ap_dol_sgv_non_reach_context",
-											"type": "Decimal",
-											"physicalType": "numeric"
+											"type": "String",
+											"physicalType": "character varying"
 										}
 									},
 									{
 										"source": {
-											"name": "AP_DOL_SGV_REACH_CONTEXT",
+											"name": "NP_DOL_SGV_REACH_CONTEXT",
 											"type": "String",
 											"physicalType": "String"
 										},
 										"sink": {
-											"name": "ap_dol_sgv_reach_context",
-											"type": "Decimal",
-											"physicalType": "numeric"
+											"name": "np_dol_sgv_reach_context",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FEATPON_DOL_SGV_NON_REACH_CONTEXT",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "featpon_dol_sgv_non_reach_context",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FEATPR_DOL_SGV_NON_REACH_CONTEXT",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "featpr_dol_sgv_non_reach_context",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FEATOLY_DOL_SGV_NON_REACH_CONTEXT",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "featoly_dol_sgv_non_reach_context",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FRVOPLY_DOL_SGV_NON_REACH_CONTEXT",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "frvoply_dol_sgv_non_reach_context",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "TPRONY_DOL_SGV_NON_REACH_CONTEXT",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "tprony_dol_sgv_non_reach_context",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "TPRFRV_DOL_SGV_NON_REACH_CONTEXT",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "tprfrv_dol_sgv_non_reach_context",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "FEATFRE_DOL_SGV_NON_REACH_CONTEXT",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "featfre_dol_sgv_non_reach_context",
+											"type": "String",
+											"physicalType": "character varying"
 										}
 									}
 								],
@@ -3627,7 +4217,7 @@
 										"type": "Expression"
 									},
 									"FileName": {
-										"value": "@concat('KR_DAESANG_KIMCHI_MT_FullHistory_aggregated_data_',variables('fileNm'),'.txt')",
+										"value": "@concat('KR_DAESANG_',pipeline().parameters.pip_fileNm,'_aggregated_data_',pipeline().parameters.pip_fileNumber,'.txt')",
 										"type": "Expression"
 									}
 								}
@@ -3658,6 +4248,9 @@
 					},
 					"pip_fileNm": {
 						"type": "string"
+					},
+					"pip_fileNumber": {
+						"type": "string"
 					}
 				},
 				"variables": {
@@ -3668,1056 +4261,6 @@
 						"type": "String"
 					},
 					"maxWeek": {
-						"type": "String"
-					},
-					"fileNm": {
-						"type": "String"
-					},
-					"filename": {
-						"type": "String"
-					}
-				},
-				"folder": {
-					"name": "매출_주문/외부/닐슨"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-12-15T09:05:35Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_NIELSEN_TO_PG_ONLINE_M')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "- 닐슨 SFTP ",
-				"activities": [
-					{
-						"name": "Lookup1",
-						"description": "닐슨데이터의 주차 csv 읽기 \nPER_yyyymm.csv",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "Set yyyymm",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							},
-							{
-								"activity": "file name",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "DelimitedTextSource",
-								"storeSettings": {
-									"type": "AzureBlobFSReadSettings",
-									"recursive": true,
-									"enablePartitionDiscovery": false
-								},
-								"formatSettings": {
-									"type": "DelimitedTextReadSettings"
-								}
-							},
-							"dataset": {
-								"referenceName": "DTS_ADLS_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"AdlsDirectory": {
-										"value": "@concat(pipeline().parameters.AdlsDirectory,'/',variables('yyyymm'))",
-										"type": "Expression"
-									},
-									"FileName": {
-										"value": "@concat('PER_',variables('fileNm'),'.csv')",
-										"type": "Expression"
-									}
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "Set yyyymm",
-						"description": "수행일 기준 전월 구하기\n포멧 : yyyymm",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "yyyymm",
-							"value": {
-								"value": "@if(equals(pipeline().parameters.pip_yyyymm,null), formatDateTime(addDays(startOfMonth(addHours(utcNow(), 9)),-34),'yyyyMM'),pipeline().parameters.pip_yyyymm)",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "Set minMonth",
-						"description": "닐슨에서전송해온 데이터의 시작주차",
-						"type": "SetVariable",
-						"dependsOn": [
-							{
-								"activity": "Lookup1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "minMonth",
-							"value": {
-								"value": "@activity('Lookup1').output.value[0].TAG",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "Set MaxMonth",
-						"description": "닐슨에서 가져온 데이터의 마지막주",
-						"type": "SetVariable",
-						"dependsOn": [
-							{
-								"activity": "Lookup1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "maxMonth",
-							"value": {
-								"value": "@activity('Lookup1').output.value[add(activity('Lookup1').output.count,-1)].TAG",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "pg_tb_neilsen_data",
-						"type": "Copy",
-						"dependsOn": [
-							{
-								"activity": "Set minMonth",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							},
-							{
-								"activity": "Set MaxMonth",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "DelimitedTextSource",
-								"additionalColumns": [
-									{
-										"name": "modify_mm",
-										"value": {
-											"value": "@variables('yyyymm')",
-											"type": "Expression"
-										}
-									}
-								],
-								"storeSettings": {
-									"type": "AzureBlobFSReadSettings",
-									"recursive": true,
-									"enablePartitionDiscovery": false
-								},
-								"formatSettings": {
-									"type": "DelimitedTextReadSettings"
-								}
-							},
-							"sink": {
-								"type": "AzurePostgreSQLSink",
-								"writeBatchSize": 1000000,
-								"writeBatchTimeout": "00:30:00",
-								"preCopyScript": {
-									"value": "DELETE FROM cd_ods.tb_nielsen_online_data\nWHERE PER_TAG BETWEEN '@{variables('minMonth')}' AND '@{variables('maxMonth')}' ",
-									"type": "Expression"
-								},
-								"writeMethod": "CopyCommand"
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"mappings": [
-									{
-										"source": {
-											"name": "MKT_TAG",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "mkt_tag",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "PROD_TAG",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "prod_tag",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "PER_TAG",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "per_tag",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "F000000000000000000100000000000000000000",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "sales_qty",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "F000000000000000000200000000000000000000",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "sales_kg",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "F000000000000000669100000000000000000000",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "sales_amt",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "modify_mm",
-											"type": "String"
-										},
-										"sink": {
-											"name": "modify_mm",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									}
-								],
-								"typeConversion": true,
-								"typeConversionSettings": {
-									"allowDataTruncation": true,
-									"treatBooleanAsNumber": false
-								}
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_ADLS_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"AdlsDirectory": {
-										"value": "@concat(pipeline().parameters.AdlsDirectory,'/',variables('yyyymm'))",
-										"type": "Expression"
-									},
-									"FileName": {
-										"value": "@concat('DATA_',variables('fileNm'),'.csv')",
-										"type": "Expression"
-									}
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "cd_ods",
-									"SinkTable": "tb_nielsen_online_data"
-								}
-							}
-						]
-					},
-					{
-						"name": "pg_tb_nielsen_temp_mkt",
-						"type": "Copy",
-						"dependsOn": [
-							{
-								"activity": "pg_tb_neilsen_data",
-								"dependencyConditions": [
-									"Completed"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "DelimitedTextSource",
-								"storeSettings": {
-									"type": "AzureBlobFSReadSettings",
-									"recursive": true,
-									"enablePartitionDiscovery": false
-								},
-								"formatSettings": {
-									"type": "DelimitedTextReadSettings"
-								}
-							},
-							"sink": {
-								"type": "AzurePostgreSQLSink",
-								"writeBatchSize": 1000000,
-								"writeBatchTimeout": "00:30:00",
-								"preCopyScript": {
-									"value": "DELETE FROM cd_ods.tb_nielsen_online_mkt_temp\n",
-									"type": "Expression"
-								},
-								"writeMethod": "CopyCommand"
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"mappings": [
-									{
-										"source": {
-											"name": "TAG",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "tag",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "SHORT",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "short",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "LONG",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "long",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "DISPLAY_ORDER",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "display_order",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "PARENT_TAG",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "parent_tag",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "HIER_NUM",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "hier_num",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "HIER_NAME",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "hier_name",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "HIER_LEVEL_NUM",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "hier_level_num",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "HIER_LEVEL_NAME",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "hier_level_name",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									}
-								],
-								"typeConversion": true,
-								"typeConversionSettings": {
-									"allowDataTruncation": true,
-									"treatBooleanAsNumber": false
-								}
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_ADLS_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"AdlsDirectory": {
-										"value": "@concat(pipeline().parameters.AdlsDirectory,'/',variables('yyyymm'))",
-										"type": "Expression"
-									},
-									"FileName": {
-										"value": "@concat('MKT_',variables('fileNm'),'.csv')",
-										"type": "Expression"
-									}
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "cd_ods",
-									"SinkTable": "tb_nielsen_online_mkt_temp"
-								}
-							}
-						]
-					},
-					{
-						"name": "pg_tb_nielsen_per",
-						"type": "Copy",
-						"dependsOn": [
-							{
-								"activity": "pg_tb_nielsen_temp_mkt",
-								"dependencyConditions": [
-									"Completed"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "DelimitedTextSource",
-								"additionalColumns": [
-									{
-										"name": "modify_mm",
-										"value": {
-											"value": "@variables('yyyymm')",
-											"type": "Expression"
-										}
-									}
-								],
-								"storeSettings": {
-									"type": "AzureBlobFSReadSettings",
-									"recursive": true,
-									"enablePartitionDiscovery": false
-								},
-								"formatSettings": {
-									"type": "DelimitedTextReadSettings"
-								}
-							},
-							"sink": {
-								"type": "AzurePostgreSQLSink",
-								"writeBatchSize": 1000000,
-								"writeBatchTimeout": "00:30:00",
-								"preCopyScript": {
-									"value": "DELETE FROM cd_ods.tb_nielsen_online_per\nWHERE TAG BETWEEN '@{variables('minMonth')}' AND '@{variables('maxMonth')}' ",
-									"type": "Expression"
-								},
-								"writeMethod": "CopyCommand"
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"mappings": [
-									{
-										"source": {
-											"name": "TAG",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "tag",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "SHORT",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "short",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "LONG",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "long",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "DISPLAY_ORDER",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "display_order",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "PARENT_TAG",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "parent_tag",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "HIER_NUM",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "hier_num",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "HIER_NAME",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "hier_name",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "HIER_LEVEL_NUM",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "hier_level_num",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "HIER_LEVEL_NAME",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "hier_level_name",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "modify_mm"
-										},
-										"sink": {
-											"name": "modify_mm"
-										}
-									}
-								],
-								"typeConversion": true,
-								"typeConversionSettings": {
-									"allowDataTruncation": true,
-									"treatBooleanAsNumber": false
-								}
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_ADLS_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"AdlsDirectory": {
-										"value": "@concat(pipeline().parameters.AdlsDirectory,'/',variables('yyyymm'))",
-										"type": "Expression"
-									},
-									"FileName": {
-										"value": "@concat('PER_',variables('fileNm'),'.csv')",
-										"type": "Expression"
-									}
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "cd_ods",
-									"SinkTable": "tb_nielsen_online_per"
-								}
-							}
-						]
-					},
-					{
-						"name": "pg_tb_nielsen_temp_prod",
-						"type": "Copy",
-						"dependsOn": [
-							{
-								"activity": "pg_tb_nielsen_per",
-								"dependencyConditions": [
-									"Completed"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "DelimitedTextSource",
-								"storeSettings": {
-									"type": "AzureBlobFSReadSettings",
-									"recursive": true,
-									"enablePartitionDiscovery": false
-								},
-								"formatSettings": {
-									"type": "DelimitedTextReadSettings"
-								}
-							},
-							"sink": {
-								"type": "AzurePostgreSQLSink",
-								"writeBatchSize": 1000000,
-								"writeBatchTimeout": "00:30:00",
-								"preCopyScript": {
-									"value": "DELETE FROM cd_ods.tb_nielsen_online_prod_temp\n",
-									"type": "Expression"
-								},
-								"writeMethod": "CopyCommand"
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"mappings": [
-									{
-										"source": {
-											"name": "TAG",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "tag",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "SHORT",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "short",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "LONG",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "long",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "DISPLAY_ORDER",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "display_order",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "PARENT_TAG",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "parent_tag",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "HIER_NUM",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "hier_num",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "HIER_NAME",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "hier_name",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "HIER_LEVEL_NUM",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "hier_level_num",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "HIER_LEVEL_NAME",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "hier_level_name",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "KIMCHI_H1 level 0",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "kimchi_h1_level_0",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "PC",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "pc",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "TYPE",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "type",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "MANUFACTURER",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "manufacturer",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "BRAND",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "brand",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									}
-								],
-								"typeConversion": true,
-								"typeConversionSettings": {
-									"allowDataTruncation": true,
-									"treatBooleanAsNumber": false
-								}
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_ADLS_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"AdlsDirectory": {
-										"value": "@concat(pipeline().parameters.AdlsDirectory,'/',variables('yyyymm'))",
-										"type": "Expression"
-									},
-									"FileName": {
-										"value": "@concat('PROD_',variables('fileNm'),'.csv')",
-										"type": "Expression"
-									}
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "cd_ods",
-									"SinkTable": "tb_nielsen_online_prod_temp"
-								}
-							}
-						]
-					},
-					{
-						"name": "file name",
-						"description": "수행일 기준 전월 구하기\n포멧 : yyyymm",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "fileNm",
-							"value": {
-								"value": "@if(equals(pipeline().parameters.pip_fileNm,null), formatDateTime(addDays(startOfMonth(addHours(utcNow(), 9)),-34),'yyyyMM'),pipeline().parameters.pip_fileNm)",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "insert",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "pg_tb_nielsen_temp_prod",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "select cd_mart.func_dm_pr_nielsen_online_t('@{variables('yyyymm')}','@{variables('minMonth')}','@{variables('maxMonth')}') AS rtn",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"AdlsDirectory": {
-						"type": "string",
-						"defaultValue": "매출(주문)/외부/유통사MS정보/닐슨_온라인"
-					},
-					"pip_yyyymm": {
-						"type": "string"
-					},
-					"pip_fileNm": {
-						"type": "string"
-					}
-				},
-				"variables": {
-					"yyyymm": {
-						"type": "String"
-					},
-					"fileNm": {
-						"type": "String"
-					},
-					"minMonth": {
-						"type": "String"
-					},
-					"maxMonth": {
 						"type": "String"
 					}
 				},
