@@ -1,0 +1,278 @@
+{
+	"name": "PIP_NIELSEN_TO_PG_OFFLINE_ALL_M_copy1",
+	"properties": {
+		"description": "- 닐슨 SFTP ",
+		"activities": [
+			{
+				"name": "Set yyyymm",
+				"description": "수행일 기준 전월 구하기\n포멧 : yyyymm",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "yyyymm",
+					"value": {
+						"value": "@if(equals(pipeline().parameters.pip_yyyymm,null), formatDateTime(addDays(startOfMonth(addHours(utcNow(), 9)),-34),'yyyyMM'),pipeline().parameters.pip_yyyymm)",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "Lookup1",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Set yyyymm",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "DelimitedTextSource",
+						"storeSettings": {
+							"type": "AzureBlobFSReadSettings",
+							"recursive": true,
+							"enablePartitionDiscovery": false
+						},
+						"formatSettings": {
+							"type": "DelimitedTextReadSettings"
+						}
+					},
+					"dataset": {
+						"referenceName": "DTS_ADLS_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"AdlsDirectory": {
+								"value": "@concat('매출(주문)/외부/유통사MS정보/닐슨_오프라인/conf')",
+								"type": "Expression"
+							},
+							"FileName": {
+								"value": "@concat('닐슨오프라인_conf.csv')",
+								"type": "Expression"
+							}
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "delete table",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Lookup1').output.value",
+						"type": "Expression"
+					},
+					"isSequential": false,
+					"activities": [
+						{
+							"name": "pg_tb_nielsen_product",
+							"type": "Copy",
+							"dependsOn": [
+								{
+									"activity": "dynamic mapping ",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "DelimitedTextSource",
+									"additionalColumns": [
+										{
+											"name": "month",
+											"value": {
+												"value": "@variables('yyyymm')",
+												"type": "Expression"
+											}
+										},
+										{
+											"name": "data_type",
+											"value": {
+												"value": "@item().fileName",
+												"type": "Expression"
+											}
+										}
+									],
+									"storeSettings": {
+										"type": "AzureBlobFSReadSettings",
+										"recursive": true,
+										"enablePartitionDiscovery": false
+									},
+									"formatSettings": {
+										"type": "DelimitedTextReadSettings"
+									}
+								},
+								"sink": {
+									"type": "AzurePostgreSQLSink",
+									"writeBatchSize": 1000000,
+									"writeBatchTimeout": "00:30:00",
+									"writeMethod": "CopyCommand"
+								},
+								"enableStaging": false,
+								"translator": {
+									"value": "@json(concat('\"translator\": {\n                                    \"type\": \"TabularTranslator\",\n                                    \"mappings\": [',activity('dynamic mapping ').output,'                                       \n                                    ],\n                                    \"typeConversion\": true,\n                                    \"typeConversionSettings\": {\n                                        \"allowDataTruncation\": true,\n                                        \"treatBooleanAsNumber\": false\n                                    }\n                                } '\n\n\n\n)\n)",
+									"type": "Expression"
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "DTS_ADLS_SNK",
+									"type": "DatasetReference",
+									"parameters": {
+										"AdlsDirectory": {
+											"value": "@concat(pipeline().parameters.AdlsDirectory,'/',variables('yyyymm'))",
+											"type": "Expression"
+										},
+										"FileName": {
+											"value": "@concat('KR_DAESANG_',item().fileName,'_product_dim_',item().fileNumber,'.txt')",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "DTS_POSTGRESQL_SNK",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": "cd_ods",
+										"SinkTable": "tb_nielsen_offline_all_prod_temp"
+									}
+								}
+							]
+						},
+						{
+							"name": "dynamic mapping",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzurePostgreSqlSource",
+									"query": {
+										"value": "select string_agg('{  \"source\": { \"name\": \"'||a.sour||'\", \"type\": \"String\" }, \"sink\": {  \"name\": \"'||a.sink||'\", \"type\": \"String\", \"physicalType\": \"character varying\" } }'\n              ,',') as json\n  from (\n\t\tselect column_name as sour\n\t\t      ,case when hierarchy_number='1' and hierarchy_level ='1' then 'data_type'\n\t\t            else hierarchy_level_name\n\t\t         end sink\n\t\t from  cd_ods.tb_nielsen_offline_all_hier_temp\n\t\t where data_type ='@{item().fileName}'\n\t) a",
+										"type": "Expression"
+									},
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "DTS_POSTGRESQL_SNK",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": "1",
+										"SinkTable": "1"
+									}
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "delete table",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Lookup1",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "delete from cd_ods.tb_nielsen_offline_all_mkt_temp;\ndelete from cd_ods.tb_nielsen_offline_all_prod_temp;\nselect 1 as su",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					},
+					"firstRowOnly": false
+				}
+			}
+		],
+		"parameters": {
+			"AdlsDirectory": {
+				"type": "string",
+				"defaultValue": "매출(주문)/외부/유통사MS정보/닐슨_오프라인"
+			},
+			"pip_yyyymm": {
+				"type": "string"
+			}
+		},
+		"variables": {
+			"yyyymm": {
+				"type": "String"
+			},
+			"minWeek": {
+				"type": "String"
+			},
+			"maxWeek": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "매출_주문/외부/닐슨"
+		},
+		"annotations": [],
+		"lastPublishTime": "2022-12-15T09:05:35Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}
