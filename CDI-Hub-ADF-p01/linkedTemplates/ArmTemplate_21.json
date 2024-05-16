@@ -13,6 +13,263 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_NEIS_NEIS_MEALS_NEW_FULL_PG')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "- 초기 적재시, 월별로 모든 파일 Sink\n- 증분컬럼이 YYYYMM 형태",
+				"activities": [
+					{
+						"name": "Lookup Date",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "OracleSource",
+								"oracleReaderQuery": {
+									"value": "@concat('SELECT DISTINCT(', pipeline().parameters.IncCol, ') AS CALMONTH FROM ', pipeline().parameters.SourceSchema, '.', pipeline().parameters.SourceTable)",
+									"type": "Expression"
+								},
+								"partitionOption": "None",
+								"queryTimeout": "02:00:00"
+							},
+							"dataset": {
+								"referenceName": "DTS_ORACLE_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceSchema": {
+										"value": "@pipeline().parameters.SourceSchema",
+										"type": "Expression"
+									},
+									"SourceTable": {
+										"value": "@pipeline().parameters.SourceTable",
+										"type": "Expression"
+									}
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach Copy data",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup Date",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup Date').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Copy data All Month",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "OracleSource",
+											"oracleReaderQuery": {
+												"value": "@concat('SELECT * FROM ', pipeline().parameters.SourceSchema, '.', pipeline().parameters.SourceTable, ' WHERE ', pipeline().parameters.IncCol, ' = ', item().CALMONTH)",
+												"type": "Expression"
+											},
+											"partitionOption": "None",
+											"queryTimeout": "02:00:00"
+										},
+										"sink": {
+											"type": "AzurePostgreSQLSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"preCopyScript": {
+												"value": "delete from cd_ods.neis_meals_new  \t\t\nwhere YYYYMM = '@{item().calmonth}'",
+												"type": "Expression"
+											},
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"name": "YYYYMMDD"
+													},
+													"sink": {
+														"name": "yyyymmdd"
+													}
+												},
+												{
+													"source": {
+														"name": "YYYY"
+													},
+													"sink": {
+														"name": "yyyy"
+													}
+												},
+												{
+													"source": {
+														"name": "YYYYMM"
+													},
+													"sink": {
+														"name": "yyyymm"
+													}
+												},
+												{
+													"source": {
+														"name": "ATPT_OFCDC_SC_CODE"
+													},
+													"sink": {
+														"name": "atpt_ofcdc_sc_code"
+													}
+												},
+												{
+													"source": {
+														"name": "SCHUL_NM"
+													},
+													"sink": {
+														"name": "schul_nm"
+													}
+												},
+												{
+													"source": {
+														"name": "SD_SCHUL_CODE"
+													},
+													"sink": {
+														"name": "sd_schul_code"
+													}
+												},
+												{
+													"source": {
+														"name": "MEALS_CODE"
+													},
+													"sink": {
+														"name": "meals_code"
+													}
+												},
+												{
+													"source": {
+														"name": "MLSV_FGR"
+													},
+													"sink": {
+														"name": "mlsv_fgr"
+													}
+												},
+												{
+													"source": {
+														"name": "MEALS"
+													},
+													"sink": {
+														"name": "meals"
+													}
+												},
+												{
+													"source": {
+														"name": "MEAL_CONTEXT"
+													},
+													"sink": {
+														"name": "meal_context"
+													}
+												},
+												{
+													"source": {
+														"name": "REG_DATE"
+													},
+													"sink": {
+														"name": "reg_date"
+													}
+												}
+											],
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_ORACLE_SRC",
+											"type": "DatasetReference",
+											"parameters": {
+												"SourceSchema": {
+													"value": "@pipeline().parameters.SourceSchema",
+													"type": "Expression"
+												},
+												"SourceTable": {
+													"value": "@pipeline().parameters.SourceTable",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK_P02",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": "cd_ods",
+												"SinkTable": "neis_meals_new"
+											}
+										}
+									]
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SourceSchema": {
+						"type": "string",
+						"defaultValue": "CD_NEIS"
+					},
+					"SourceTable": {
+						"type": "string",
+						"defaultValue": "NEIS_MEALS_NEW"
+					},
+					"AdlsDirectory": {
+						"type": "string",
+						"defaultValue": "판촉/내부/학교급식_식단정보"
+					},
+					"IncCol": {
+						"type": "string",
+						"defaultValue": "YYYYMM"
+					}
+				},
+				"folder": {
+					"name": "판촉/내부/급식입개찰"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-02-03T01:31:00Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_NEIS_NEIS_MEALS_NEW_INC')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -11656,273 +11913,6 @@
 				},
 				"annotations": [],
 				"lastPublishTime": "2022-10-25T08:15:19Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_ODS_BW_AZEP_O06200_INC')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "Copy data Current Month",
-						"type": "Copy",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "7.00:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "SELECT *\n  FROM CD_ODS.BW_AZEP_O06200\n WHERE CALDAY >= TO_CHAR(TRUNC(SYSDATE, 'MM'),'YYYYMMDD')\n   AND CALDAY <= TO_CHAR(TRUNC(SYSDATE-1),'YYYYMMDD');",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"sink": {
-								"type": "AzurePostgreSQLSink",
-								"writeBatchSize": 1000000,
-								"writeBatchTimeout": "00:30:00",
-								"preCopyScript": {
-									"value": "delete \nfrom cd_ods.bw_azep_o06200 \nwhere calday >= to_char(date_trunc('month', current_timestamp + interval '9 hours'), 'YYYYMMDD')\nand calday <= to_char(date_trunc('month', current_timestamp + interval '9 hours' + interval '1 months')::date - 1, 'YYYYMMDD');",
-									"type": "Expression"
-								},
-								"writeMethod": "CopyCommand"
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"mappings": [
-									{
-										"source": {
-											"name": "COMP_CODE",
-											"type": "String"
-										},
-										"sink": {
-											"name": "comp_code",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CALMONTH",
-											"type": "String"
-										},
-										"sink": {
-											"name": "calmonth",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CALWEEK",
-											"type": "String"
-										},
-										"sink": {
-											"name": "calweek",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CALDAY",
-											"type": "String"
-										},
-										"sink": {
-											"name": "calday",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "SALES_GRP",
-											"type": "String"
-										},
-										"sink": {
-											"name": "sales_grp",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CUSTOMER",
-											"type": "String"
-										},
-										"sink": {
-											"name": "customer",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "MATERIAL",
-											"type": "String"
-										},
-										"sink": {
-											"name": "material",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "ZAMT",
-											"type": "Decimal"
-										},
-										"sink": {
-											"name": "zamt",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "REG_DATE",
-											"type": "DateTime"
-										},
-										"sink": {
-											"name": "reg_date",
-											"type": "DateTime",
-											"physicalType": "timestamp without time zone"
-										}
-									},
-									{
-										"source": {
-											"name": "ZEA",
-											"type": "Decimal"
-										},
-										"sink": {
-											"name": "zea",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZKG",
-											"type": "Decimal"
-										},
-										"sink": {
-											"name": "zkg",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZBOX",
-											"type": "Decimal"
-										},
-										"sink": {
-											"name": "zbox",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "CREATE_DATE",
-											"type": "DateTime"
-										},
-										"sink": {
-											"name": "create_date",
-											"type": "DateTime",
-											"physicalType": "timestamp without time zone"
-										}
-									}
-								],
-								"typeConversion": true,
-								"typeConversionSettings": {
-									"allowDataTruncation": true,
-									"treatBooleanAsNumber": false
-								}
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": {
-										"value": "@pipeline().parameters.SourceSchema",
-										"type": "Expression"
-									},
-									"SourceTable": {
-										"value": "@pipeline().parameters.SourceTable",
-										"type": "Expression"
-									}
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": {
-										"value": "@pipeline().parameters.SinkSchema",
-										"type": "Expression"
-									},
-									"SinkTable": {
-										"value": "@pipeline().parameters.SinkTable",
-										"type": "Expression"
-									}
-								}
-							}
-						]
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SourceSchema": {
-						"type": "string",
-						"defaultValue": "CD_ODS"
-					},
-					"SourceTable": {
-						"type": "string",
-						"defaultValue": "BW_AZEP_O06200"
-					},
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "bw_azep_o06200"
-					}
-				},
-				"variables": {
-					"prev_start": {
-						"type": "String",
-						"defaultValue": "@startOfMonth(addToTime(addHours(utcNow(), 9), -1, 'Month'), 'yyyyMMdd')"
-					},
-					"prev_end": {
-						"type": "String",
-						"defaultValue": "@adddays(startOfMonth(addHours(utcNow(), 9)), -1, 'yyyyMMdd')"
-					}
-				},
-				"folder": {
-					"name": "매출_주문/내부/ODS"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-12-16T15:55:35Z"
 			},
 			"dependsOn": []
 		}
