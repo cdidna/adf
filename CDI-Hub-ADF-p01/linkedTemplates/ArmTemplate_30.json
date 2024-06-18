@@ -13,6 +13,301 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_RSN_STORE_REVIEW_DATA_INC')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Copy Yesterday data",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "MySqlSource",
+								"query": {
+									"value": "@concat('SELECT srd_id,\n\tsd_reviewid,\n\tcase when site = ''[대상]마켓컬리_STORE'' then ''마켓컬리_STORE'' else  site end  as site,\n\tsite_id,\n\treplace(replace(replace(replace(replace(replace(srd_title, ''\\\\'', ''＼''),char(10), ''//LF//''), char(13),''//LF//''), ''\\\"'', ''＂''), ''\\0'',''''), '','',''//CM//'') as srd_title,\n    replace(replace(replace(replace(replace(replace(srd_content, ''\\\\'', ''＼''),char(10), ''//LF//''), char(13),''//LF//''), ''\\\"'', ''＂''), ''\\0'',''''), '','',''//CM//'') as srd_content,\n\tsrd_writer,\n\tsrd_writetime,\n\tsrd_rate,\n\tsrd_crawl_time\n\tFROM ',\npipeline().parameters.SourceTable,\n ' WHERE DATE(', pipeline().parameters.IncCol, ') = DATE_ADD(CURDATE(), INTERVAL -1 DAY)')",
+									"type": "Expression"
+								}
+							},
+							"sink": {
+								"type": "DelimitedTextSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								},
+								"formatSettings": {
+									"type": "DelimitedTextWriteSettings",
+									"quoteAllText": true,
+									"fileExtension": ".csv"
+								}
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_RSN_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceTable": {
+										"value": "@pipeline().parameters.SourceTable",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": {
+										"value": "@pipeline().parameters.AdlsDirectory",
+										"type": "Expression"
+									},
+									"FileName": {
+										"value": "@concat('D_RSN_온라인몰_리뷰정보(중복제거)_', pipeline().parameters.SourceTable,'_', addDays(addHours(utcNow(), 9), -1, 'yyyyMMdd'),'.csv')",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					},
+					{
+						"name": "Data flow1",
+						"type": "ExecuteDataFlow",
+						"dependsOn": [
+							{
+								"activity": "Copy Yesterday data",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataflow": {
+								"referenceName": "DF_ADLS_PG_STORE_REVIEW_INC",
+								"type": "DataFlowReference",
+								"parameters": {},
+								"datasetParameters": {
+									"source1": {
+										"AdlsDirectory": "@pipeline().parameters.AdlsDirectory",
+										"FileName": {
+											"value": "@concat('D_RSN_온라인몰_리뷰정보(중복제거)_', pipeline().parameters.SourceTable,'_', addDays(addHours(utcNow(), 9), -1, 'yyyyMMdd'),'.csv')",
+											"type": "Expression"
+										}
+									},
+									"sink1": {
+										"SinkSchema": "@concat(pipeline().parameters.SinkSchema)",
+										"SinkTable": "@concat(pipeline().parameters.SinkTable)"
+									}
+								}
+							},
+							"staging": {},
+							"compute": {
+								"coreCount": 8,
+								"computeType": "General"
+							},
+							"traceLevel": "Fine"
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SourceTable": {
+						"type": "string",
+						"defaultValue": "STORE_REVIEW_DATA"
+					},
+					"AdlsDirectory": {
+						"type": "string",
+						"defaultValue": "고객/외부/온라인몰정보/RSN_온라인몰_리뷰정보(중복제거)"
+					},
+					"IncCol": {
+						"type": "string",
+						"defaultValue": "srd_crawl_time"
+					},
+					"SinkSchema": {
+						"type": "string",
+						"defaultValue": "cd_mart"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "dm_sl_documents_summary_t"
+					}
+				},
+				"variables": {
+					"prev_start": {
+						"type": "String",
+						"defaultValue": "@startOfMonth(addToTime(addHours(utcNow(), 9), -1, 'Month'), 'yyyyMMdd')"
+					},
+					"prev_end": {
+						"type": "String",
+						"defaultValue": "@adddays(startOfMonth(addHours(utcNow(), 9)), -1, 'yyyyMMdd')"
+					},
+					"dd": {
+						"type": "Array"
+					}
+				},
+				"folder": {
+					"name": "고객/외부/온라인몰정보"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-02-02T07:43:33Z"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_RSN_STORE_REVIEW_DATA_INC_ADLS')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Copy Yesterday data",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "MySqlSource",
+								"query": {
+									"value": "@concat('SELECT srd_id,\n\tsd_reviewid,\n\tsite,\n\tsite_id,\n\treplace(replace(replace(replace(replace(replace(srd_title, ''\\\\'', ''＼''),char(10), ''//LF//''), char(13),''//LF//''), ''\\\"'', ''＂''), ''\\0'',''''), '','',''//CM//'') as srd_title,\n    replace(replace(replace(replace(replace(replace(srd_content, ''\\\\'', ''＼''),char(10), ''//LF//''), char(13),''//LF//''), ''\\\"'', ''＂''), ''\\0'',''''), '','',''//CM//'') as srd_content,\n\tsrd_writer,\n\tsrd_writetime,\n\tsrd_rate,\n\tsrd_crawl_time\n\tFROM ',\npipeline().parameters.SourceTable,\n ' WHERE DATE(', pipeline().parameters.IncCol, ') = DATE_ADD(CURDATE(), INTERVAL -',pipeline().parameters.date,' DAY)\n ')",
+									"type": "Expression"
+								}
+							},
+							"sink": {
+								"type": "DelimitedTextSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								},
+								"formatSettings": {
+									"type": "DelimitedTextWriteSettings",
+									"quoteAllText": true,
+									"fileExtension": ".csv"
+								}
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_RSN_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceTable": {
+										"value": "@pipeline().parameters.SourceTable",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": {
+										"value": "@pipeline().parameters.AdlsDirectory",
+										"type": "Expression"
+									},
+									"FileName": {
+										"value": "@concat('D_RSN_온라인몰_리뷰정보(중복제거)_', pipeline().parameters.SourceTable,'_', addDays(addHours(utcNow(), 9), Int(concat('-',pipeline().parameters.date)), 'yyyyMMdd'),'.csv')",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SourceTable": {
+						"type": "string",
+						"defaultValue": "STORE_REVIEW_DATA"
+					},
+					"AdlsDirectory": {
+						"type": "string",
+						"defaultValue": "고객/외부/온라인몰정보/RSN_온라인몰_리뷰정보(중복제거)"
+					},
+					"IncCol": {
+						"type": "string",
+						"defaultValue": "srd_crawl_time"
+					},
+					"SinkSchema": {
+						"type": "string",
+						"defaultValue": "cd_mart"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "dm_sl_documents_test"
+					},
+					"date": {
+						"type": "string"
+					}
+				},
+				"variables": {
+					"prev_start": {
+						"type": "String",
+						"defaultValue": "@startOfMonth(addToTime(addHours(utcNow(), 9), -1, 'Month'), 'yyyyMMdd')"
+					},
+					"prev_end": {
+						"type": "String",
+						"defaultValue": "@adddays(startOfMonth(addHours(utcNow(), 9)), -1, 'yyyyMMdd')"
+					},
+					"dd": {
+						"type": "Array"
+					}
+				},
+				"folder": {
+					"name": "고객/외부/온라인몰정보"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-02-02T06:27:34Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_RSN_STORE_REVIEW_DATA_INC_PG')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -2729,856 +3024,6 @@
 			"dependsOn": []
 		},
 		{
-			"name": "[concat(parameters('factoryName'), '/PIP_NIELSEN_TO_PG_OFFLINE_M_copy1')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "- 닐슨 SFTP ",
-				"activities": [
-					{
-						"name": "Set yyyymm",
-						"description": "수행일 기준 전월 구하기\n포멧 : yyyymm",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "yyyymm",
-							"value": {
-								"value": "@if(equals(pipeline().parameters.pip_yyyymm,null), formatDateTime(addDays(startOfMonth(addHours(utcNow(), 9)),-34),'yyyyMM'),pipeline().parameters.pip_yyyymm)",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "pg_tb_nielsen_data",
-						"type": "Copy",
-						"dependsOn": [
-							{
-								"activity": "Set yyyymm",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "DelimitedTextSource",
-								"additionalColumns": [
-									{
-										"name": "month",
-										"value": {
-											"value": "@variables('yyyymm')",
-											"type": "Expression"
-										}
-									},
-									{
-										"name": "data_type",
-										"value": {
-											"value": "@pipeline().parameters.pip_fileNm",
-											"type": "Expression"
-										}
-									}
-								],
-								"storeSettings": {
-									"type": "AzureBlobFSReadSettings",
-									"recursive": true,
-									"enablePartitionDiscovery": false
-								},
-								"formatSettings": {
-									"type": "DelimitedTextReadSettings"
-								}
-							},
-							"sink": {
-								"type": "AzurePostgreSQLSink",
-								"writeBatchSize": 1000000,
-								"writeBatchTimeout": "00:30:00",
-								"writeMethod": "CopyCommand"
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"mappings": [
-									{
-										"source": {
-											"name": "data_type",
-											"type": "String"
-										},
-										"sink": {
-											"name": "data_type",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "market_id",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "market_id",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "product_id",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "product_id",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "period_id",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "period_id",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "DOL",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "dol",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "E",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "e",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "U",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "u",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "BDOL",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "bdol",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "BE",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "be",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "BU",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "bu",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "AP_DOL",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "ap_dol",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FEATPON_DOL",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "featpon_dol",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FEATPR_DOL",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "featpr_dol",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FEATOLY_DOL",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "featoly_dol",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FEATFRE_DOL",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "featfre_dol",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FRVOPLY_DOL",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "frvoply_dol",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "TPRFRV_DOL",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "tprfrv_dol",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "TPRONY_DOL",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "tprony_dol",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "AP_E",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "ap_e",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FEATPON_E",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "featpon_e",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FEATPR_E",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "featpr_e",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FEATOLY_E",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "featoly_e",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FEATFRE_E",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "featfre_e",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FRVOPLY_E",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "frvoply_e",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "TPRFRV_E",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "tprfrv_e",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "TPRONY_E",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "tprony_e",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "AP_U",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "ap_u",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FEATPON_U",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "featpon_u",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FEATPR_U",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "featpr_u",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FEATOLY_U",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "featoly_u",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FRVOPLY_U",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "frvoply_u",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "TPRFRV_U",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "tprfrv_u",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "TPRONY_U",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "tprony_u",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FEATFRE_U",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "featfre_u",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "NUM_DIST",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "num_dist",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "NUM_DIST_REACH",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "num_dist_reach",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "DOL_CCV_NON_REACH_CONTEXT",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "dol_ccv_non_reach_context",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "DOL_CCV_REACH_CONTEXT",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "dol_ccv_reach_context",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "NUM_STORES_SELLING_SMPL",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "num_stores_selling_smpl",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "NUM_STORES_SELLING_SMPL_REACH",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "num_stores_selling_smpl_reach",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "AP_NUM_DIST",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "ap_num_dist",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "NP_NUM_DIST_REACH",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "np_num_dist_reach",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FEATPON_NUM_DIST",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "featpon_num_dist",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FEATPR_NUM_DIST",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "featpr_num_dist",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FEATOLY_NUM_DIST",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "featoly_num_dist",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FRVOPLY_NUM_DIST",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "frvoply_num_dist",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "TPRONY_NUM_DIST",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "tprony_num_dist",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "TPRFRV_NUM_DIST",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "tprfrv_num_dist",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FEATFRE_NUM_DIST",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "featfre_num_dist",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "AP_DOL_SGV_NON_REACH_CONTEXT",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "ap_dol_sgv_non_reach_context",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "NP_DOL_SGV_REACH_CONTEXT",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "np_dol_sgv_reach_context",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FEATPON_DOL_SGV_NON_REACH_CONTEXT",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "featpon_dol_sgv_non_reach_context",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FEATPR_DOL_SGV_NON_REACH_CONTEXT",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "featpr_dol_sgv_non_reach_context",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FEATOLY_DOL_SGV_NON_REACH_CONTEXT",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "featoly_dol_sgv_non_reach_context",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FRVOPLY_DOL_SGV_NON_REACH_CONTEXT",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "frvoply_dol_sgv_non_reach_context",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "TPRONY_DOL_SGV_NON_REACH_CONTEXT",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "tprony_dol_sgv_non_reach_context",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "TPRFRV_DOL_SGV_NON_REACH_CONTEXT",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "tprfrv_dol_sgv_non_reach_context",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "FEATFRE_DOL_SGV_NON_REACH_CONTEXT",
-											"type": "String",
-											"physicalType": "String"
-										},
-										"sink": {
-											"name": "featfre_dol_sgv_non_reach_context",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									}
-								],
-								"typeConversion": true,
-								"typeConversionSettings": {
-									"allowDataTruncation": true,
-									"treatBooleanAsNumber": false
-								}
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_ADLS_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"AdlsDirectory": {
-										"value": "@concat(pipeline().parameters.AdlsDirectory,'/',variables('yyyymm'))",
-										"type": "Expression"
-									},
-									"FileName": {
-										"value": "@concat('KR_DAESANG_',pipeline().parameters.pip_fileNm,'_aggregated_data_',pipeline().parameters.pip_fileNumber,'.txt')",
-										"type": "Expression"
-									}
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "cd_ods",
-									"SinkTable": "tb_nielsen_offline_data_temp"
-								}
-							}
-						]
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"AdlsDirectory": {
-						"type": "string",
-						"defaultValue": "매출(주문)/외부/유통사MS정보/닐슨_오프라인"
-					},
-					"pip_yyyymm": {
-						"type": "string"
-					},
-					"pip_fileNm": {
-						"type": "string"
-					},
-					"pip_fileNumber": {
-						"type": "string"
-					}
-				},
-				"variables": {
-					"yyyymm": {
-						"type": "String"
-					},
-					"minWeek": {
-						"type": "String"
-					},
-					"maxWeek": {
-						"type": "String"
-					}
-				},
-				"folder": {
-					"name": "매출_주문/외부/닐슨"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-12-15T09:05:35Z"
-			},
-			"dependsOn": []
-		},
-		{
 			"name": "[concat(parameters('factoryName'), '/pipeline2')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -3646,853 +3091,6 @@
 					"name": "Test"
 				},
 				"annotations": []
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/API_CUST_OUT_VAIV_D')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "PIP_API_CUSTOMER_ASSOCIATION_TRAN",
-						"type": "ExecutePipeline",
-						"dependsOn": [
-							{
-								"activity": "Input log",
-								"dependencyConditions": [
-									"Completed"
-								]
-							}
-						],
-						"policy": {
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"pipeline": {
-								"referenceName": "PIP_API_CUSTOMER_ASSOCIATION_TRAN",
-								"type": "PipelineReference"
-							},
-							"waitOnCompletion": true,
-							"parameters": {}
-						}
-					},
-					{
-						"name": "PIP_API_CUSTOMER_ASSOCIATION_TRAN2",
-						"type": "ExecutePipeline",
-						"dependsOn": [
-							{
-								"activity": "Input log 2",
-								"dependencyConditions": [
-									"Completed"
-								]
-							}
-						],
-						"policy": {
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"pipeline": {
-								"referenceName": "PIP_API_CUSTOMER_ASSOCIATION_TRAN2",
-								"type": "PipelineReference"
-							},
-							"waitOnCompletion": true,
-							"parameters": {}
-						}
-					},
-					{
-						"name": "PIP_API_CUSTOMER_OPINION_TWITTER_ADLS",
-						"type": "ExecutePipeline",
-						"dependsOn": [
-							{
-								"activity": "Input log 3",
-								"dependencyConditions": [
-									"Completed"
-								]
-							}
-						],
-						"policy": {
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"pipeline": {
-								"referenceName": "PIP_API_CUSTOMER_OPINION_TWITTER_ADLS",
-								"type": "PipelineReference"
-							},
-							"waitOnCompletion": true,
-							"parameters": {}
-						}
-					},
-					{
-						"name": "PIP_API_CUSTOMER_TOPKEYWORD_BLOG_csv",
-						"type": "ExecutePipeline",
-						"dependsOn": [
-							{
-								"activity": "Input log 9",
-								"dependencyConditions": [
-									"Completed"
-								]
-							}
-						],
-						"policy": {
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"pipeline": {
-								"referenceName": "PIP_API_CUSTOMER_TOPKEYWORD_BLOG_csv",
-								"type": "PipelineReference"
-							},
-							"waitOnCompletion": true,
-							"parameters": {}
-						}
-					},
-					{
-						"name": "PIP_API_CUSTOMER_TOPKEYWORD_TWITTER_csv",
-						"type": "ExecutePipeline",
-						"dependsOn": [
-							{
-								"activity": "Input log 10",
-								"dependencyConditions": [
-									"Completed"
-								]
-							}
-						],
-						"policy": {
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"pipeline": {
-								"referenceName": "PIP_API_CUSTOMER_TOPKEYWORD_TWITTER_csv",
-								"type": "PipelineReference"
-							},
-							"waitOnCompletion": true,
-							"parameters": {}
-						}
-					},
-					{
-						"name": "Input log",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "select CD_IF.FUNC_CDI_LOG(  'I' , p_pipline => 'PIP_API_CUSTOMER_ASSOCIATION_TRAN' ) as result from dual;",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Input log 2",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "select CD_IF.FUNC_CDI_LOG(  'I' , p_pipline => 'PIP_API_CUSTOMER_ASSOCIATION_TRAN2' ) as result from dual;",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Input log 3",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "select CD_IF.FUNC_CDI_LOG(  'I' , p_pipline => 'PIP_API_CUSTOMER_OPINION_TWITTER_ADLS' ) as result from dual;",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Input log 9",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "select CD_IF.FUNC_CDI_LOG(  'I' , p_pipline => 'PIP_API_CUSTOMER_TOPKEYWORD_BLOG_csv' ) as result from dual;",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Input log 10",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "select CD_IF.FUNC_CDI_LOG(  'I' , p_pipline => 'PIP_API_CUSTOMER_TOPKEYWORD_TWITTER_csv' ) as result from dual;",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Success log",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_API_CUSTOMER_ASSOCIATION_TRAN",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log').output.firstRow.RESULT, ''', p_result => ''S'') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Error log",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_API_CUSTOMER_ASSOCIATION_TRAN",
-								"dependencyConditions": [
-									"Failed"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log').output.firstRow.RESULT, ''', p_result => ''E'', p_error_msg => ''', replace(activity('PIP_API_CUSTOMER_ASSOCIATION_TRAN').Error.Message, '''','‘'),''') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Success log 2",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_API_CUSTOMER_ASSOCIATION_TRAN2",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log 2').output.firstRow.RESULT, ''', p_result => ''S'') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Success log 3",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_API_CUSTOMER_OPINION_TWITTER_ADLS",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log 3').output.firstRow.RESULT, ''', p_result => ''S'') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Success log 9",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_API_CUSTOMER_TOPKEYWORD_BLOG_csv",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log 9').output.firstRow.RESULT, ''', p_result => ''S'') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Success log 10",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_API_CUSTOMER_TOPKEYWORD_TWITTER_csv",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log 10').output.firstRow.RESULT, ''', p_result => ''S'') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Error log 2",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_API_CUSTOMER_ASSOCIATION_TRAN2",
-								"dependencyConditions": [
-									"Failed"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log 2').output.firstRow.RESULT, ''', p_result => ''E'', p_error_msg => ''', replace(activity('PIP_API_CUSTOMER_ASSOCIATION_TRAN2').Error.Message, '''','‘'),''') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Error log 3",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_API_CUSTOMER_OPINION_TWITTER_ADLS",
-								"dependencyConditions": [
-									"Failed"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log 3').output.firstRow.RESULT, ''', p_result => ''E'', p_error_msg => ''', replace(activity('PIP_API_CUSTOMER_OPINION_TWITTER_ADLS').Error.Message, '''','‘'),''') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Error log 9",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_API_CUSTOMER_TOPKEYWORD_BLOG_csv",
-								"dependencyConditions": [
-									"Failed"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log 9').output.firstRow.RESULT, ''', p_result => ''E'', p_error_msg => ''', replace(activity('PIP_API_CUSTOMER_TOPKEYWORD_BLOG_csv').Error.Message, '''','‘'),''') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Error log 10",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_API_CUSTOMER_TOPKEYWORD_TWITTER_csv",
-								"dependencyConditions": [
-									"Failed"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log 10').output.firstRow.RESULT, ''', p_result => ''E'', p_error_msg => ''', replace(activity('PIP_API_CUSTOMER_TOPKEYWORD_TWITTER_csv').Error.Message, '''','‘'),''') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "PIP_API_CUSTOMER_OPINION_TWITTER_PG",
-						"type": "ExecutePipeline",
-						"dependsOn": [
-							{
-								"activity": "Input log 3_copy1",
-								"dependencyConditions": [
-									"Completed"
-								]
-							}
-						],
-						"policy": {
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"pipeline": {
-								"referenceName": "PIP_API_CUSTOMER_OPINION_TWITTER_PG",
-								"type": "PipelineReference"
-							},
-							"waitOnCompletion": true,
-							"parameters": {}
-						}
-					},
-					{
-						"name": "Input log 3_copy1",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "Output Success log 3",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "select CD_IF.FUNC_CDI_LOG(  'I' , p_pipline => 'PIP_API_CUSTOMER_OPINION_TWITTER_PG' ) as result from dual;",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Success log 3_copy1",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_API_CUSTOMER_OPINION_TWITTER_PG",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log 3_copy1').output.firstRow.RESULT, ''', p_result => ''S'') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Error log 3_copy1",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_API_CUSTOMER_OPINION_TWITTER_PG",
-								"dependencyConditions": [
-									"Failed"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log 3_copy1').output.firstRow.RESULT, ''', p_result => ''E'', p_error_msg => ''', replace(activity('PIP_API_CUSTOMER_OPINION_TWITTER_PG').Error.Message, '''','‘'),''') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"folder": {
-					"name": "실행/Daily"
-				},
-				"annotations": [],
-				"lastPublishTime": "2023-01-16T04:36:21Z"
 			},
 			"dependsOn": []
 		}
