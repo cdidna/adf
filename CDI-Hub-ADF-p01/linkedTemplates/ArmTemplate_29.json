@@ -4395,6 +4395,134 @@
 						}
 					},
 					{
+						"name": "pg_tb_nielsen_product_",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "dynamic mapping",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"additionalColumns": [
+									{
+										"name": "month",
+										"value": {
+											"value": "@variables('yyyymm')",
+											"type": "Expression"
+										}
+									},
+									{
+										"name": "data_type",
+										"value": {
+											"value": "@pipeline().parameters.pip_fileNm",
+											"type": "Expression"
+										}
+									}
+								],
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": false,
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "AzurePostgreSQLSink",
+								"writeBatchSize": 1000000,
+								"writeBatchTimeout": "00:30:00",
+								"preCopyScript": {
+									"value": "delete from cd_ods.tb_nielsen_offline_all_prod_temp",
+									"type": "Expression"
+								},
+								"writeMethod": "CopyCommand"
+							},
+							"enableStaging": false,
+							"translator": {
+								"value": "@json(concat('{\n\"type\": \"TabularTranslator\",\n\"mappings\": [\n    { \"source\": {  \"name\": \"data_type\",   \"type\": \"String\"  }, \"sink\": {  \"name\": \"data_type\",  \"type\": \"String\", \"physicalType\": \"character varying\"  } },\n    { \"source\": {  \"name\": \"product_id\",   \"type\": \"String\"  }, \"sink\": {  \"name\": \"product_id\",  \"type\": \"String\", \"physicalType\": \"character varying\"  } },'\n  ,activity('dynamic mapping').output.firstRow.json,'\n] }\n'))",
+								"type": "Expression"
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": {
+										"value": "@concat(pipeline().parameters.AdlsDirectory,'/',variables('yyyymm'))",
+										"type": "Expression"
+									},
+									"FileName": {
+										"value": "@concat('KR_DAESANG_',pipeline().parameters.pip_fileNm,'_product_dim_',pipeline().parameters.pip_fileNumber,'.txt')",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "cd_ods",
+									"SinkTable": "tb_nielsen_offline_all_prod_temp"
+								}
+							}
+						]
+					},
+					{
+						"name": "dynamic mapping",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "pg_tb_nielsen_hier",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "select string_agg('{  \"source\": { \"name\": \"'||a.sour||'\", \"type\": \"String\" }, \"sink\": {  \"name\": \"'||a.sink||'\", \"type\": \"String\", \"physicalType\": \"character varying\" } }'\n              ,',') as json\n  from (\n\t     SELECT distinct column_name as sour\n\t\t      ,case when column_name like 'CSTM%' then 'category'\n\t\t            else lower(hierarchy_level_name)\n\t\t         end sink\n\t\t from  cd_ods.tb_nielsen_offline_all_hier_temp\n\t\t  union all \n\t\tselect 'hierarchy_number','hierarchy_number' union all\n\t\tselect 'hierarchy_level','hierarchy_level'   union all\n\t\tselect 'hierarchy_level_name','hierarchy_level_name' \t\n\t) a",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							}
+						}
+					},
+					{
 						"name": "pg_tb_nielsen_hier",
 						"type": "Copy",
 						"dependsOn": [
