@@ -2895,363 +2895,6 @@
 			"dependsOn": []
 		},
 		{
-			"name": "[concat(parameters('factoryName'), '/PIP_API_CUSTOMER_BRAND_NEWS')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "token",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "set date",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							},
-							{
-								"activity": "end date",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							},
-							{
-								"activity": "key1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							},
-							{
-								"activity": "key2",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "JsonSource",
-								"storeSettings": {
-									"type": "HttpReadSettings",
-									"requestMethod": "POST",
-									"requestTimeout": ""
-								},
-								"formatSettings": {
-									"type": "JsonReadSettings"
-								}
-							},
-							"dataset": {
-								"referenceName": "DTS_VIVE_API_TOKEN",
-								"type": "DatasetReference",
-								"parameters": {}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "set date",
-						"description": "당일자",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "date",
-							"value": {
-								"value": "@formatDateTime(adddays(addHours(utcNow(), 9), -1), 'yyyyMMdd')",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "end date",
-						"description": "당일자",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "date2",
-							"value": {
-								"value": "@formatDateTime(adddays(addHours(utcNow(), 9), 0), 'yyyyMMdd')",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "delete table",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "token",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "delete from @{pipeline().parameters.SinkSckema}.@{pipeline().parameters.SinkTable}\n where date between '@{variables('date')}' and '@{variables('date2')}'\n and keyword = '@{variables('key1')}'\n ;\n\n select 1 as su\n   ",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK_P02",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "key2",
-						"description": "당일자",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "key2",
-							"value": {
-								"value": "@pipeline().parameters.key2",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "key1",
-						"description": "당일자",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "key1",
-							"value": {
-								"value": "@pipeline().parameters.key1",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "Copy data",
-						"type": "Copy",
-						"dependsOn": [
-							{
-								"activity": "delete table",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 2,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "JsonSource",
-								"additionalColumns": [
-									{
-										"name": "keyword",
-										"value": {
-											"value": "@variables('key1')",
-											"type": "Expression"
-										}
-									}
-								],
-								"storeSettings": {
-									"type": "HttpReadSettings",
-									"requestMethod": "GET",
-									"additionalHeaders": {
-										"value": "@{concat('Authorization : Bearer ',activity('token').output.value[0].access_token)}",
-										"type": "Expression"
-									},
-									"requestTimeout": ""
-								},
-								"formatSettings": {
-									"type": "JsonReadSettings"
-								}
-							},
-							"sink": {
-								"type": "AzurePostgreSQLSink",
-								"writeBatchSize": 1000000,
-								"writeBatchTimeout": "00:30:00",
-								"writeMethod": "CopyCommand"
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"mappings": [
-									{
-										"source": {
-											"path": "[['date']"
-										},
-										"sink": {
-											"name": "date",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['title']"
-										},
-										"sink": {
-											"name": "title",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['content']"
-										},
-										"sink": {
-											"name": "content",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['url']"
-										},
-										"sink": {
-											"name": "url",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['writerName']"
-										},
-										"sink": {
-											"name": "writername",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "$['keyword']"
-										},
-										"sink": {
-											"name": "keyword",
-											"type": "String"
-										}
-									}
-								],
-								"collectionReference": "$['data']['documentList']",
-								"mapComplexValuesToString": true
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_VIVE_API",
-								"type": "DatasetReference",
-								"parameters": {
-									"param": {
-										"value": "@concat('/dataplus/social/GetKeywordDocuments?source=news&startDate=',variables('date'),'&endDate=',variables('date2'),'&period=0&rowPerPage=3000&keyword=',variables('key2'))",
-										"type": "Expression"
-									}
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_POSTGRESQL_SNK_P02",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": {
-										"value": "@pipeline().parameters.SinkSckema",
-										"type": "Expression"
-									},
-									"SinkTable": {
-										"value": "@pipeline().parameters.SinkTable",
-										"type": "Expression"
-									}
-								}
-							}
-						]
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SinkSckema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "tb_fc_brand_news_t"
-					},
-					"key1": {
-						"type": "string"
-					},
-					"key2": {
-						"type": "string"
-					}
-				},
-				"variables": {
-					"date": {
-						"type": "String"
-					},
-					"date2": {
-						"type": "String"
-					},
-					"key1": {
-						"type": "String"
-					},
-					"key2": {
-						"type": "String"
-					}
-				},
-				"folder": {
-					"name": "고객/외부/브랜드 NEWS"
-				},
-				"annotations": []
-			},
-			"dependsOn": []
-		},
-		{
 			"name": "[concat(parameters('factoryName'), '/PIP_API_CUSTOMER_KIMCHI_NEWS')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -6523,6 +6166,104 @@
 				},
 				"annotations": [],
 				"lastPublishTime": "2023-02-01T06:02:07Z"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_CUSTOMER_OPINION_BLOG_PG_FULL')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "소셜 고객 의견 데이터 블로그",
+				"activities": [
+					{
+						"name": "Data flow1_copy1",
+						"type": "ExecuteDataFlow",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataflow": {
+								"referenceName": "DF_ADLS_PG_CUSTOMER_OPINION_BLOG_FULL",
+								"type": "DataFlowReference",
+								"parameters": {},
+								"datasetParameters": {
+									"source1": {},
+									"sink1": {
+										"SinkSchema": "@concat(pipeline().parameters.SinkSchema)",
+										"SinkTable": "@concat(pipeline().parameters.SinkTable)"
+									}
+								}
+							},
+							"staging": {},
+							"compute": {
+								"coreCount": 8,
+								"computeType": "General"
+							},
+							"traceLevel": "Fine"
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"AdlsDirectory": {
+						"type": "string",
+						"defaultValue": "고객/외부/소셜고객의견데이터/블로그"
+					},
+					"FileName": {
+						"type": "string",
+						"defaultValue": "소셜고객의견데이터_블로그"
+					},
+					"AdlsDirectoryConf": {
+						"type": "string",
+						"defaultValue": "고객/외부/소셜고객의견데이터/conf"
+					},
+					"ConfFile": {
+						"type": "string",
+						"defaultValue": "소셜고객의견데이터_BLOG_conf"
+					},
+					"Apikey": {
+						"type": "string",
+						"defaultValue": "50151fed78146d9974fc10b335738ef395cc6d0c20998505442c7d1c75642242"
+					},
+					"Channel": {
+						"type": "string",
+						"defaultValue": "ko.blog"
+					},
+					"Category1": {
+						"type": "string",
+						"defaultValue": "doc"
+					},
+					"Category2": {
+						"type": "string",
+						"defaultValue": "DOC"
+					},
+					"SinkSchema": {
+						"type": "string",
+						"defaultValue": "cd_mart"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "dm_sl_documents_summary_t"
+					},
+					"AdlsDirectoryTemp": {
+						"type": "string",
+						"defaultValue": "고객/외부/소셜고객의견데이터/블로그/Temp"
+					}
+				},
+				"folder": {
+					"name": "고객/외부/소셜고객의견데이터"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-02-01T06:51:26Z"
 			},
 			"dependsOn": []
 		}
