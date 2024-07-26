@@ -13,6 +13,913 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_SFTP_NIELSEN_FULL')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "- 닐슨 SFTP ",
+				"activities": [
+					{
+						"name": "Copy data",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Set yyyymm",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "BinarySource",
+								"storeSettings": {
+									"type": "SftpReadSettings",
+									"recursive": true,
+									"deleteFilesAfterCompletion": false,
+									"disableChunking": false
+								},
+								"formatSettings": {
+									"type": "BinaryReadSettings",
+									"compressionProperties": {
+										"type": "ZipDeflateReadSettings",
+										"preserveZipFileNameAsFolder": false
+									}
+								}
+							},
+							"sink": {
+								"type": "BinarySink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings",
+									"copyBehavior": "PreserveHierarchy"
+								}
+							},
+							"enableStaging": false
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_NIELSEN_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"zipname": {
+										"value": "@concat('MDSPK_SFF_',variables('yyyymm'),'.zip')",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_NIELSEN_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"yyyymm": {
+										"value": "@variables('yyyymm')",
+										"type": "Expression"
+									},
+									"dir": "매출(주문)/외부/유통사MS정보/닐슨/"
+								}
+							}
+						]
+					},
+					{
+						"name": "Set yyyymm",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "yyyymm",
+							"value": {
+								"value": "@if(equals(pipeline().parameters.month,null), formatDateTime(addDays(startOfMonth(addHours(utcNow(), 9)),-34),'yyyyMM'), pipeline().parameters.month)",
+								"type": "Expression"
+							}
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"month": {
+						"type": "string"
+					}
+				},
+				"variables": {
+					"yyyymm": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "매출_주문/외부/닐슨"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-12-15T09:05:35Z"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_SFTP_NIELSEN_FULL_OFFLINE')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "- 닐슨 SFTP ",
+				"activities": [
+					{
+						"name": "Set yyyymm",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "yyyymm",
+							"value": {
+								"value": "@if(equals(pipeline().parameters.pip_month,null), formatDateTime(addDays(startOfMonth(addHours(utcNow(), 9)),-34),'yyyyMM'), pipeline().parameters.pip_month)",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup1').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "period_copy",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "fact_copy",
+											"dependencyConditions": [
+												"Completed"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "BinarySource",
+											"storeSettings": {
+												"type": "SftpReadSettings",
+												"recursive": true,
+												"disableChunking": false
+											},
+											"formatSettings": {
+												"type": "BinaryReadSettings"
+											}
+										},
+										"sink": {
+											"type": "BinarySink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings",
+												"copyBehavior": "PreserveHierarchy"
+											}
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_NIELSEN_SRC_01",
+											"type": "DatasetReference",
+											"parameters": {
+												"zipname": {
+													"value": "@concat('KR_DAESANG_',item().fileName,'_period_dim_',item().fileNumber,'.txt.gz')",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_NIELSEN_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"yyyymm": {
+													"value": "@variables('yyyymm')",
+													"type": "Expression"
+												},
+												"dir": {
+													"value": "@pipeline().parameters.AdlsDirectory",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "product_copy",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "period_copy",
+											"dependencyConditions": [
+												"Completed"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "BinarySource",
+											"storeSettings": {
+												"type": "SftpReadSettings",
+												"recursive": true,
+												"disableChunking": false
+											},
+											"formatSettings": {
+												"type": "BinaryReadSettings"
+											}
+										},
+										"sink": {
+											"type": "BinarySink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings",
+												"copyBehavior": "PreserveHierarchy"
+											}
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_NIELSEN_SRC_01",
+											"type": "DatasetReference",
+											"parameters": {
+												"zipname": {
+													"value": "@concat('KR_DAESANG_',item().fileName,'_product_dim_',item().fileNumber,'.txt.gz')",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_NIELSEN_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"yyyymm": {
+													"value": "@variables('yyyymm')",
+													"type": "Expression"
+												},
+												"dir": {
+													"value": "@pipeline().parameters.AdlsDirectory",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "market_copy",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "product_copy",
+											"dependencyConditions": [
+												"Completed"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "BinarySource",
+											"storeSettings": {
+												"type": "SftpReadSettings",
+												"recursive": true,
+												"disableChunking": false
+											},
+											"formatSettings": {
+												"type": "BinaryReadSettings"
+											}
+										},
+										"sink": {
+											"type": "BinarySink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings",
+												"copyBehavior": "PreserveHierarchy"
+											}
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_NIELSEN_SRC_01",
+											"type": "DatasetReference",
+											"parameters": {
+												"zipname": {
+													"value": "@concat('KR_DAESANG_',item().fileName,'_market_dim_',item().fileNumber,'.txt.gz')",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_NIELSEN_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"yyyymm": {
+													"value": "@variables('yyyymm')",
+													"type": "Expression"
+												},
+												"dir": {
+													"value": "@pipeline().parameters.AdlsDirectory",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "data_copy",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "market_copy",
+											"dependencyConditions": [
+												"Completed"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "BinarySource",
+											"storeSettings": {
+												"type": "SftpReadSettings",
+												"recursive": true,
+												"disableChunking": false
+											},
+											"formatSettings": {
+												"type": "BinaryReadSettings"
+											}
+										},
+										"sink": {
+											"type": "BinarySink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings",
+												"copyBehavior": "PreserveHierarchy"
+											}
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_NIELSEN_SRC_01",
+											"type": "DatasetReference",
+											"parameters": {
+												"zipname": {
+													"value": "@concat('KR_DAESANG_',item().fileName,'_aggregated_data_',item().fileNumber,'.txt.gz')",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_NIELSEN_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"yyyymm": {
+													"value": "@variables('yyyymm')",
+													"type": "Expression"
+												},
+												"dir": {
+													"value": "@pipeline().parameters.AdlsDirectory",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "fact_copy",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "BinarySource",
+											"storeSettings": {
+												"type": "SftpReadSettings",
+												"recursive": true,
+												"disableChunking": false
+											},
+											"formatSettings": {
+												"type": "BinaryReadSettings"
+											}
+										},
+										"sink": {
+											"type": "BinarySink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings",
+												"copyBehavior": "PreserveHierarchy"
+											}
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_NIELSEN_SRC_01",
+											"type": "DatasetReference",
+											"parameters": {
+												"zipname": {
+													"value": "@concat('KR_DAESANG_',item().fileName,'_facts_ref_',item().fileNumber,'.txt.gz')",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_NIELSEN_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"yyyymm": {
+													"value": "@variables('yyyymm')",
+													"type": "Expression"
+												},
+												"dir": {
+													"value": "@pipeline().parameters.AdlsDirectory",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "hierarchies_copy",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "data_copy",
+											"dependencyConditions": [
+												"Completed"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "BinarySource",
+											"storeSettings": {
+												"type": "SftpReadSettings",
+												"recursive": true,
+												"disableChunking": false
+											},
+											"formatSettings": {
+												"type": "BinaryReadSettings"
+											}
+										},
+										"sink": {
+											"type": "BinarySink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings",
+												"copyBehavior": "PreserveHierarchy"
+											}
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_NIELSEN_SRC_01",
+											"type": "DatasetReference",
+											"parameters": {
+												"zipname": {
+													"value": "@concat('KR_DAESANG_',item().fileName,'_hierarchies_ref_',item().fileNumber,'.txt.gz')",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_NIELSEN_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"yyyymm": {
+													"value": "@variables('yyyymm')",
+													"type": "Expression"
+												},
+												"dir": {
+													"value": "@pipeline().parameters.AdlsDirectory",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "characteristics_copy",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "hierarchies_copy",
+											"dependencyConditions": [
+												"Completed"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "BinarySource",
+											"storeSettings": {
+												"type": "SftpReadSettings",
+												"recursive": true,
+												"disableChunking": false
+											},
+											"formatSettings": {
+												"type": "BinaryReadSettings"
+											}
+										},
+										"sink": {
+											"type": "BinarySink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings",
+												"copyBehavior": "PreserveHierarchy"
+											}
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_NIELSEN_SRC_01",
+											"type": "DatasetReference",
+											"parameters": {
+												"zipname": {
+													"value": "@concat('KR_DAESANG_',item().fileName,'_characteristics_ref_',item().fileNumber,'.txt.gz')",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_NIELSEN_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"yyyymm": {
+													"value": "@variables('yyyymm')",
+													"type": "Expression"
+												},
+												"dir": {
+													"value": "@pipeline().parameters.AdlsDirectory",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "checksum_copy",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "characteristics_copy",
+											"dependencyConditions": [
+												"Completed"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "BinarySource",
+											"storeSettings": {
+												"type": "SftpReadSettings",
+												"recursive": true,
+												"disableChunking": false
+											},
+											"formatSettings": {
+												"type": "BinaryReadSettings"
+											}
+										},
+										"sink": {
+											"type": "BinarySink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings",
+												"copyBehavior": "PreserveHierarchy"
+											}
+										},
+										"enableStaging": false
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_NIELSEN_SRC_01",
+											"type": "DatasetReference",
+											"parameters": {
+												"zipname": {
+													"value": "@concat('KR_DAESANG_',item().fileName,'_checksum_',item().fileNumber,'.txt.gz')",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_NIELSEN_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"yyyymm": {
+													"value": "@variables('yyyymm')",
+													"type": "Expression"
+												},
+												"dir": {
+													"value": "@pipeline().parameters.AdlsDirectory",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					},
+					{
+						"name": "Lookup1",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "Set yyyymm",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true,
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"dataset": {
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": {
+										"value": "@concat('매출(주문)/외부/유통사MS정보/닐슨_오프라인/conf')",
+										"type": "Expression"
+									},
+									"FileName": {
+										"value": "@concat('닐슨오프라인_conf.csv')",
+										"type": "Expression"
+									}
+								}
+							},
+							"firstRowOnly": false
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"pip_month": {
+						"type": "string",
+						"defaultValue": "202403"
+					},
+					"AdlsDirectory": {
+						"type": "string",
+						"defaultValue": "매출(주문)/외부/유통사MS정보/닐슨_오프라인"
+					}
+				},
+				"variables": {
+					"yyyymm": {
+						"type": "String"
+					},
+					"filename": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "매출_주문/외부/닐슨"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-12-15T09:05:35Z"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_SFTP_NIELSEN_FULL_ONLINE')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "- 닐슨 SFTP ",
+				"activities": [
+					{
+						"name": "Copy data",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Set yyyymm",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "BinarySource",
+								"storeSettings": {
+									"type": "SftpReadSettings",
+									"recursive": true,
+									"deleteFilesAfterCompletion": false,
+									"disableChunking": false
+								},
+								"formatSettings": {
+									"type": "BinaryReadSettings",
+									"compressionProperties": {
+										"type": "ZipDeflateReadSettings",
+										"preserveZipFileNameAsFolder": false
+									}
+								}
+							},
+							"sink": {
+								"type": "BinarySink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings",
+									"copyBehavior": "PreserveHierarchy"
+								}
+							},
+							"enableStaging": false
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_NIELSEN_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"zipname": {
+										"value": "@concat('KIDSPK_SFF_',variables('yyyymm'),'.zip')",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_NIELSEN_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"yyyymm": {
+										"value": "@variables('yyyymm')",
+										"type": "Expression"
+									},
+									"dir": {
+										"value": "@concat('매출(주문)/외부/유통사MS정보/닐슨_온라인/')",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					},
+					{
+						"name": "Set yyyymm",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "yyyymm",
+							"value": {
+								"value": "@if(equals(pipeline().parameters.month,null), formatDateTime(addDays(startOfMonth(addHours(utcNow(), 9)),-34),'yyyyMM'), pipeline().parameters.month)",
+								"type": "Expression"
+							}
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"month": {
+						"type": "string",
+						"defaultValue": "202402"
+					}
+				},
+				"variables": {
+					"yyyymm": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "매출_주문/외부/닐슨"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-12-15T09:05:35Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_SFTP_NIELSEN_FULL_TEST')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -168,7 +1075,56 @@
 			"dependsOn": []
 		},
 		{
-			"name": "[concat(parameters('factoryName'), '/PIP_API_CUSTOMER_MENU_NEWS_copy1')]",
+			"name": "[concat(parameters('factoryName'), '/pipeline3')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Lookup1",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "JsonSource",
+								"storeSettings": {
+									"type": "HttpReadSettings",
+									"requestMethod": "POST",
+									"additionalHeaders": "tableNm : es_order\nregDt : 20240312\t",
+									"requestTimeout": ""
+								},
+								"formatSettings": {
+									"type": "JsonReadSettings"
+								}
+							},
+							"dataset": {
+								"referenceName": "DTS_GODOMALL",
+								"type": "DatasetReference",
+								"parameters": {}
+							}
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"folder": {
+					"name": "Test"
+				},
+				"annotations": []
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_CUSTOMER_MENU_NEWS2')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
 			"properties": {
@@ -178,7 +1134,13 @@
 						"type": "Lookup",
 						"dependsOn": [
 							{
-								"activity": "no",
+								"activity": "set date",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "end date",
 								"dependencyConditions": [
 									"Succeeded"
 								]
@@ -213,24 +1175,6 @@
 						}
 					},
 					{
-						"name": "no",
-						"description": "paging",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "no",
-							"value": {
-								"value": "@pipeline().parameters.no",
-								"type": "Expression"
-							}
-						}
-					},
-					{
 						"name": "select_keyword",
 						"type": "Lookup",
 						"dependsOn": [
@@ -253,7 +1197,7 @@
 							"source": {
 								"type": "AzurePostgreSqlSource",
 								"query": {
-									"value": "SELECT replace(keyword,'''','''''') AS key1, \nCASE WHEN COALESCE (synonym, '') != '' THEN replace(keyword,'''','''''') ||'||'||replace(synonym,'''','''''')\n     ELSE replace(keyword,'''','''''') END AS key2\nFROM cd_ods.tb_fc_news_keyword_t\nWHERE 1=1\nAND seq between @{int(variables('no'))} *3000 - 2999 and @{int(variables('no'))} *3000\nORDER BY key1 , key2",
+									"value": "SELECT  regexp_replace(keyword, '[()]', '', 'g') AS keyword\nFROM \n(\nSELECT string_agg(keyword, '||') AS keyword, cnt\nFROM (\nSELECT keyword\n,row_number() over (ORDER  BY keyword) / 10 as cnt\nfrom(\nSELECT DISTINCT  keyword AS keyword \nFROM cd_ods.tb_fc_news_keyword_t\nWHERE COALESCE (use_yn,'Y') != 'N'\nUNION \nSELECT DISTINCT synonym AS keyword \nFROM cd_ods.tb_fc_news_keyword_t\nWHERE COALESCE (use_yn,'Y') != 'N'\nAND COALESCE (synonym,'') != ''\n) a\n) a\nGROUP BY cnt\nORDER BY cnt\n) a",
 									"type": "Expression"
 								},
 								"partitionOption": "None"
@@ -308,7 +1252,7 @@
 												{
 													"name": "keyword",
 													"value": {
-														"value": "@item().key1",
+														"value": "@item().keyword",
 														"type": "Expression"
 													}
 												}
@@ -317,7 +1261,7 @@
 												"type": "HttpReadSettings",
 												"requestMethod": "GET",
 												"additionalHeaders": {
-													"value": "@{concat('Authorization : Bearer ',activity('token').output.value[0].access_token)}",
+													"value": "@{concat('Authorization : Bearer ','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzY29wZSI6WyJTT0NJQUwiXSwiZXhwIjoxNzIyMDE5MTcwLCJhdXRob3JpdGllcyI6WyJST0xFX1VTRVIiXSwianRpIjoiMTIyNmRlYWUtYTUyNy00ZDE2LWE1YjItMjBjNTViZTBmZjkzIiwiY2xpZW50X2lkIjoiM0FCQUIxNzhFRjQzMjg1NzA4RUJCNTJCMTZCMjhFQ0MifQ.n0yj0T3k2jnxvCg0jnTRt2vAkVlLXAKt0lyDKV1cgNg')}",
 													"type": "Expression"
 												},
 												"requestTimeout": ""
@@ -401,7 +1345,7 @@
 											"type": "DatasetReference",
 											"parameters": {
 												"param": {
-													"value": "@concat('/dataplus/social/GetKeywordDocuments?source=dataplus&type=foodnews&startDate=20240401&endDate=20240717&period=0&rowPerPage=3000&keyword=',item().key2,'&includeKeyword=신제품||신메뉴||출시||선봬')",
+													"value": "@concat('/dataplus/social/GetKeywordDocuments?source=dataplus&type=foodnews&startDate=',variables('date'),'&endDate=',variables('date2'),'&period=0&rowPerPage=3000&keyword=',item().keyword,'&includeKeyword=신제품||신메뉴||출시||선봬')",
 													"type": "Expression"
 												}
 											}
@@ -426,6 +1370,80 @@
 								}
 							]
 						}
+					},
+					{
+						"name": "set date",
+						"description": "당일자",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "date",
+							"value": {
+								"value": "@formatDateTime(adddays(addHours(utcNow(), 9), -1), 'yyyyMMdd')",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "end date",
+						"description": "당일자",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "date2",
+							"value": {
+								"value": "@formatDateTime(adddays(addHours(utcNow(), 9), 0), 'yyyyMMdd')",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "excute function",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "ForEach1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "SELECT cd_ods.fn_fc_menu_news_increase();",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK_P02",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							}
+						}
 					}
 				],
 				"policy": {
@@ -438,10 +1456,7 @@
 					},
 					"SinkTable": {
 						"type": "string",
-						"defaultValue": "tb_fc_menu_news_t"
-					},
-					"no": {
-						"type": "string"
+						"defaultValue": "tb_fc_menu_news_temp"
 					}
 				},
 				"variables": {
@@ -449,9 +1464,6 @@
 						"type": "String"
 					},
 					"date2": {
-						"type": "String"
-					},
-					"no": {
 						"type": "String"
 					}
 				},
@@ -7670,763 +8682,6 @@
 				},
 				"annotations": [],
 				"lastPublishTime": "2022-12-15T13:28:38Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/MYSQL_TREND_OUT_RSN_D')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "PIP_RSN_SEARCH_KEYWORD_DATA_INC",
-						"type": "ExecutePipeline",
-						"dependsOn": [
-							{
-								"activity": "Input log",
-								"dependencyConditions": [
-									"Completed"
-								]
-							}
-						],
-						"policy": {
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"pipeline": {
-								"referenceName": "PIP_RSN_SEARCH_KEYWORD_DATA_INC",
-								"type": "PipelineReference"
-							},
-							"waitOnCompletion": true,
-							"parameters": {}
-						}
-					},
-					{
-						"name": "Input log",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "select CD_IF.FUNC_CDI_LOG(  'I' , p_pipline => 'PIP_RSN_SEARCH_KEYWORD_DATA_INC' ) as result from dual;",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Success log",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_RSN_SEARCH_KEYWORD_DATA_INC",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log').output.firstRow.RESULT, ''', p_result => ''S'') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Error log",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_RSN_SEARCH_KEYWORD_DATA_INC",
-								"dependencyConditions": [
-									"Failed"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log').output.firstRow.RESULT, ''', p_result => ''E'', p_error_msg => ''', replace(activity('PIP_RSN_SEARCH_KEYWORD_DATA_INC').Error.Message, '''','‘'),''') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"folder": {
-					"name": "실행/Daily"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-12-15T13:28:38Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/MYSQL_TREND_OUT_RSN_W')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "PIP_RSN_BEST_RANKING_DATA_INC",
-						"type": "ExecutePipeline",
-						"dependsOn": [
-							{
-								"activity": "Input log",
-								"dependencyConditions": [
-									"Completed"
-								]
-							}
-						],
-						"policy": {
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"pipeline": {
-								"referenceName": "PIP_RSN_BEST_RANKING_DATA_INC",
-								"type": "PipelineReference"
-							},
-							"waitOnCompletion": true,
-							"parameters": {}
-						}
-					},
-					{
-						"name": "Input log",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "select CD_IF.FUNC_CDI_LOG(  'I' , p_pipline => 'PIP_RSN_BEST_RANKING_DATA_INC' ) as result from dual;",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Success log",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_RSN_BEST_RANKING_DATA_INC",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log').output.firstRow.RESULT, ''', p_result => ''S'') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Error log",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_RSN_BEST_RANKING_DATA_INC",
-								"dependencyConditions": [
-									"Failed"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log').output.firstRow.RESULT, ''', p_result => ''E'', p_error_msg => ''', replace(activity('PIP_RSN_BEST_RANKING_DATA_INC').Error.Message, '''','‘'),''') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"folder": {
-					"name": "실행/Weekly"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-12-16T15:10:38Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/ORA_CUST_IN_BESTON_M')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "PIP_M_CD_BESTON_ES_PLUSREVIEWARTICLE",
-						"type": "ExecutePipeline",
-						"dependsOn": [
-							{
-								"activity": "Input log",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"pipeline": {
-								"referenceName": "PIP_M_CD_BESTON_ES_PLUSREVIEWARTICLE",
-								"type": "PipelineReference"
-							},
-							"waitOnCompletion": true,
-							"parameters": {}
-						}
-					},
-					{
-						"name": "Input log",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "select CD_IF.FUNC_CDI_LOG(  'I' , p_pipline => 'PIP_M_CD_BESTON_ES_PLUSREVIEWARTICLE' ) as result from dual;",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Success log",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_M_CD_BESTON_ES_PLUSREVIEWARTICLE",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log').output.firstRow.RESULT, ''', p_result => ''S'') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Error log",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_M_CD_BESTON_ES_PLUSREVIEWARTICLE",
-								"dependencyConditions": [
-									"Failed"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log').output.firstRow.RESULT, ''', p_result => ''E'', p_error_msg => ''', replace(activity('PIP_M_CD_BESTON_ES_PLUSREVIEWARTICLE').Error.Message, '''','‘'),''') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"folder": {
-					"name": "실행/Monthly"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-12-19T01:56:26Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/ORA_CUST_IN_JWES_M')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "PIP_M_CD_JWES_LOGIN_STAT",
-						"type": "ExecutePipeline",
-						"dependsOn": [
-							{
-								"activity": "Input log",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"pipeline": {
-								"referenceName": "PIP_M_CD_MART_JW_LOGINSTAT",
-								"type": "PipelineReference"
-							},
-							"waitOnCompletion": true,
-							"parameters": {}
-						}
-					},
-					{
-						"name": "PIP_M_CD_JWES_CUSTOMERVIEWS",
-						"type": "ExecutePipeline",
-						"dependsOn": [
-							{
-								"activity": "Input log 2",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"pipeline": {
-								"referenceName": "PIP_M_CD_JWES_CUSTOMERVIEWS",
-								"type": "PipelineReference"
-							},
-							"waitOnCompletion": true,
-							"parameters": {}
-						}
-					},
-					{
-						"name": "Input log",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "select CD_IF.FUNC_CDI_LOG(  'I' , p_pipline => 'PIP_M_CD_JWES_LOGIN_STAT' ) as result from dual;",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Success log",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_M_CD_JWES_LOGIN_STAT",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log').output.firstRow.RESULT, ''', p_result => ''S'') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Error log",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_M_CD_JWES_LOGIN_STAT",
-								"dependencyConditions": [
-									"Failed"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log').output.firstRow.RESULT, ''', p_result => ''E'', p_error_msg => ''', replace(activity('PIP_M_CD_JWES_LOGIN_STAT').Error.Message, '''','‘'),''') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Input log 2",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "select CD_IF.FUNC_CDI_LOG(  'I' , p_pipline => 'PIP_M_CD_JWES_CUSTOMERVIEWS' ) as result from dual;",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Success log 2",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_M_CD_JWES_CUSTOMERVIEWS",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log 2').output.firstRow.RESULT, ''', p_result => ''S'') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Error log 2",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_M_CD_JWES_CUSTOMERVIEWS",
-								"dependencyConditions": [
-									"Failed"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log 2').output.firstRow.RESULT, ''', p_result => ''E'', p_error_msg => ''', replace(activity('PIP_M_CD_JWES_CUSTOMERVIEWS').Error.Message, '''','‘'),''') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"folder": {
-					"name": "실행/Monthly"
-				},
-				"annotations": [],
-				"lastPublishTime": "2023-01-09T01:08:01Z"
 			},
 			"dependsOn": []
 		}
