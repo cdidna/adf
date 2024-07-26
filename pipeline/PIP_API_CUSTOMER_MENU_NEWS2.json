@@ -1,0 +1,248 @@
+{
+	"name": "PIP_API_CUSTOMER_MENU_NEWS2",
+	"properties": {
+		"activities": [
+			{
+				"name": "token",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "JsonSource",
+						"storeSettings": {
+							"type": "HttpReadSettings",
+							"requestMethod": "POST",
+							"requestTimeout": ""
+						},
+						"formatSettings": {
+							"type": "JsonReadSettings"
+						}
+					},
+					"dataset": {
+						"referenceName": "DTS_VIVE_API_TOKEN",
+						"type": "DatasetReference"
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "select_keyword",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "token",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "SELECT  regexp_replace(keyword, '[()]', '', 'g') AS keyword\nFROM \n(\nSELECT string_agg(keyword, '||') AS keyword, cnt\nFROM (\nSELECT keyword\n,row_number() over (ORDER  BY keyword) / 10 as cnt\nfrom(\nSELECT DISTINCT  keyword AS keyword \nFROM cd_ods.tb_fc_news_keyword_t\nWHERE COALESCE (use_yn,'Y') != 'N'\nUNION \nSELECT DISTINCT synonym AS keyword \nFROM cd_ods.tb_fc_news_keyword_t\nWHERE COALESCE (use_yn,'Y') != 'N'\nAND COALESCE (synonym,'') != ''\n) a\n) a\nGROUP BY cnt\nORDER BY cnt\n) a",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK_P02",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "select_keyword",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('select_keyword').output.value",
+						"type": "Expression"
+					},
+					"isSequential": false,
+					"batchCount": 50,
+					"activities": [
+						{
+							"name": "Copy data_copy1",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 2,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "JsonSource",
+									"additionalColumns": [
+										{
+											"name": "keyword",
+											"value": {
+												"value": "@item().keyword",
+												"type": "Expression"
+											}
+										}
+									],
+									"storeSettings": {
+										"type": "HttpReadSettings",
+										"requestMethod": "GET",
+										"additionalHeaders": {
+											"value": "@{concat('Authorization : Bearer ','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzY29wZSI6WyJTT0NJQUwiXSwiZXhwIjoxNzIyMDE2NDg2LCJhdXRob3JpdGllcyI6WyJST0xFX1VTRVIiXSwianRpIjoiZDBmNGM4NWYtMGEwMi00M2FjLTk2ODgtYWRkNWNkZDA0ZjM0IiwiY2xpZW50X2lkIjoiM0FCQUIxNzhFRjQzMjg1NzA4RUJCNTJCMTZCMjhFQ0MifQ.b-KY_hMuPrXyJIluqjbYC0i2PKEGCIBLsDvpKfAyfwA')}",
+											"type": "Expression"
+										},
+										"requestTimeout": ""
+									},
+									"formatSettings": {
+										"type": "JsonReadSettings"
+									}
+								},
+								"sink": {
+									"type": "AzurePostgreSQLSink",
+									"writeBatchSize": 1000000,
+									"writeBatchTimeout": "00:30:00",
+									"writeMethod": "CopyCommand"
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"mappings": [
+										{
+											"source": {
+												"path": "['date']"
+											},
+											"sink": {
+												"name": "date",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['title']"
+											},
+											"sink": {
+												"name": "title",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['content']"
+											},
+											"sink": {
+												"name": "content",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['url']"
+											},
+											"sink": {
+												"name": "url",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "$['keyword']"
+											},
+											"sink": {
+												"name": "keyword",
+												"type": "String"
+											}
+										}
+									],
+									"collectionReference": "$['data']['documentList']",
+									"mapComplexValuesToString": true
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "DTS_VIVE_API",
+									"type": "DatasetReference",
+									"parameters": {
+										"param": {
+											"value": "@concat('/dataplus/social/GetKeywordDocuments?source=dataplus&type=foodnews&startDate=20240101&endDate=20240717&period=0&rowPerPage=3000&keyword=',item().keyword,'&includeKeyword=신제품||신메뉴||출시||선봬')",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "DTS_POSTGRESQL_SNK_P02",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": {
+											"value": "@pipeline().parameters.SinkSckema",
+											"type": "Expression"
+										},
+										"SinkTable": {
+											"value": "@pipeline().parameters.SinkTable",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"SinkSckema": {
+				"type": "string",
+				"defaultValue": "cd_ods"
+			},
+			"SinkTable": {
+				"type": "string",
+				"defaultValue": "tb_fc_menu_news_temp"
+			}
+		},
+		"variables": {
+			"date": {
+				"type": "String"
+			},
+			"date2": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "고객/외부/브랜드 NEWS"
+		},
+		"annotations": []
+	}
+}
