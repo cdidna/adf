@@ -5,7 +5,20 @@
 			{
 				"name": "Lookup1",
 				"type": "Lookup",
-				"dependsOn": [],
+				"dependsOn": [
+					{
+						"activity": "set strdt",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "set enddt",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
 				"policy": {
 					"timeout": "0.12:00:00",
 					"retry": 0,
@@ -17,7 +30,10 @@
 				"typeProperties": {
 					"source": {
 						"type": "AzurePostgreSqlSource",
-						"query": "  select distinct pg_table_name        \n       ,es_table_name      \n  from cd_ods.tb_jweshop_table_mapping_master\n where pg_table_name  ='tb_jweshop_es_cart'",
+						"query": {
+							"value": "select distinct pg_table_name        \n      ,es_table_name      \n  from cd_ods.tb_jweshop_table_mapping_master\n where pg_table_name  = 'tb_jweshop_es_cart'",
+							"type": "Expression"
+						},
 						"partitionOption": "None"
 					},
 					"dataset": {
@@ -76,7 +92,7 @@
 										"type": "HttpReadSettings",
 										"requestMethod": "POST",
 										"additionalHeaders": {
-											"value": "tableNm : es_cart\nstartDt : 20240801\nendDt : 20240801\ndtType : reg\n",
+											"value": "tableNm : ${item().pg_table_name}\nstartDt : ${variables('strdt')}\nendDt : ${variables('enddt')}\ndtType : reg",
 											"type": "Expression"
 										},
 										"requestTimeout": ""
@@ -89,6 +105,10 @@
 									"type": "AzurePostgreSQLSink",
 									"writeBatchSize": 1000000,
 									"writeBatchTimeout": "00:30:00",
+									"preCopyScript": {
+										"value": "@delete from cd_ods.${item().pg_table_name}\nwhere to_char(date(regdt),'yyyymmdd') between '${variables('strdt')}' and '${variables('enddt')}'",
+										"type": "Expression"
+									},
 									"writeMethod": "CopyCommand"
 								},
 								"enableStaging": false,
@@ -109,7 +129,10 @@
 									"type": "DatasetReference",
 									"parameters": {
 										"SinkSchema": "cd_ods",
-										"SinkTable": "tb_jweshop_es_cart_temp"
+										"SinkTable": {
+											"value": "@item().pg_table_name",
+											"type": "Expression"
+										}
 									}
 								}
 							]
@@ -147,8 +170,60 @@
 						}
 					]
 				}
+			},
+			{
+				"name": "set strdt",
+				"description": "당일자",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "strdt",
+					"value": {
+						"value": "@if(equals(pipeline().parameters.pip_strdt,null),formatDateTime(addDays(addHours(utcNow(), 9),-10),'yyyyMMdd'),pipeline().parameters.pip_strdt)",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "set enddt",
+				"description": "당일자",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "enddt",
+					"value": {
+						"value": "@if(equals(pipeline().parameters.pip_enddt,null),formatDateTime(addDays(addHours(utcNow(), 9),-1),'yyyyMMdd'),pipeline().parameters.pip_enddt)",
+						"type": "Expression"
+					}
+				}
 			}
 		],
+		"parameters": {
+			"pip_strdt": {
+				"type": "string"
+			},
+			"pip_enddt": {
+				"type": "string"
+			}
+		},
+		"variables": {
+			"strdt": {
+				"type": "String"
+			},
+			"enddt": {
+				"type": "String"
+			}
+		},
 		"folder": {
 			"name": "고객/내부/고도몰"
 		},
