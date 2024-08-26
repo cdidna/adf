@@ -1,18 +1,11 @@
 {
-	"name": "pipeline4",
+	"name": "PIP_D_CD_GODOMALL_MOD",
 	"properties": {
 		"activities": [
 			{
 				"name": "Lookup1",
 				"type": "Lookup",
-				"dependsOn": [
-					{
-						"activity": "Lookup2",
-						"dependencyConditions": [
-							"Succeeded"
-						]
-					}
-				],
+				"dependsOn": [],
 				"policy": {
 					"timeout": "0.12:00:00",
 					"retry": 0,
@@ -25,7 +18,7 @@
 					"source": {
 						"type": "AzurePostgreSqlSource",
 						"query": {
-							"value": "select min(a.work_date) as str_date\n      ,max(a.work_date) as end_date\n  from (\n\t    select to_char(base_date,'yyyymmdd') as work_date\n\t          ,row_number() over (order by base_date) / 8 as rnum\n \t      from cd_ods.aps_sdc_pw_mst \n\t     where base_date between date('2022-04-17') and date('2024-08-12')\n\t   ) a\nwhere  RNUM >= 64\ngroup by a.rnum\norder by a.rnum",
+							"value": "select min(a.work_date) as str_date\n\t,max(a.work_date) as end_date\nfrom (\n\tselect to_char(base_date,'yyyymmdd') as work_date\n\t\t\t,row_number() over (order by base_date) / (b.period+1)::int as rnum\n\t\tfrom cd_ods.aps_sdc_pw_mst a\n\t\t\t,(\n\t\t\t\tselect distinct period\n\t\t\t\tfrom cd_ods.tb_jweshop_table_master                       \n\t\t\t) b\n\t\twhere 1=1\n\t\t--and base_date between date('2022-04-17') and date('2024-08-12')\n\t\tand base_date between date('2024-08-12') and date('2024-08-25')\n\t\tand b.period = @{pipeline().parameters.period}\n\t) a\t \nwhere  1=1  --RNUM >= 64\ngroup by a.rnum\norder by a.rnum\n",
 							"type": "Expression"
 						},
 						"partitionOption": "None"
@@ -88,44 +81,6 @@
 						}
 					]
 				}
-			},
-			{
-				"name": "Lookup2",
-				"type": "Lookup",
-				"dependsOn": [],
-				"policy": {
-					"timeout": "0.12:00:00",
-					"retry": 0,
-					"retryIntervalInSeconds": 30,
-					"secureOutput": false,
-					"secureInput": false
-				},
-				"userProperties": [],
-				"typeProperties": {
-					"source": {
-						"type": "DelimitedTextSource",
-						"storeSettings": {
-							"type": "AzureBlobFSReadSettings",
-							"recursive": true,
-							"enablePartitionDiscovery": false
-						},
-						"formatSettings": {
-							"type": "DelimitedTextReadSettings"
-						}
-					},
-					"dataset": {
-						"referenceName": "DTS_ADLS_SNK",
-						"type": "DatasetReference",
-						"parameters": {
-							"AdlsDirectory": "@pipeline().parameters.AdlsDirectoryConf",
-							"FileName": {
-								"value": "@concat(pipeline().parameters.ConfFile,'.csv')",
-								"type": "Expression"
-							}
-						}
-					},
-					"firstRowOnly": false
-				}
 			}
 		],
 		"parameters": {
@@ -136,6 +91,10 @@
 			"ConfFile": {
 				"type": "string",
 				"defaultValue": "고도몰 테이블 증분주기_conf"
+			},
+			"period": {
+				"type": "string",
+				"defaultValue": "7"
 			}
 		},
 		"folder": {
