@@ -4,9 +4,23 @@
 		"description": "고도몰 증분",
 		"activities": [
 			{
-				"name": "Delete1",
+				"name": "Delete json",
+				"description": "temp폴더 아래 json 파일 삭",
 				"type": "Delete",
-				"dependsOn": [],
+				"dependsOn": [
+					{
+						"activity": "set strdt",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "set enddt",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
 				"policy": {
 					"timeout": "0.12:00:00",
 					"retry": 0,
@@ -35,12 +49,417 @@
 						"enablePartitionDiscovery": false
 					}
 				}
+			},
+			{
+				"name": "set strdt",
+				"description": "당일자",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "strdt",
+					"value": {
+						"value": "@if(equals(pipeline().parameters.pip_strdt,null),formatDateTime(addDays(addHours(utcNow(), 9),-1),'yyyyMMdd'),pipeline().parameters.pip_strdt)",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "set enddt",
+				"description": "당일자",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "enddt",
+					"value": {
+						"value": "@if(equals(pipeline().parameters.pip_enddt,null),formatDateTime(addDays(addHours(utcNow(), 9),-1),'yyyyMMdd'),pipeline().parameters.pip_enddt)",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "truncate temp",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Delete json",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "select cd_ods.func_godomoall_truncate_temp() as rtn;",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					}
+				}
+			},
+			{
+				"name": "table_list",
+				"description": "정웝이샵 테이블과 적재되는 pg테이블 리스트 ( temp )",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "truncate temp",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "select b.pg_table_name, a.es_table_name, a.period::int as period\n  from cd_ods.tb_jweshop_table_master a\n      inner join ( select distinct pg_table_name, es_table_name \n                     from cd_ods.tb_jweshop_table_mapping_master                    \n                 ) b                \n                on \n                 ( a.es_table_name = b.es_table_name)\n          ",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "table_list",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('table_list').output.value",
+						"type": "Expression"
+					},
+					"isSequential": true,
+					"activities": [
+						{
+							"name": "copy to json",
+							"description": "api 결과 lake temp 적",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "JsonSource",
+									"storeSettings": {
+										"type": "HttpReadSettings",
+										"requestMethod": "POST",
+										"additionalHeaders": {
+											"value": "tableNm : @{item().es_table_name}\nstartDt : @{variables('strdt')}\nendDt : @{variables('enddt')}\ndtType : all",
+											"type": "Expression"
+										},
+										"requestTimeout": ""
+									},
+									"formatSettings": {
+										"type": "JsonReadSettings"
+									}
+								},
+								"sink": {
+									"type": "JsonSink",
+									"storeSettings": {
+										"type": "AzureBlobFSWriteSettings"
+									},
+									"formatSettings": {
+										"type": "JsonWriteSettings"
+									}
+								},
+								"enableStaging": false,
+								"enableSkipIncompatibleRow": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"mappings": [
+										{
+											"source": {
+												"path": "['couponNo']"
+											},
+											"sink": {
+												"name": "couponno",
+												"type": "Decimal"
+											}
+										},
+										{
+											"source": {
+												"path": "['couponKind']"
+											},
+											"sink": {
+												"name": "couponkind",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['couponType']"
+											},
+											"sink": {
+												"name": "coupontype",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['couponUseType']"
+											},
+											"sink": {
+												"name": "couponusetype",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['couponSaveType']"
+											},
+											"sink": {
+												"name": "couponsavetype",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['couponNm']"
+											},
+											"sink": {
+												"name": "couponnm",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['couponDescribed']"
+											},
+											"sink": {
+												"name": "coupondescribed",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['couponUsePeriodType']"
+											},
+											"sink": {
+												"name": "couponuseperiodtype",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['couponUsePeriodStartDate']"
+											},
+											"sink": {
+												"name": "couponuseperiodstartdate",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['couponUsePeriodEndDate']"
+											},
+											"sink": {
+												"name": "couponuseperiodenddate",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['couponUsePeriodDay']"
+											},
+											"sink": {
+												"name": "couponuseperiodday",
+												"type": "Decimal"
+											}
+										},
+										{
+											"source": {
+												"path": "['couponUseDateLimit']"
+											},
+											"sink": {
+												"name": "couponusedatelimit",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['couponKindType']"
+											},
+											"sink": {
+												"name": "couponkindtype",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['couponDeviceType']"
+											},
+											"sink": {
+												"name": "coupondevicetype",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "$['result']"
+											},
+											"sink": {
+												"name": "result",
+												"type": "String"
+											}
+										}
+									],
+									"collectionReference": "$['data']"
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "DTS_GODOMALL",
+									"type": "DatasetReference"
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "DTS_ADLS_JSON_SRC_P1",
+									"type": "DatasetReference",
+									"parameters": {
+										"AdlsDirectory": {
+											"value": "@pipeline().parameters.AdlsDirectory",
+											"type": "Expression"
+										},
+										"FileName": "es_coupon.json"
+									}
+								}
+							]
+						},
+						{
+							"name": "result chk",
+							"type": "Lookup",
+							"dependsOn": [
+								{
+									"activity": "copy to json",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "JsonSource",
+									"storeSettings": {
+										"type": "AzureBlobFSReadSettings",
+										"recursive": true,
+										"enablePartitionDiscovery": false
+									},
+									"formatSettings": {
+										"type": "JsonReadSettings"
+									}
+								},
+								"dataset": {
+									"referenceName": "DTS_ADLS_JSON_SRC_P1",
+									"type": "DatasetReference",
+									"parameters": {
+										"AdlsDirectory": {
+											"value": "@pipeline().parameters.AdlsDirectory",
+											"type": "Expression"
+										},
+										"FileName": {
+											"value": "@concat(item().es_table_name,'.json')",
+											"type": "Expression"
+										}
+									}
+								}
+							}
+						}
+					]
+				}
 			}
 		],
 		"parameters": {
 			"AdlsDirectory": {
 				"type": "string",
 				"defaultValue": "/고객/내부/고도몰/temp"
+			},
+			"pip_strdt": {
+				"type": "string"
+			},
+			"pip_enddt": {
+				"type": "string"
+			}
+		},
+		"variables": {
+			"strdt": {
+				"type": "String"
+			},
+			"pip_strdt": {
+				"type": "String"
+			},
+			"pip_enddt": {
+				"type": "String"
+			},
+			"enddt": {
+				"type": "String"
 			}
 		},
 		"folder": {
