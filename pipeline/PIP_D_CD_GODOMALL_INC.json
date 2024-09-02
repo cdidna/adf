@@ -45,7 +45,7 @@
 					"storeSettings": {
 						"type": "AzureBlobFSReadSettings",
 						"recursive": true,
-						"wildcardFileName": "*.json",
+						"wildcardFileName": "*.*",
 						"enablePartitionDiscovery": false
 					}
 				}
@@ -186,7 +186,14 @@
 						{
 							"name": "mapping",
 							"type": "Lookup",
-							"dependsOn": [],
+							"dependsOn": [
+								{
+									"activity": "json to csv",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
 							"policy": {
 								"timeout": "0.12:00:00",
 								"retry": 0,
@@ -256,7 +263,7 @@
 									"writeMethod": "CopyCommand"
 								},
 								"enableStaging": false,
-								"enableSkipIncompatibleRow": true,
+								"enableSkipIncompatibleRow": false,
 								"translator": {
 									"value": "@json(concat('{\n\"type\": \"TabularTranslator\",\n\"mappings\": ['\n     ,activity('mapping').output.firstRow.json,'\n],\"collectionReference\": \"$[''data'']\",\"mapComplexValuesToString\": true}\n'))",
 									"type": "Expression"
@@ -281,46 +288,151 @@
 									}
 								}
 							]
+						},
+						{
+							"name": "api to json",
+							"description": "api 결과값 json 파일생성",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "JsonSource",
+									"storeSettings": {
+										"type": "HttpReadSettings",
+										"requestMethod": "POST",
+										"additionalHeaders": {
+											"value": "tableNm : @{item().es_table_name}\nstartDt : @{variables('strdt')}\nendDt : @{variables('enddt')}\ndtType : all",
+											"type": "Expression"
+										},
+										"requestTimeout": ""
+									},
+									"formatSettings": {
+										"type": "JsonReadSettings"
+									}
+								},
+								"sink": {
+									"type": "JsonSink",
+									"storeSettings": {
+										"type": "AzureBlobFSWriteSettings"
+									},
+									"formatSettings": {
+										"type": "JsonWriteSettings"
+									}
+								},
+								"enableStaging": false,
+								"enableSkipIncompatibleRow": false,
+								"translator": {
+									"value": "@json(concat('{\n\"type\": \"TabularTranslator\",\n\"mappings\": ['\n     ,activity('mapping').output.firstRow.json,'\n],\"collectionReference\": \"$[''data'']\",\"mapComplexValuesToString\": true}\n'))",
+									"type": "Expression"
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "DTS_GODOMALL",
+									"type": "DatasetReference"
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "DTS_ADLS_JSON_SRC_P1",
+									"type": "DatasetReference",
+									"parameters": {
+										"AdlsDirectory": {
+											"value": "@pipeline().parameters.AdlsDirectory",
+											"type": "Expression"
+										},
+										"FileName": {
+											"value": "@concat(item().es_table_name,'.json')",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						},
+						{
+							"name": "json to csv",
+							"description": "json의 result 값을 보기 위한 csv생성\n(상단 result, count만생성) \njson결과값이 많으면 조회 기능이 안됨 ",
+							"type": "Copy",
+							"dependsOn": [
+								{
+									"activity": "api to json",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "JsonSource",
+									"storeSettings": {
+										"type": "AzureBlobFSReadSettings",
+										"recursive": true,
+										"enablePartitionDiscovery": false
+									},
+									"formatSettings": {
+										"type": "JsonReadSettings"
+									}
+								},
+								"sink": {
+									"type": "DelimitedTextSink",
+									"storeSettings": {
+										"type": "AzureBlobFSWriteSettings"
+									},
+									"formatSettings": {
+										"type": "DelimitedTextWriteSettings",
+										"quoteAllText": true,
+										"fileExtension": ".txt"
+									}
+								},
+								"enableStaging": false
+							},
+							"inputs": [
+								{
+									"referenceName": "DTS_ADLS_JSON_SRC_P1",
+									"type": "DatasetReference",
+									"parameters": {
+										"AdlsDirectory": {
+											"value": "@pipeline().parameters.AdlsDirectory",
+											"type": "Expression"
+										},
+										"FileName": "@concat(item().es_table_name,'.json')"
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "DTS_ADLS_JSONTOCSV_SNK",
+									"type": "DatasetReference",
+									"parameters": {
+										"AdlsDirectory": {
+											"value": "@pipeline().parameters.AdlsDirectory",
+											"type": "Expression"
+										},
+										"FileName": {
+											"value": "@concat(item().es_table_name,'.csv')",
+											"type": "Expression"
+										}
+									}
+								}
+							]
 						}
 					]
-				}
-			},
-			{
-				"name": "Lookup1",
-				"type": "Lookup",
-				"dependsOn": [],
-				"policy": {
-					"timeout": "0.12:00:00",
-					"retry": 0,
-					"retryIntervalInSeconds": 30,
-					"secureOutput": false,
-					"secureInput": false
-				},
-				"userProperties": [],
-				"typeProperties": {
-					"source": {
-						"type": "JsonSource",
-						"storeSettings": {
-							"type": "AzureBlobFSReadSettings",
-							"recursive": true,
-							"enablePartitionDiscovery": false
-						},
-						"formatSettings": {
-							"type": "JsonReadSettings"
-						}
-					},
-					"dataset": {
-						"referenceName": "DTS_ADLS_JSON_SRC_P1",
-						"type": "DatasetReference",
-						"parameters": {
-							"AdlsDirectory": {
-								"value": "@pipeline().parameters.AdlsDirectory",
-								"type": "Expression"
-							},
-							"FileName": "es_coupon.json"
-						}
-					},
-					"firstRowOnly": false
 				}
 			}
 		],
