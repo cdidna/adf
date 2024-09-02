@@ -184,9 +184,8 @@
 					"isSequential": true,
 					"activities": [
 						{
-							"name": "copy to json",
-							"description": "api 결과 lake temp 적",
-							"type": "Copy",
+							"name": "mapping",
+							"type": "Lookup",
 							"dependsOn": [],
 							"policy": {
 								"timeout": "0.12:00:00",
@@ -198,236 +197,19 @@
 							"userProperties": [],
 							"typeProperties": {
 								"source": {
-									"type": "JsonSource",
-									"storeSettings": {
-										"type": "HttpReadSettings",
-										"requestMethod": "POST",
-										"additionalHeaders": {
-											"value": "tableNm : @{item().es_table_name}\nstartDt : @{variables('strdt')}\nendDt : @{variables('enddt')}\ndtType : all",
-											"type": "Expression"
-										},
-										"requestTimeout": ""
+									"type": "AzurePostgreSqlSource",
+									"query": {
+										"value": "select string_agg('{  \"source\": { \"path\": \"['''||a.es_column_name||''']\" }, \"sink\": {  \"name\": \"'||a.pg_column_name||'\", \"type\": \"'||a.objtype||'\" } }' ,',') as json\n   from (\n\t\t  select a.es_column_name , a.pg_column_name , case when b.udt_name = 'numeric' then 'Decimal'\n\t\t                                                   else  'String'\n\t\t                                                end as objtype                                                                         \n\t\t    from cd_ods.tb_jweshop_table_mapping_master as a inner join information_schema.columns b\n\t\t                                              on (\n\t\t                                                     a.pg_table_name||'_temp' = b.table_name\n\t\t                                                 and a.pg_column_name = b.column_name \n\t\t                                                 and b.table_schema ='cd_ods'\n\t\t                                                 )       \n\t\t   where a.pg_table_name ='@{item().pg_table_name}'\n\t\t) a\n",
+										"type": "Expression"
 									},
-									"formatSettings": {
-										"type": "JsonReadSettings"
-									}
-								},
-								"sink": {
-									"type": "JsonSink",
-									"storeSettings": {
-										"type": "AzureBlobFSWriteSettings"
-									},
-									"formatSettings": {
-										"type": "JsonWriteSettings"
-									}
-								},
-								"enableStaging": false,
-								"enableSkipIncompatibleRow": false,
-								"translator": {
-									"type": "TabularTranslator",
-									"mappings": [
-										{
-											"source": {
-												"path": "['couponNo']"
-											},
-											"sink": {
-												"name": "couponno",
-												"type": "Decimal"
-											}
-										},
-										{
-											"source": {
-												"path": "['couponKind']"
-											},
-											"sink": {
-												"name": "couponkind",
-												"type": "String"
-											}
-										},
-										{
-											"source": {
-												"path": "['couponType']"
-											},
-											"sink": {
-												"name": "coupontype",
-												"type": "String"
-											}
-										},
-										{
-											"source": {
-												"path": "['couponUseType']"
-											},
-											"sink": {
-												"name": "couponusetype",
-												"type": "String"
-											}
-										},
-										{
-											"source": {
-												"path": "['couponSaveType']"
-											},
-											"sink": {
-												"name": "couponsavetype",
-												"type": "String"
-											}
-										},
-										{
-											"source": {
-												"path": "['couponNm']"
-											},
-											"sink": {
-												"name": "couponnm",
-												"type": "String"
-											}
-										},
-										{
-											"source": {
-												"path": "['couponDescribed']"
-											},
-											"sink": {
-												"name": "coupondescribed",
-												"type": "String"
-											}
-										},
-										{
-											"source": {
-												"path": "['couponUsePeriodType']"
-											},
-											"sink": {
-												"name": "couponuseperiodtype",
-												"type": "String"
-											}
-										},
-										{
-											"source": {
-												"path": "['couponUsePeriodStartDate']"
-											},
-											"sink": {
-												"name": "couponuseperiodstartdate",
-												"type": "String"
-											}
-										},
-										{
-											"source": {
-												"path": "['couponUsePeriodEndDate']"
-											},
-											"sink": {
-												"name": "couponuseperiodenddate",
-												"type": "String"
-											}
-										},
-										{
-											"source": {
-												"path": "['couponUsePeriodDay']"
-											},
-											"sink": {
-												"name": "couponuseperiodday",
-												"type": "Decimal"
-											}
-										},
-										{
-											"source": {
-												"path": "['couponUseDateLimit']"
-											},
-											"sink": {
-												"name": "couponusedatelimit",
-												"type": "String"
-											}
-										},
-										{
-											"source": {
-												"path": "['couponKindType']"
-											},
-											"sink": {
-												"name": "couponkindtype",
-												"type": "String"
-											}
-										},
-										{
-											"source": {
-												"path": "['couponDeviceType']"
-											},
-											"sink": {
-												"name": "coupondevicetype",
-												"type": "String"
-											}
-										},
-										{
-											"source": {
-												"path": "$['result']"
-											},
-											"sink": {
-												"name": "result",
-												"type": "String"
-											}
-										}
-									],
-									"collectionReference": "$['data']"
-								}
-							},
-							"inputs": [
-								{
-									"referenceName": "DTS_GODOMALL",
-									"type": "DatasetReference"
-								}
-							],
-							"outputs": [
-								{
-									"referenceName": "DTS_ADLS_JSON_SRC_P1",
-									"type": "DatasetReference",
-									"parameters": {
-										"AdlsDirectory": {
-											"value": "@pipeline().parameters.AdlsDirectory",
-											"type": "Expression"
-										},
-										"FileName": "@concat(item().es_table_name,'.json')"
-									}
-								}
-							]
-						},
-						{
-							"name": "result chk",
-							"type": "Lookup",
-							"dependsOn": [
-								{
-									"activity": "copy to json",
-									"dependencyConditions": [
-										"Succeeded"
-									]
-								}
-							],
-							"policy": {
-								"timeout": "0.12:00:00",
-								"retry": 0,
-								"retryIntervalInSeconds": 30,
-								"secureOutput": false,
-								"secureInput": false
-							},
-							"userProperties": [],
-							"typeProperties": {
-								"source": {
-									"type": "JsonSource",
-									"storeSettings": {
-										"type": "AzureBlobFSReadSettings",
-										"recursive": true,
-										"enablePartitionDiscovery": false
-									},
-									"formatSettings": {
-										"type": "JsonReadSettings"
-									}
+									"partitionOption": "None"
 								},
 								"dataset": {
-									"referenceName": "DTS_ADLS_JSON_SRC_P1",
+									"referenceName": "DTS_POSTGRESQL_SNK",
 									"type": "DatasetReference",
 									"parameters": {
-										"AdlsDirectory": {
-											"value": "@pipeline().parameters.AdlsDirectory",
-											"type": "Expression"
-										},
-										"FileName": {
-											"value": "@concat(item().es_table_name,'.json')",
-											"type": "Expression"
-										}
+										"SinkSchema": "1",
+										"SinkTable": "1"
 									}
 								}
 							}
@@ -455,9 +237,13 @@
 								"source": {
 									"type": "JsonSource",
 									"storeSettings": {
-										"type": "AzureBlobFSReadSettings",
-										"recursive": true,
-										"enablePartitionDiscovery": false
+										"type": "HttpReadSettings",
+										"requestMethod": "POST",
+										"additionalHeaders": {
+											"value": "tableNm : @{item().es_table_name}\nstartDt : @{variables('strdt')}\nendDt : @{variables('enddt')}\ndtType : all",
+											"type": "Expression"
+										},
+										"requestTimeout": ""
 									},
 									"formatSettings": {
 										"type": "JsonReadSettings"
@@ -477,65 +263,23 @@
 							},
 							"inputs": [
 								{
-									"referenceName": "DTS_ADLS_JSON_SRC_P1",
-									"type": "DatasetReference",
-									"parameters": {
-										"AdlsDirectory": {
-											"value": "@pipeline().parameters.AdlsDirectory",
-											"type": "Expression"
-										},
-										"FileName": "@concat(item().es_table_name,'.json')"
-									}
+									"referenceName": "DTS_GODOMALL",
+									"type": "DatasetReference"
 								}
 							],
 							"outputs": [
 								{
-									"referenceName": "DTS_POSTGRESQL_SNK_P02",
-									"type": "DatasetReference",
-									"parameters": {
-										"SinkSchema": "cd_ods",
-										"SinkTable": "@concat(item().pg_table_name,'_temp')"
-									}
-								}
-							]
-						},
-						{
-							"name": "mapping",
-							"type": "Lookup",
-							"dependsOn": [
-								{
-									"activity": "result chk",
-									"dependencyConditions": [
-										"Succeeded"
-									]
-								}
-							],
-							"policy": {
-								"timeout": "0.12:00:00",
-								"retry": 0,
-								"retryIntervalInSeconds": 30,
-								"secureOutput": false,
-								"secureInput": false
-							},
-							"userProperties": [],
-							"typeProperties": {
-								"source": {
-									"type": "AzurePostgreSqlSource",
-									"query": {
-										"value": "select string_agg('{  \"source\": { \"path\": \"['''||a.es_column_name||''']\" }, \"sink\": {  \"name\": \"'||a.pg_column_name||'\", \"type\": \"'||a.objtype||'\" } }' ,',') as json\n   from (\n\t\t  select a.es_column_name , a.pg_column_name , case when b.udt_name = 'numeric' then 'Decimal'\n\t\t                                                   else  'String'\n\t\t                                                end as objtype                                                                         \n\t\t    from cd_ods.tb_jweshop_table_mapping_master as a inner join information_schema.columns b\n\t\t                                              on (\n\t\t                                                     a.pg_table_name||'_temp' = b.table_name\n\t\t                                                 and a.pg_column_name = b.column_name \n\t\t                                                 and b.table_schema ='cd_ods'\n\t\t                                                 )       \n\t\t   where a.pg_table_name ='@{item().pg_table_name}'\n\t\t) a\n",
-										"type": "Expression"
-									},
-									"partitionOption": "None"
-								},
-								"dataset": {
 									"referenceName": "DTS_POSTGRESQL_SNK",
 									"type": "DatasetReference",
 									"parameters": {
-										"SinkSchema": "1",
-										"SinkTable": "1"
+										"SinkSchema": "cd_ods",
+										"SinkTable": {
+											"value": "@concat(item().pg_table_name,'_temp')",
+											"type": "Expression"
+										}
 									}
 								}
-							}
+							]
 						}
 					]
 				}
