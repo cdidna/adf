@@ -143,8 +143,8 @@
 					"isSequential": true,
 					"activities": [
 						{
-							"name": "api to json",
-							"description": "api 결과  json  파일생",
+							"name": "pg copy",
+							"description": "pg copy",
 							"type": "Copy",
 							"dependsOn": [
 								{
@@ -246,7 +246,7 @@
 							"type": "SetVariable",
 							"dependsOn": [
 								{
-									"activity": "api to json",
+									"activity": "pg copy",
 									"dependencyConditions": [
 										"Succeeded"
 									]
@@ -260,9 +260,119 @@
 							"typeProperties": {
 								"variableName": "rtn_cnt",
 								"value": {
-									"value": "@activity('api to json').output.rowsCopied",
+									"value": "@activity('pg copy').output.rowsCopied",
 									"type": "Expression"
 								}
+							}
+						},
+						{
+							"name": "If Condition1",
+							"type": "IfCondition",
+							"dependsOn": [
+								{
+									"activity": "Set variable1",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"userProperties": [],
+							"typeProperties": {
+								"expression": {
+									"value": "@equals( variables('rtn_cnt'), 0)",
+									"type": "Expression"
+								},
+								"ifTrueActivities": [
+									{
+										"name": "reslut chk",
+										"description": "pg copy",
+										"type": "Copy",
+										"dependsOn": [],
+										"policy": {
+											"timeout": "0.12:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"source": {
+												"type": "JsonSource",
+												"additionalColumns": [
+													{
+														"name": "es_table_name",
+														"value": {
+															"value": "@item().es_table_name",
+															"type": "Expression"
+														}
+													}
+												],
+												"storeSettings": {
+													"type": "HttpReadSettings",
+													"requestMethod": "POST",
+													"additionalHeaders": {
+														"value": "tableNm : @{item().es_table_name}\nstartDt : @{variables('strdt')}\nendDt : @{variables('enddt')}\ndtType : all",
+														"type": "Expression"
+													},
+													"requestTimeout": ""
+												},
+												"formatSettings": {
+													"type": "JsonReadSettings"
+												}
+											},
+											"sink": {
+												"type": "AzurePostgreSQLSink",
+												"writeBatchSize": 1000000,
+												"writeBatchTimeout": "00:30:00",
+												"writeMethod": "CopyCommand"
+											},
+											"enableStaging": false,
+											"translator": {
+												"type": "TabularTranslator",
+												"mappings": [
+													{
+														"source": {
+															"path": "$['result']"
+														},
+														"sink": {
+															"name": "result",
+															"type": "Decimal"
+														}
+													},
+													{
+														"source": {
+															"path": "$['es_table_name']"
+														},
+														"sink": {
+															"name": "es_table_name",
+															"type": "String"
+														}
+													}
+												]
+											}
+										},
+										"inputs": [
+											{
+												"referenceName": "DTS_GODOMALL",
+												"type": "DatasetReference"
+											}
+										],
+										"outputs": [
+											{
+												"referenceName": "DTS_POSTGRESQL_SNK",
+												"type": "DatasetReference",
+												"parameters": {
+													"SinkSchema": "cd_ods",
+													"SinkTable": {
+														"value": "tb_jweshop_zero_cnt_chk",
+														"type": "Expression"
+													}
+												}
+											}
+										]
+									}
+								]
 							}
 						}
 					]
