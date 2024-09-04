@@ -1,0 +1,275 @@
+{
+	"name": "PIP_D_CD_GODOMALL_INC_copy1",
+	"properties": {
+		"description": "고도몰 증분",
+		"activities": [
+			{
+				"name": "set strdt",
+				"description": "당일자",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "strdt",
+					"value": {
+						"value": "@if(equals(pipeline().parameters.pip_strdt,null),formatDateTime(addDays(addHours(utcNow(), 9),-1),'yyyyMMdd'),pipeline().parameters.pip_strdt)",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "set enddt",
+				"description": "당일자",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "enddt",
+					"value": {
+						"value": "@if(equals(pipeline().parameters.pip_enddt,null),formatDateTime(addDays(addHours(utcNow(), 9),-1),'yyyyMMdd'),pipeline().parameters.pip_enddt)",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "truncate temp",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "set strdt",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "set enddt",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "select cd_ods.func_godomoall_truncate_temp() as rtn;",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					}
+				}
+			},
+			{
+				"name": "table_list",
+				"description": "정웝이샵 테이블과 적재되는 pg테이블 리스트 ( temp )",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "truncate temp",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "select b.pg_table_name, a.es_table_name, a.period::int as period\n  from cd_ods.tb_jweshop_table_master a\n      inner join ( select distinct pg_table_name, es_table_name \n                     from cd_ods.tb_jweshop_table_mapping_master                    \n                 ) b                \n                on \n                 ( a.es_table_name = b.es_table_name)\nwhere a.es_table_name = 'es_goods'              \n          ",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "table_list",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('table_list').output.value",
+						"type": "Expression"
+					},
+					"isSequential": true,
+					"activities": [
+						{
+							"name": "api to json",
+							"description": "api 결과  json  파일생",
+							"type": "Copy",
+							"dependsOn": [
+								{
+									"activity": "mapping_copy",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "JsonSource",
+									"storeSettings": {
+										"type": "HttpReadSettings",
+										"requestMethod": "POST",
+										"additionalHeaders": {
+											"value": "tableNm : @{item().es_table_name}\nstartDt : @{variables('strdt')}\nendDt : @{variables('enddt')}\ndtType : all",
+											"type": "Expression"
+										},
+										"requestTimeout": ""
+									},
+									"formatSettings": {
+										"type": "JsonReadSettings"
+									}
+								},
+								"sink": {
+									"type": "AzurePostgreSQLSink",
+									"writeBatchSize": 1000000,
+									"writeBatchTimeout": "00:30:00",
+									"writeMethod": "CopyCommand"
+								},
+								"enableStaging": false
+							},
+							"inputs": [
+								{
+									"referenceName": "DTS_GODOMALL",
+									"type": "DatasetReference"
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "DTS_POSTGRESQL_SNK",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": "cd_ods",
+										"SinkTable": {
+											"value": "@item().pg_table_name",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						},
+						{
+							"name": "mapping_copy",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzurePostgreSqlSource",
+									"query": {
+										"value": "select string_agg('{  \"source\": { \"path\": \"['''||a.es_column_name||''']\" }, \"sink\": {  \"name\": \"'||a.pg_column_name||'\", \"type\": \"'||a.objtype||'\" } }' ,',') as json\n   from (\n\t\t  select a.es_column_name , a.pg_column_name , case when b.udt_name = 'numeric' then 'Decimal'\n\t\t                                                   else  'String'\n\t\t                                                end as objtype                                                                         \n\t\t    from cd_ods.tb_jweshop_table_mapping_master as a inner join information_schema.columns b\n\t\t                                              on (\n\t\t                                                     a.pg_table_name||'_temp' = b.table_name\n\t\t                                                 and a.pg_column_name = b.column_name \n\t\t                                                 and b.table_schema ='cd_ods'\n\t\t                                                 )       \n\t\t   where a.pg_table_name ='@{item().pg_table_name}'\n\t\t) a\n",
+										"type": "Expression"
+									},
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "DTS_POSTGRESQL_SNK",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": "1",
+										"SinkTable": "1"
+									}
+								}
+							}
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"AdlsDirectory": {
+				"type": "string",
+				"defaultValue": "/고객/내부/고도몰/temp"
+			},
+			"pip_strdt": {
+				"type": "string"
+			},
+			"pip_enddt": {
+				"type": "string"
+			}
+		},
+		"variables": {
+			"strdt": {
+				"type": "String"
+			},
+			"pip_strdt": {
+				"type": "String"
+			},
+			"pip_enddt": {
+				"type": "String"
+			},
+			"enddt": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "고객/내부/고도몰"
+		},
+		"annotations": []
+	}
+}
