@@ -7,7 +7,7 @@
 				"type": "Copy",
 				"dependsOn": [
 					{
-						"activity": "Copy data1_copy1",
+						"activity": "mapping",
 						"dependencyConditions": [
 							"Succeeded"
 						]
@@ -34,17 +34,16 @@
 						}
 					},
 					"sink": {
-						"type": "DelimitedTextSink",
-						"storeSettings": {
-							"type": "AzureBlobFSWriteSettings"
-						},
-						"formatSettings": {
-							"type": "DelimitedTextWriteSettings",
-							"quoteAllText": true,
-							"fileExtension": ".txt"
-						}
+						"type": "AzurePostgreSQLSink",
+						"writeBatchSize": 1000000,
+						"writeBatchTimeout": "00:30:00",
+						"writeMethod": "CopyCommand"
 					},
-					"enableStaging": false
+					"enableStaging": false,
+					"translator": {
+						"value": "@json(concat('{\n\"type\": \"TabularTranslator\",\n\"mappings\": ['\n     ,activity('mapping').output.firstRow.json,'\n],\"collectionReference\": \"$[''data'']\",\"mapComplexValuesToString\": true}\n'))",
+						"type": "Expression"
+					}
 				},
 				"inputs": [
 					{
@@ -58,18 +57,18 @@
 				],
 				"outputs": [
 					{
-						"referenceName": "DTS_ADLS_SNK",
+						"referenceName": "DTS_POSTGRESQL_SNK",
 						"type": "DatasetReference",
 						"parameters": {
-							"AdlsDirectory": "고객/내부/고도몰",
-							"FileName": "es_orderDelivery(2023.04.17~2023.04.22)_1.csv"
+							"SinkSchema": "cd_ods",
+							"SinkTable": "tb_jweshop_es_orderDelivery_temp_upload"
 						}
 					}
 				]
 			},
 			{
-				"name": "Copy data1_copy1",
-				"type": "Copy",
+				"name": "mapping",
+				"type": "Lookup",
 				"dependsOn": [],
 				"policy": {
 					"timeout": "0.12:00:00",
@@ -81,43 +80,22 @@
 				"userProperties": [],
 				"typeProperties": {
 					"source": {
-						"type": "BinarySource",
-						"storeSettings": {
-							"type": "AzureBlobFSReadSettings",
-							"recursive": true
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "select string_agg('{  \"source\": { \"path\": \"['''||a.es_column_name||''']\" }, \"sink\": {  \"name\": \"'||a.pg_column_name||'\", \"type\": \"'||a.objtype||'\" } }' ,',') as json\n   from (\n\t\t  select a.es_column_name , a.pg_column_name , case when b.udt_name = 'numeric' then 'Decimal'\n\t\t                                                   else  'String'\n\t\t                                                end as objtype                                                                         \n\t\t    from cd_ods.tb_jweshop_table_mapping_master as a inner join information_schema.columns b\n\t\t                                              on (\n\t\t                                                     a.pg_table_name||'_temp' = b.table_name\n\t\t                                                 and a.pg_column_name = b.column_name \n\t\t                                                 and b.table_schema ='cd_ods'\n\t\t                                                 )       \n\t\t   where a.es_table_name ='es_orderDelivery'\n\t\t) a\n",
+							"type": "Expression"
 						},
-						"formatSettings": {
-							"type": "BinaryReadSettings"
-						}
+						"partitionOption": "None"
 					},
-					"sink": {
-						"type": "BinarySink",
-						"storeSettings": {
-							"type": "AzureBlobFSWriteSettings"
-						}
-					},
-					"enableStaging": false
-				},
-				"inputs": [
-					{
-						"referenceName": "DTS_ADLS_SNK_BINARYGz_P01",
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK",
 						"type": "DatasetReference",
 						"parameters": {
-							"AdlsDirectory": "고객/내부/고도몰",
-							"FileName": "es_orderDelivery(2023.04.17~2023.04.22)_1.txt"
+							"SinkSchema": "1",
+							"SinkTable": "1"
 						}
 					}
-				],
-				"outputs": [
-					{
-						"referenceName": "DTS_ADLS_SNK_BINARYGz_P01",
-						"type": "DatasetReference",
-						"parameters": {
-							"AdlsDirectory": "고객/내부/고도몰",
-							"FileName": "es_orderDelivery(2023.04.17~2023.04.22)_1.json"
-						}
-					}
-				]
+				}
 			}
 		],
 		"parameters": {
