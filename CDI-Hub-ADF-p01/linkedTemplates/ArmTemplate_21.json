@@ -1586,13 +1586,7 @@
 						"type": "Lookup",
 						"dependsOn": [
 							{
-								"activity": "set strdt",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							},
-							{
-								"activity": "set enddt",
+								"activity": "truncate temp",
 								"dependencyConditions": [
 									"Succeeded"
 								]
@@ -1610,7 +1604,7 @@
 							"source": {
 								"type": "AzurePostgreSqlSource",
 								"query": {
-									"value": "select distinct pg_table_name as  pg_table_name      \n      ,es_table_name      \n  from cd_ods.tb_jweshop_table_mapping_master\n where pg_table_name  not in \n (\n 'tb_jweshop_es_goodscategorystatistics'\n,'tb_jweshop_es_member'\n,'tb_jweshop_es_membercoupon'\n,'tb_jweshop_es_membermileage'\n,'tb_jweshop_es_memberordergoodscountlog'\n )  \n",
+									"value": "select distinct pg_table_name as  pg_table_name      \n      ,es_table_name      \n  from cd_ods.tb_jweshop_table_mapping_master",
 									"type": "Expression"
 								},
 								"partitionOption": "None"
@@ -1946,6 +1940,89 @@
 							"value": {
 								"value": "@if(equals(pipeline().parameters.pip_enddt,null),formatDateTime(addDays(addHours(utcNow(), 9),-1),'yyyyMMdd'),pipeline().parameters.pip_enddt)",
 								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "call func_godomoall_upsert",
+						"description": "운영테이블 적재 함수 호출",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "ForEach1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "select cd_ods.func_godomoall_upsert() as rtn; ",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							}
+						}
+					},
+					{
+						"name": "truncate temp",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "set strdt",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "set enddt",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "select cd_ods.func_godomoall_truncate_temp() as rtn;",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
 							}
 						}
 					}
@@ -2781,7 +2858,7 @@
 			"dependsOn": []
 		},
 		{
-			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_GODOMALL_IN_copy1')]",
+			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_GODOMALL_IN_SUGI')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
 			"properties": {
@@ -2800,7 +2877,7 @@
 						"typeProperties": {
 							"variableName": "strdt",
 							"value": {
-								"value": "@formatDateTime(addDays(addHours(utcNow(), 9),int(pipeline().parameters.pip_strdt)),'yyyyMMdd')",
+								"value": "@if(equals(pipeline().parameters.pip_strdt,null),formatDateTime(addDays(addHours(utcNow(), 9),-10),'yyyyMMdd'),pipeline().parameters.pip_strdt)",
 								"type": "Expression"
 							}
 						}
@@ -2818,7 +2895,7 @@
 						"typeProperties": {
 							"variableName": "enddt",
 							"value": {
-								"value": "@formatDateTime(addDays(addHours(utcNow(), 9),int(pipeline().parameters.pip_enddt)),'yyyyMMdd')",
+								"value": "@if(equals(pipeline().parameters.pip_enddt,null),formatDateTime(addDays(addHours(utcNow(), 9),0),'yyyyMMdd'),pipeline().parameters.pip_enddt)",
 								"type": "Expression"
 							}
 						}
@@ -2853,7 +2930,7 @@
 							"source": {
 								"type": "AzurePostgreSqlSource",
 								"query": {
-									"value": "select b.pg_table_name, a.es_table_name, a.period::int as period\n  from cd_ods.tb_jweshop_table_master a\n      inner join ( select distinct pg_table_name, es_table_name \n                     from cd_ods.tb_jweshop_table_mapping_master                    \n                 ) b                \n                on \n                 ( a.es_table_name = b.es_table_name)  \nwhere a.es_table_name ='es_order'                          \n          ",
+									"value": "select b.pg_table_name, a.es_table_name, a.period::int as period\n  from cd_ods.tb_jweshop_table_master a\n      inner join ( select distinct pg_table_name, es_table_name \n                     from cd_ods.tb_jweshop_table_mapping_master                    \n                 ) b                \n                on \n                 ( a.es_table_name = b.es_table_name)  \nwhere a.es_table_name ='@{pipeline().parameters.pip_estable}'                          \n          ",
 									"type": "Expression"
 								},
 								"partitionOption": "None"
@@ -2867,38 +2944,6 @@
 								}
 							},
 							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "call func_godomoall_upsert",
-						"description": "운영테이블 적재 함수 호출",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "select cd_ods.func_godomoall_upsert() as rtn; ",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							}
 						}
 					},
 					{
@@ -2919,11 +2964,10 @@
 								"type": "Expression"
 							},
 							"isSequential": false,
-							"batchCount": 5,
+							"batchCount": 7,
 							"activities": [
 								{
-									"name": "pg copy",
-									"description": "pg copy",
+									"name": "Copy data1",
 									"type": "Copy",
 									"dependsOn": [
 										{
@@ -2934,7 +2978,7 @@
 										}
 									],
 									"policy": {
-										"timeout": "",
+										"timeout": "0.0:01:00",
 										"retry": 0,
 										"retryIntervalInSeconds": 30,
 										"secureOutput": false,
@@ -3020,6 +3064,171 @@
 											}
 										}
 									}
+								},
+								{
+									"name": "Set variable1",
+									"type": "SetVariable",
+									"dependsOn": [
+										{
+											"activity": "Copy data1",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "rtn_cnt",
+										"value": {
+											"value": "@activity('Copy data1').output.rowsCopied",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "If Condition1",
+									"type": "IfCondition",
+									"dependsOn": [
+										{
+											"activity": "Set variable1",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"userProperties": [],
+									"typeProperties": {
+										"expression": {
+											"value": "@equals( variables('rtn_cnt'), 0)",
+											"type": "Expression"
+										},
+										"ifTrueActivities": [
+											{
+												"name": "reslut chk",
+												"description": "pg copy",
+												"type": "Copy",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "0.12:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "JsonSource",
+														"additionalColumns": [
+															{
+																"name": "es_table_name",
+																"value": {
+																	"value": "@item().es_table_name",
+																	"type": "Expression"
+																}
+															},
+															{
+																"name": "strdt",
+																"value": {
+																	"value": "@variables('strdt')",
+																	"type": "Expression"
+																}
+															},
+															{
+																"name": "enddt",
+																"value": {
+																	"value": "@variables('enddt')",
+																	"type": "Expression"
+																}
+															}
+														],
+														"storeSettings": {
+															"type": "HttpReadSettings",
+															"requestMethod": "POST",
+															"additionalHeaders": {
+																"value": "tableNm : @{item().es_table_name}\nstartDt : @{variables('strdt')}\nendDt : @{variables('enddt')}\ndtType : all",
+																"type": "Expression"
+															},
+															"requestTimeout": ""
+														},
+														"formatSettings": {
+															"type": "JsonReadSettings"
+														}
+													},
+													"sink": {
+														"type": "AzurePostgreSQLSink",
+														"writeBatchSize": 1000000,
+														"writeBatchTimeout": "00:30:00",
+														"writeMethod": "CopyCommand"
+													},
+													"enableStaging": false,
+													"translator": {
+														"type": "TabularTranslator",
+														"mappings": [
+															{
+																"source": {
+																	"path": "$['result']"
+																},
+																"sink": {
+																	"name": "result",
+																	"type": "Decimal"
+																}
+															},
+															{
+																"source": {
+																	"path": "$['es_table_name']"
+																},
+																"sink": {
+																	"name": "es_table_name",
+																	"type": "String"
+																}
+															},
+															{
+																"source": {
+																	"path": "$['strdt']"
+																},
+																"sink": {
+																	"name": "strdt"
+																}
+															},
+															{
+																"source": {
+																	"path": "$['enddt']"
+																},
+																"sink": {
+																	"name": "enddt"
+																}
+															}
+														]
+													}
+												},
+												"inputs": [
+													{
+														"referenceName": "DTS_GODOMALL",
+														"type": "DatasetReference",
+														"parameters": {}
+													}
+												],
+												"outputs": [
+													{
+														"referenceName": "DTS_POSTGRESQL_SNK",
+														"type": "DatasetReference",
+														"parameters": {
+															"SinkSchema": "cd_ods",
+															"SinkTable": {
+																"value": "tb_jweshop_zero_cnt_chk",
+																"type": "Expression"
+															}
+														}
+													}
+												]
+											}
+										]
+									}
 								}
 							]
 						}
@@ -3033,6 +3242,9 @@
 						"type": "string"
 					},
 					"pip_enddt": {
+						"type": "string"
+					},
+					"pip_estable": {
 						"type": "string"
 					}
 				},
