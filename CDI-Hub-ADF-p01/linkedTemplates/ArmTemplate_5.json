@@ -7,10 +7,6 @@
 			"metadata": "Data Factory 이름",
 			"defaultValue": "CDI-Hub-ADF-p01"
 		},
-		"LKS_PG_P01_connectionString": {
-			"type": "secureString",
-			"metadata": "'LKS_PG_P01'의 'connectionString'에 대한 보안 문자열"
-		},
 		"LKS_RSN_P01_password": {
 			"type": "secureString",
 			"metadata": "'LKS_RSN_P01'의 'password'에 대한 보안 문자열"
@@ -104,23 +100,6 @@
 		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
 	},
 	"resources": [
-		{
-			"name": "[concat(parameters('factoryName'), '/LKS_PG_P01')]",
-			"type": "Microsoft.DataFactory/factories/linkedServices",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"annotations": [],
-				"type": "AzurePostgreSql",
-				"typeProperties": {
-					"connectionString": "[parameters('LKS_PG_P01_connectionString')]"
-				},
-				"connectVia": {
-					"referenceName": "IR-SHIR-P01",
-					"type": "IntegrationRuntimeReference"
-				}
-			},
-			"dependsOn": []
-		},
 		{
 			"name": "[concat(parameters('factoryName'), '/LKS_RSN_P01')]",
 			"type": "Microsoft.DataFactory/factories/linkedServices",
@@ -315,6 +294,126 @@
 					"referenceName": "IR-SHIR-P01",
 					"type": "IntegrationRuntimeReference"
 				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_CUSTOMER_SRM_NEWS_INC')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "set date",
+						"description": "당일자",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "date",
+							"value": {
+								"value": "@if(equals(pipeline().parameters.pip_date,null),formatDateTime(addDays(addHours(utcNow(), 9),-1),'yyyyMMdd'),pipeline().parameters.pip_date)",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "end date",
+						"description": "당일자",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "date2",
+							"value": {
+								"value": "@if(equals(pipeline().parameters.pip_date2,null),formatDateTime(addHours(utcNow(), 9),'yyyyMMdd'),pipeline().parameters.pip_date2)",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "select_keyword",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "set date",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "end date",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "select a.gubun   \n      ,a.reason \n      ,a.keyword\n      ,string_agg(a.inculde_keyword,',') as inculde_keyword\n      ,a.exculde_keyword \n      ,string_agg(a.inculde_keyword,'||') as api_inculde_keyword\n      ,replace(a.exculde_keyword ,',','||') as api_exculde_keyword\n  from (\n\t\tselect gubun   \n\t\t      ,reason \n\t\t      ,keyword\t\t    \n\t\t      ,exculde_keyword \n\t\t      ,case when regexp_match( inculde_keyword,',') is not null then '('||replace(inculde_keyword,',','&&')||')'\n\t\t            else inculde_keyword\n\t\t        end inculde_keyword         \n\t\t  from cd_ods.tb_srm_news_keyword\n       ) a \n where a.keyword = '가뭄'     \ngroup by  a.gubun   \n      ,a.reason \n      ,a.keyword  \n       ,a.exculde_keyword \norder by a.gubun, a.reason, a.keyword\n       ",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK_P02",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SinkSckema": {
+						"type": "string"
+					},
+					"SinkTable": {
+						"type": "string"
+					},
+					"pip_date": {
+						"type": "string"
+					},
+					"pip_date2": {
+						"type": "string"
+					}
+				},
+				"variables": {
+					"date": {
+						"type": "String"
+					},
+					"date2": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "고객/외부/SRM NEWS"
+				},
+				"annotations": []
 			},
 			"dependsOn": []
 		},
