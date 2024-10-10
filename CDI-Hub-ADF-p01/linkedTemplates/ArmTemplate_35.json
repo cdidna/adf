@@ -13,6 +13,341 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_AT_PRICE_SALE_M2')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "수요기관정보조회",
+				"activities": [
+					{
+						"name": "whsal list",
+						"description": "도매시장 리스트",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 5,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "select t.codeid, a.date\n   from cd_ods.tb_at_whsal_master_t as t\n       ,(\n        select to_char(now() - generate_series(1,3750) *interval '1 days','yyyymmdd') as  date\n       ) a\nwhere  a.date between '20181001' AND '20181231'   \norder by a.date;",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK_P02",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "whsal list",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('whsal list').output.value",
+								"type": "Expression"
+							},
+							"isSequential": false,
+							"batchCount": 20,
+							"activities": [
+								{
+									"name": "Execute Pipeline1",
+									"type": "ExecutePipeline",
+									"dependsOn": [],
+									"policy": {
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"pipeline": {
+											"referenceName": "PIP_API_INDUSTRY_AT_PRICE_SALE_SUB",
+											"type": "PipelineReference"
+										},
+										"waitOnCompletion": true,
+										"parameters": {
+											"SaleDate": {
+												"value": "@item().date",
+												"type": "Expression"
+											},
+											"WhsalCd": {
+												"value": "@item().codeid",
+												"type": "Expression"
+											}
+										}
+									}
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"pip_saledate": {
+						"type": "string"
+					},
+					"ApiKey": {
+						"type": "string",
+						"defaultValue": "EDCC40BADEB8467BB2CD68B11A369A83"
+					},
+					"sdate": {
+						"type": "string"
+					},
+					"edate": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "Industry/외부/도매시장"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-01-16T07:55:39Z"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_D2B_BID_ITEM_DETAIL_M')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "국내 품목명세서_멀",
+				"activities": [
+					{
+						"name": "Lookup1",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "SELECT\ndemandyear , dcsno , orntcode \nFROM \n(\nSELECT COALESCE (b.dcsno, 'xxxxx') AS b_dcsno \n     , a.dcsno AS dcsno\n     , a.orntcode  AS orntcode\n     , a.demandyear  AS demandyear\nFROM cd_ods.tb_d2b_cmpt_bid_notice_list a\n  LEFT OUTER join   cd_ods.tb_d2b_bid_item_detail b\non a.dcsno  = b.dcsno\n  AND a.demandyear = b.demandyear\n  AND a.orntcode = b.orntcode\n) a\nWHERE a.b_dcsno = 'xxxxx'\n;",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup1').output.value",
+								"type": "Expression"
+							},
+							"isSequential": false,
+							"batchCount": 50,
+							"activities": [
+								{
+									"name": "Execute Pipeline1",
+									"type": "ExecutePipeline",
+									"dependsOn": [],
+									"policy": {
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"pipeline": {
+											"referenceName": "PIP_API_INDUSTRY_D2B_BID_ITEM_DETAIL",
+											"type": "PipelineReference"
+										},
+										"waitOnCompletion": true,
+										"parameters": {
+											"pipdemandyear": {
+												"value": "@item().demandYear",
+												"type": "Expression"
+											},
+											"pipdcsno": {
+												"value": "@item().dcsNo",
+												"type": "Expression"
+											},
+											"piporntcode": {
+												"value": "@item().orntCode",
+												"type": "Expression"
+											}
+										}
+									}
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"variables": {
+					"list_total_count": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "Industry/외부/방위사업청"
+				},
+				"annotations": []
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_D2B_CMPT_BID_NOTICE_DETAIL_M')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "국내 경쟁입찰결과 상세",
+				"activities": [
+					{
+						"name": "Lookup1",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "SELECT demandyear , dcsno , orntcode ,  pblancNo, pblancOdr\nFROM \n(\nSELECT COALESCE (b.dcsno, 'xxxxx') AS b_dcsno \n     , a.dcsno AS dcsno\n     , a.orntcode  AS orntcode\n     , a.pblancno AS pblancno\n     , a.pblancOdr AS pblancOdr\n     , a.demandyear  AS demandyear\nFROM cd_ods.tb_d2b_cmpt_bid_notice_list a\n  LEFT OUTER join   cd_ods.tb_d2b_cmpt_bid_notice_detail b\non a.dcsno  = b.dcsno\n  AND a.pblancno = b.pblancno\n  AND a.pblancOdr = b.pblancOdr\n  AND a.pblancdate  = b.pblancdate \n) a\nWHERE a.b_dcsno = 'xxxxx'",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup1').output.value",
+								"type": "Expression"
+							},
+							"isSequential": false,
+							"batchCount": 50,
+							"activities": [
+								{
+									"name": "Execute Pipeline1",
+									"type": "ExecutePipeline",
+									"dependsOn": [],
+									"policy": {
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"pipeline": {
+											"referenceName": "PIP_API_INDUSTRY_D2B_CMPT_BID_NOTICE_DETAIL",
+											"type": "PipelineReference"
+										},
+										"waitOnCompletion": true,
+										"parameters": {
+											"pipdemandyear": {
+												"value": "@item().demandYear",
+												"type": "Expression"
+											},
+											"pipdcsno": {
+												"value": "@item().dcsNo",
+												"type": "Expression"
+											},
+											"piporntcode": {
+												"value": "@item().orntCode",
+												"type": "Expression"
+											},
+											"pippblancno": {
+												"value": "@item().pblancNo",
+												"type": "Expression"
+											},
+											"pippblancodr": {
+												"value": "@item().pblancOdr",
+												"type": "Expression"
+											}
+										}
+									}
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"folder": {
+					"name": "Industry/외부/방위사업청"
+				},
+				"annotations": []
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_D2B_CMPT_BID_NOTICE_INC')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -4412,406 +4747,6 @@
 					"name": "Industry/외부/조달청"
 				},
 				"annotations": []
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_GODOMALL_FULL')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "Lookup1",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "\n select min(aa.work_date) as str_date\n     \t,max(aa.work_date) as end_date\n\tfrom (   \n\t\tselect to_char(dt,'yyyymmdd') as work_date\n\t\t      ,row_number() over (order by dt) / (3)::int as rnum\n\t\t  from (\n\t\t        select  date('2000-11-27') + cast ( generate_series(1,10000)|| 'day' as  interval )  as dt\n\t\t       ) a\n\t\t where a.dt between  date('2024-09-06') and date('2024-09-25')       \n\t) aa\n group by aa.rnum\t\n ",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup1').output.value",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"activities": [
-								{
-									"name": "Execute Pipeline1",
-									"type": "ExecutePipeline",
-									"dependsOn": [],
-									"policy": {
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"pipeline": {
-											"referenceName": "PIP_D_CD_GODOMALL_FULL_SUB",
-											"type": "PipelineReference"
-										},
-										"waitOnCompletion": true,
-										"parameters": {
-											"pip_strdt": {
-												"value": "@item().str_date",
-												"type": "Expression"
-											},
-											"pip_enddt": {
-												"value": "@item().end_date",
-												"type": "Expression"
-											}
-										}
-									}
-								}
-							]
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"folder": {
-					"name": "고객/내부/고도몰"
-				},
-				"annotations": []
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_GODOMALL_INIT')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "Lookup1",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "select min(a.work_date) as str_date\n\t,max(a.work_date) as end_date\nfrom (\n\tselect to_char(base_date,'yyyymmdd') as work_date\n\t\t\t,row_number() over (order by base_date) / (4)::int as rnum\n\t\tfrom cd_ods.aps_sdc_pw_mst a\n\t\t\t,(\n\t\t\t\tselect distinct period\n\t\t\t\tfrom cd_ods.tb_jweshop_table_master                       \n\t\t\t) b\n\t\twhere 1=1\n\t\t--and base_date between date('2022-04-17') and date('2024-08-12')\n\t\tand base_date between date('2024-08-29') and date('2024-09-01')\n\t\tand b.period = @{pipeline().parameters.period}\n\t) a\t \nwhere  1=1  -- \ngroup by a.rnum\norder by a.rnum\n",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup1').output.value",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"activities": [
-								{
-									"name": "Execute Pipeline1",
-									"type": "ExecutePipeline",
-									"dependsOn": [],
-									"policy": {
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"pipeline": {
-											"referenceName": "PIP_D_CD_GODOMALL_INIT_SUB",
-											"type": "PipelineReference"
-										},
-										"waitOnCompletion": true,
-										"parameters": {
-											"pip_strdt": {
-												"value": "@item().str_date",
-												"type": "Expression"
-											},
-											"pip_enddt": {
-												"value": "@item().end_date",
-												"type": "Expression"
-											},
-											"period": {
-												"value": "@pipeline().parameters.period",
-												"type": "Expression"
-											}
-										}
-									}
-								}
-							]
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"period": {
-						"type": "string",
-						"defaultValue": "7"
-					}
-				},
-				"folder": {
-					"name": "고객/내부/고도몰"
-				},
-				"annotations": []
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_M_CD_KODATA_ALL_FULL')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "- 디렉터리 하위 구조 그대로 적재",
-				"activities": [
-					{
-						"name": "PIP_M_CD_KODATA_INC_PG_03_FULL",
-						"type": "ExecutePipeline",
-						"dependsOn": [
-							{
-								"activity": "PIP_M_CD_KODATA_INC_PG_63_FULL",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"pipeline": {
-								"referenceName": "PIP_M_CD_KODATA_PG_03_FULL",
-								"type": "PipelineReference"
-							},
-							"waitOnCompletion": true,
-							"parameters": {}
-						}
-					},
-					{
-						"name": "PIP_M_CD_KODATA_INC_PG_63_FULL",
-						"type": "ExecutePipeline",
-						"dependsOn": [],
-						"policy": {
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"pipeline": {
-								"referenceName": "PIP_M_CD_KODATA_PG_63_FULL",
-								"type": "PipelineReference"
-							},
-							"waitOnCompletion": true,
-							"parameters": {}
-						}
-					},
-					{
-						"name": "PIP_M_CD_KODATA_INC_PG_41_FULL",
-						"type": "ExecutePipeline",
-						"dependsOn": [
-							{
-								"activity": "PIP_M_CD_KODATA_INC_PG_26_FULL",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"pipeline": {
-								"referenceName": "PIP_M_CD_KODATA_PG_41_FULL",
-								"type": "PipelineReference"
-							},
-							"waitOnCompletion": true,
-							"parameters": {}
-						}
-					},
-					{
-						"name": "PIP_M_CD_KODATA_INC_PG_26_FULL",
-						"type": "ExecutePipeline",
-						"dependsOn": [
-							{
-								"activity": "PIP_M_CD_KODATA_INC_PG_16_FULL",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"pipeline": {
-								"referenceName": "PIP_M_CD_KODATA_PG_26_FULL",
-								"type": "PipelineReference"
-							},
-							"waitOnCompletion": true,
-							"parameters": {}
-						}
-					},
-					{
-						"name": "PIP_M_CD_KODATA_INC_PG_16_FULL",
-						"type": "ExecutePipeline",
-						"dependsOn": [],
-						"policy": {
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"pipeline": {
-								"referenceName": "PIP_M_CD_KODATA_PG_16_FULL",
-								"type": "PipelineReference"
-							},
-							"waitOnCompletion": true,
-							"parameters": {}
-						}
-					},
-					{
-						"name": "PIP_M_CD_KODATA_INC_PG_D1_FULL",
-						"type": "ExecutePipeline",
-						"dependsOn": [],
-						"policy": {
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"pipeline": {
-								"referenceName": "PIP_M_CD_KODATA_PG_D1_FULL",
-								"type": "PipelineReference"
-							},
-							"waitOnCompletion": true,
-							"parameters": {}
-						}
-					},
-					{
-						"name": "PIP_M_CD_KODATA_INC_PG_D4_FULL",
-						"type": "ExecutePipeline",
-						"dependsOn": [
-							{
-								"activity": "PIP_M_CD_KODATA_INC_PG_D1_FULL",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"pipeline": {
-								"referenceName": "PIP_M_CD_KODATA_PG_D4_FULL",
-								"type": "PipelineReference"
-							},
-							"waitOnCompletion": true,
-							"parameters": {}
-						}
-					},
-					{
-						"name": "PIP_M_CD_KODATA_INC_PG_D8_FULL",
-						"type": "ExecutePipeline",
-						"dependsOn": [
-							{
-								"activity": "PIP_M_CD_KODATA_INC_PG_D4_FULL",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"pipeline": {
-								"referenceName": "PIP_M_CD_KODATA_PG_D8_FULL",
-								"type": "PipelineReference"
-							},
-							"waitOnCompletion": true,
-							"parameters": {}
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"AdlsDirectory": {
-						"type": "string",
-						"defaultValue": "Industry/외부/한국평가데이터"
-					}
-				},
-				"folder": {
-					"name": "Industry/외부/한국평가데이터"
-				},
-				"annotations": [],
-				"lastPublishTime": "2023-01-30T09:48:22Z"
 			},
 			"dependsOn": []
 		}
