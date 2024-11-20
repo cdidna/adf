@@ -13,17 +13,17 @@
 	},
 	"resources": [
 		{
-			"name": "[concat(parameters('factoryName'), '/BATCH_ADF_D_IN_0920')]",
+			"name": "[concat(parameters('factoryName'), '/BATCH_API_IND_M_OUT_0600')]",
 			"type": "Microsoft.DataFactory/factories/triggers",
 			"apiVersion": "2018-06-01",
 			"properties": {
-				"description": "9시 20분 내부 ",
+				"description": "중소기업은행 환율정보 월배치",
 				"annotations": [],
 				"runtimeState": "Started",
 				"pipelines": [
 					{
 						"pipelineReference": {
-							"referenceName": "PIP_D_CD_ODS_SAP_TCURR",
+							"referenceName": "PIP_API_INDUSTRY_APIS_EXCHANGE_RATE_D",
 							"type": "PipelineReference"
 						},
 						"parameters": {}
@@ -32,20 +32,141 @@
 				"type": "ScheduleTrigger",
 				"typeProperties": {
 					"recurrence": {
-						"frequency": "Day",
+						"frequency": "Month",
 						"interval": 1,
-						"startTime": "2024-11-18T05:29:00",
+						"startTime": "2024-03-18T01:40:00",
 						"timeZone": "Korea Standard Time",
 						"schedule": {
 							"minutes": [
-								20
+								0
 							],
 							"hours": [
-								9
+								6
+							],
+							"monthDays": [
+								1,
+								2,
+								3,
+								4,
+								5,
+								6,
+								7
 							]
 						}
 					}
 				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_FSK_I1250_INC')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "수요기관정보조회",
+				"activities": [
+					{
+						"name": "sel_date",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "select to_char(base_date, 'YYYYMMDD') as date \nfrom cd_ods.aps_sdc_pw_mst \nwhere cyear  = '2022'\n;\n",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							}
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "sel_date",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('sel_date').output.value",
+								"type": "Expression"
+							},
+							"batchCount": 20,
+							"activities": [
+								{
+									"name": "PIP_API_INDUSTRY_FSK_I1250",
+									"type": "ExecutePipeline",
+									"dependsOn": [],
+									"policy": {
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"pipeline": {
+											"referenceName": "PIP_API_INDUSTRY_FSK_I1250",
+											"type": "PipelineReference"
+										},
+										"waitOnCompletion": true,
+										"parameters": {
+											"PipDate": {
+												"value": "@item().date",
+												"type": "Expression"
+											}
+										}
+									}
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SinkSchema": {
+						"type": "string",
+						"defaultValue": "cd_ods"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "tb_fsk_I1250"
+					}
+				},
+				"variables": {
+					"date": {
+						"type": "String"
+					},
+					"url": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "Industry/외부/식품의약품안전처"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-01-16T07:55:39Z"
 			},
 			"dependsOn": []
 		},
@@ -2389,50 +2510,6 @@
 							],
 							"hours": [
 								7
-							]
-						}
-					}
-				}
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/BATCH_ADF_D_IN_1200')]",
-			"type": "Microsoft.DataFactory/factories/triggers",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "12시 배치 ",
-				"annotations": [],
-				"runtimeState": "Started",
-				"pipelines": [
-					{
-						"pipelineReference": {
-							"referenceName": "API_IND_OUT_WEATHER_D",
-							"type": "PipelineReference"
-						},
-						"parameters": {}
-					},
-					{
-						"pipelineReference": {
-							"referenceName": "API_VIVE_OUT_NEWS_D",
-							"type": "PipelineReference"
-						},
-						"parameters": {}
-					}
-				],
-				"type": "ScheduleTrigger",
-				"typeProperties": {
-					"recurrence": {
-						"frequency": "Day",
-						"interval": 1,
-						"startTime": "2024-03-12T04:30:00",
-						"timeZone": "Korea Standard Time",
-						"schedule": {
-							"minutes": [
-								0
-							],
-							"hours": [
-								12
 							]
 						}
 					}
