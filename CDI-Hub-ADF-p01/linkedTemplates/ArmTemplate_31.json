@@ -13,6 +13,357 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_NIELSEN_TO_PG_OFFLINE_M_copy1')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "- 닐슨 SFTP ",
+				"activities": [
+					{
+						"name": "Set yyyymm",
+						"description": "수행일 기준 전월 구하기\n포멧 : yyyymm",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "yyyymm",
+							"value": {
+								"value": "@if(equals(pipeline().parameters.pip_yyyymm,null), formatDateTime(addDays(startOfMonth(addHours(utcNow(), 9)),-34),'yyyyMM'),pipeline().parameters.pip_yyyymm)",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "pg_tb_nielsen_product_",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "dynamic mapping",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"additionalColumns": [
+									{
+										"name": "month",
+										"value": {
+											"value": "@variables('yyyymm')",
+											"type": "Expression"
+										}
+									},
+									{
+										"name": "data_type",
+										"value": {
+											"value": "@pipeline().parameters.pip_fileNm",
+											"type": "Expression"
+										}
+									}
+								],
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": false,
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "AzurePostgreSQLSink",
+								"writeBatchSize": 1000000,
+								"writeBatchTimeout": "00:30:00",
+								"preCopyScript": {
+									"value": "delete from cd_ods.tb_nielsen_offline_all_prod_temp",
+									"type": "Expression"
+								},
+								"writeMethod": "CopyCommand"
+							},
+							"enableStaging": false,
+							"translator": {
+								"value": "@json(concat('{\n\"type\": \"TabularTranslator\",\n\"mappings\": [\n    { \"source\": {  \"name\": \"data_type\",   \"type\": \"String\"  }, \"sink\": {  \"name\": \"data_type\",  \"type\": \"String\", \"physicalType\": \"character varying\"  } },\n    { \"source\": {  \"name\": \"product_id\",   \"type\": \"String\"  }, \"sink\": {  \"name\": \"product_id\",  \"type\": \"String\", \"physicalType\": \"character varying\"  } },'\n  ,activity('dynamic mapping').output.firstRow.json,'\n] }\n'))",
+								"type": "Expression"
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": {
+										"value": "@concat(pipeline().parameters.AdlsDirectory,'/',variables('yyyymm'))",
+										"type": "Expression"
+									},
+									"FileName": {
+										"value": "@concat('KR_DAESANG_',pipeline().parameters.pip_fileNm,'_product_dim_',pipeline().parameters.pip_fileNumber,'.txt')",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "cd_ods",
+									"SinkTable": "tb_nielsen_offline_all_prod_temp"
+								}
+							}
+						]
+					},
+					{
+						"name": "dynamic mapping",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "pg_tb_nielsen_hier",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "select string_agg('{  \"source\": { \"name\": \"'||a.sour||'\", \"type\": \"String\" }, \"sink\": {  \"name\": \"'||a.sink||'\", \"type\": \"String\", \"physicalType\": \"character varying\" } }'\n              ,',') as json\n  from (\n\t     SELECT distinct column_name as sour\n\t\t      ,case when column_name like 'CSTM%' then 'category'\n\t\t            else lower(hierarchy_level_name)\n\t\t         end sink\n\t\t from  cd_ods.tb_nielsen_offline_all_hier_temp\n\t\t  union all \n\t\tselect 'hierarchy_number','hierarchy_number' union all\n\t\tselect 'hierarchy_level','hierarchy_level'   union all\n\t\tselect 'hierarchy_level_name','hierarchy_level_name' \t\n\t) a",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							}
+						}
+					},
+					{
+						"name": "pg_tb_nielsen_hier",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Set yyyymm",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"additionalColumns": [
+									{
+										"name": "data_type",
+										"value": {
+											"value": "@pipeline().parameters.pip_fileNm",
+											"type": "Expression"
+										}
+									}
+								],
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"recursive": true,
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "AzurePostgreSQLSink",
+								"writeBatchSize": 1000000,
+								"writeBatchTimeout": "00:30:00",
+								"preCopyScript": {
+									"value": "delete from cd_ods.tb_nielsen_offline_all_hier_temp",
+									"type": "Expression"
+								},
+								"writeMethod": "CopyCommand"
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"mappings": [
+									{
+										"source": {
+											"name": "data_type",
+											"type": "String"
+										},
+										"sink": {
+											"name": "data_type",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "column_name",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "column_name",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "dimension",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "dimension",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "hierarchy_number",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "hierarchy_number",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "hierarchy_level",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "hierarchy_level",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "hierarchy_level_name",
+											"type": "String",
+											"physicalType": "String"
+										},
+										"sink": {
+											"name": "hierarchy_level_name",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									}
+								],
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": {
+										"value": "@concat(pipeline().parameters.AdlsDirectory,'/',variables('yyyymm'))",
+										"type": "Expression"
+									},
+									"FileName": {
+										"value": "@concat('KR_DAESANG_',pipeline().parameters.pip_fileNm,'_hierarchies_ref_',pipeline().parameters.pip_fileNumber,'.txt')",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "cd_ods",
+									"SinkTable": "tb_nielsen_offline_all_hier_temp"
+								}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"AdlsDirectory": {
+						"type": "string",
+						"defaultValue": "매출(주문)/외부/유통사MS정보/닐슨_오프라인"
+					},
+					"pip_yyyymm": {
+						"type": "string"
+					},
+					"pip_fileNm": {
+						"type": "string"
+					},
+					"pip_fileNumber": {
+						"type": "string"
+					}
+				},
+				"variables": {
+					"yyyymm": {
+						"type": "String"
+					},
+					"minWeek": {
+						"type": "String"
+					},
+					"maxWeek": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "매출_주문/외부/닐슨"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-12-15T09:05:35Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_NIELSEN_TO_PG_ONLINE_M')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -3696,121 +4047,6 @@
 				},
 				"annotations": [],
 				"lastPublishTime": "2023-02-02T08:52:47Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_RSN_STORE_REVIEW_DATA_INC_TEST')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "Copy Yesterday data",
-						"type": "Copy",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "7.00:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "MySqlSource",
-								"query": {
-									"value": "@concat('SELECT srd_id,\n\tsd_reviewid,\n\tsite,\n\tsite_id,\n\treplace(replace(replace(srd_title,char(10), ''//LF//''), char(13),''//LF//''), ''\\\"'', ''＂'') as srd_title,\n    replace(replace(replace(replace(srd_content,char(10), ''//LF//''), char(13),''//LF//''), ''\\\"'', ''＂''), ''\\0'','''') as srd_content,\n\tsrd_writer,\n\tsrd_writetime,\n\tsrd_rate,\n\tsrd_crawl_time\n\tFROM ',\npipeline().parameters.SourceTable,\n ' WHERE srd_content like ''병이 네모나서%''')",
-									"type": "Expression"
-								}
-							},
-							"sink": {
-								"type": "DelimitedTextSink",
-								"storeSettings": {
-									"type": "AzureBlobFSWriteSettings"
-								},
-								"formatSettings": {
-									"type": "DelimitedTextWriteSettings",
-									"quoteAllText": true,
-									"fileExtension": ".csv"
-								}
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"typeConversion": true,
-								"typeConversionSettings": {
-									"allowDataTruncation": true,
-									"treatBooleanAsNumber": false
-								}
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_RSN_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceTable": {
-										"value": "@pipeline().parameters.SourceTable",
-										"type": "Expression"
-									}
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_ADLS_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"AdlsDirectory": {
-										"value": "@pipeline().parameters.AdlsDirectory",
-										"type": "Expression"
-									},
-									"FileName": {
-										"value": "D_RSN_온라인몰_리뷰정보(중복제거)_00000000.csv",
-										"type": "Expression"
-									}
-								}
-							}
-						]
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SourceTable": {
-						"type": "string",
-						"defaultValue": "STORE_REVIEW_DATA"
-					},
-					"AdlsDirectory": {
-						"type": "string",
-						"defaultValue": "고객/외부/온라인몰정보/RSN_온라인몰_리뷰정보(중복제거)"
-					},
-					"IncCol": {
-						"type": "string",
-						"defaultValue": "srd_crawl_time"
-					}
-				},
-				"variables": {
-					"prev_start": {
-						"type": "String",
-						"defaultValue": "@startOfMonth(addToTime(addHours(utcNow(), 9), -1, 'Month'), 'yyyyMMdd')"
-					},
-					"prev_end": {
-						"type": "String",
-						"defaultValue": "@adddays(startOfMonth(addHours(utcNow(), 9)), -1, 'yyyyMMdd')"
-					},
-					"dd": {
-						"type": "Array"
-					}
-				},
-				"folder": {
-					"name": "고객/외부/온라인몰정보"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-12-15T08:49:47Z"
 			},
 			"dependsOn": []
 		}
