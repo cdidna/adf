@@ -7,6 +7,10 @@
 			"metadata": "Data Factory 이름",
 			"defaultValue": "CDI-Hub-ADF-p01"
 		},
+		"LKS_FTP_P01_password": {
+			"type": "secureString",
+			"metadata": "'LKS_FTP_P01'의 'password'에 대한 보안 문자열"
+		},
 		"LKS_ORA_P01_connectionString": {
 			"type": "secureString",
 			"metadata": "'LKS_ORA_P01'의 'connectionString'에 대한 보안 문자열"
@@ -38,6 +42,14 @@
 		"LKS_SFTP_P04_password": {
 			"type": "secureString",
 			"metadata": "'LKS_SFTP_P04'의 'password'에 대한 보안 문자열"
+		},
+		"LKS_FTP_P01_properties_typeProperties_host": {
+			"type": "string",
+			"defaultValue": "192.168.60.10"
+		},
+		"LKS_FTP_P01_properties_typeProperties_userName": {
+			"type": "string",
+			"defaultValue": "administrator"
 		},
 		"LKS_RSN_P01_properties_typeProperties_server": {
 			"type": "string",
@@ -108,6 +120,32 @@
 		"factoryId": "[concat('Microsoft.DataFactory/factories/', parameters('factoryName'))]"
 	},
 	"resources": [
+		{
+			"name": "[concat(parameters('factoryName'), '/LKS_FTP_P01')]",
+			"type": "Microsoft.DataFactory/factories/linkedServices",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"annotations": [],
+				"type": "FtpServer",
+				"typeProperties": {
+					"host": "[parameters('LKS_FTP_P01_properties_typeProperties_host')]",
+					"port": 21,
+					"enableSsl": false,
+					"enableServerCertificateValidation": false,
+					"authenticationType": "Basic",
+					"userName": "[parameters('LKS_FTP_P01_properties_typeProperties_userName')]",
+					"password": {
+						"type": "SecureString",
+						"value": "[parameters('LKS_FTP_P01_password')]"
+					}
+				},
+				"connectVia": {
+					"referenceName": "IR-SHIR-P01",
+					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": []
+		},
 		{
 			"name": "[concat(parameters('factoryName'), '/LKS_ORA_P01')]",
 			"type": "Microsoft.DataFactory/factories/linkedServices",
@@ -335,6 +373,70 @@
 				"connectVia": {
 					"referenceName": "IR-SHIR-P01",
 					"type": "IntegrationRuntimeReference"
+				}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DTS_NAVER_API')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"linkedServiceName": {
+					"referenceName": "HttpServer1_p13",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"params": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "Source"
+				},
+				"annotations": [],
+				"type": "Json",
+				"typeProperties": {
+					"location": {
+						"type": "HttpServerLocation",
+						"relativeUrl": {
+							"value": "@dataset().params",
+							"type": "Expression"
+						}
+					}
+				},
+				"schema": {}
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/DTS_NAVER_API_XML')]",
+			"type": "Microsoft.DataFactory/factories/datasets",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "HTTP_XML형식 REQ\n기상청 OpenAPI서비스 기준으로 생성\n분류 필요 시 추가생성 필요",
+				"linkedServiceName": {
+					"referenceName": "HttpServer1_p13",
+					"type": "LinkedServiceReference"
+				},
+				"parameters": {
+					"params": {
+						"type": "string"
+					}
+				},
+				"folder": {
+					"name": "Source"
+				},
+				"annotations": [],
+				"type": "Xml",
+				"typeProperties": {
+					"location": {
+						"type": "HttpServerLocation",
+						"relativeUrl": {
+							"value": "@dataset().params\n",
+							"type": "Expression"
+						}
+					}
 				}
 			},
 			"dependsOn": []
@@ -2652,766 +2754,6 @@
 				},
 				"folder": {
 					"name": "Industry/외부/관세청"
-				},
-				"annotations": [],
-				"lastPublishTime": "2023-01-16T07:55:39Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_APIS_NitemtradeList')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "수요기관정보조회",
-				"activities": [
-					{
-						"name": "Lookup1",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": "select a.statcd, b.strtYymm, b.endYymm\nfrom cd_ods.tb_apis_nationtrade_statcd_master_t a,\n (\nselect  to_char(now() - interval '1 month' * 12,'yyyymm') as strtYymm      \n        ,to_char(now() - interval '1 month' * 1,'yyyymm') as endYymm                                                                \n) b",
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK_P02",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": {
-										"value": "@pipeline().parameters.SinkSchema",
-										"type": "Expression"
-									},
-									"SinkTable": {
-										"value": "@pipeline().parameters.SinkTable",
-										"type": "Expression"
-									}
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup1').output.value",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"batchCount": 50,
-							"activities": [
-								{
-									"name": "Copy data1",
-									"type": "Copy",
-									"dependsOn": [],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "XmlSource",
-											"storeSettings": {
-												"type": "HttpReadSettings",
-												"requestMethod": "GET"
-											},
-											"formatSettings": {
-												"type": "XmlReadSettings",
-												"validationMode": "none",
-												"namespaces": true
-											}
-										},
-										"sink": {
-											"type": "AzurePostgreSQLSink",
-											"writeBatchSize": 1000000,
-											"writeBatchTimeout": "00:30:00",
-											"writeMethod": "CopyCommand"
-										},
-										"enableStaging": false,
-										"translator": {
-											"type": "TabularTranslator",
-											"mappings": [
-												{
-													"source": {
-														"path": "[['balPayments']"
-													},
-													"sink": {
-														"name": "balpayments",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['expDlr']"
-													},
-													"sink": {
-														"name": "expdlr",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['expWgt']"
-													},
-													"sink": {
-														"name": "expwgt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['hsCd']"
-													},
-													"sink": {
-														"name": "hscd",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['impDlr']"
-													},
-													"sink": {
-														"name": "impdlr",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['impWgt']"
-													},
-													"sink": {
-														"name": "impwgt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['statCd']"
-													},
-													"sink": {
-														"name": "statcd",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['statCdCntnKor1']"
-													},
-													"sink": {
-														"name": "statcdcntnkor1",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['statKor']"
-													},
-													"sink": {
-														"name": "statkor",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['year']"
-													},
-													"sink": {
-														"name": "year",
-														"type": "String"
-													}
-												}
-											],
-											"collectionReference": "$['response']['body']['items']['item']",
-											"mapComplexValuesToString": false
-										}
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_API_APIS_XML",
-											"type": "DatasetReference",
-											"parameters": {
-												"url": {
-													"value": "@concat('/1220000/nitemtrade/getNitemtradeList?serviceKey=rj5HeIJYh3E2HRvmEw3P3%2BeVDZoZj074w7IIt%2BpcAaujPSI9CTx0U88XSd6C9eWwkBMUncCaG4w%2FtYRT898jcw%3D%3D&hsSgn=2005991000&strtYymm=',item().strtYymm,'&endYymm=',item().endYymm,'&cntyCd=',item().statcd)",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_POSTGRESQL_SNK_P02",
-											"type": "DatasetReference",
-											"parameters": {
-												"SinkSchema": {
-													"value": "@pipeline().parameters.SinkSchema",
-													"type": "Expression"
-												},
-												"SinkTable": {
-													"value": "@pipeline().parameters.SinkTable",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								}
-							]
-						}
-					},
-					{
-						"name": "Lookup1_copy1",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "ForEach1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": "SELECT cd_ods.fn_apis_nitemtrade();",
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK_P02",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "tb_apis_nitemtrade_temp"
-					}
-				},
-				"variables": {
-					"date": {
-						"type": "String"
-					},
-					"url": {
-						"type": "String"
-					}
-				},
-				"folder": {
-					"name": "Industry/외부/관세청"
-				},
-				"annotations": [],
-				"lastPublishTime": "2023-01-16T07:55:39Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_APIS_RETRIEVE_TRIF_FXRTINFO')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "수요기관정보조회",
-				"activities": [
-					{
-						"name": "Lookup1",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": " WITH v_seq AS \n (\n \tselect   generate_series( '1', '5', 1  ) AS num \n )\n select  to_char(to_date(c.max_date,'YYYYMMDD') + interval '7 day' * a.num,'YYYYMMDD') as date, b.b_num as weekFxrtTpcd      \nFROM v_seq a, (SELECT UNNEST (ARRAY['1','2'] ) AS b_num )b,\n(select  max(aplybgndt) AS max_date FROM cd_ods.tb_apis_retrieve_trif_fxrtinfo) c\n;",
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK_P02",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": {
-										"value": "@pipeline().parameters.SinkSchema",
-										"type": "Expression"
-									},
-									"SinkTable": {
-										"value": "@pipeline().parameters.SinkTable",
-										"type": "Expression"
-									}
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup1').output.value",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"batchCount": 50,
-							"activities": [
-								{
-									"name": "Copy data1",
-									"type": "Copy",
-									"dependsOn": [],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 5,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "XmlSource",
-											"additionalColumns": [
-												{
-													"name": "date",
-													"value": {
-														"value": "@item().date",
-														"type": "Expression"
-													}
-												}
-											],
-											"storeSettings": {
-												"type": "HttpReadSettings",
-												"requestMethod": "GET"
-											},
-											"formatSettings": {
-												"type": "XmlReadSettings",
-												"validationMode": "none",
-												"namespaces": true
-											}
-										},
-										"sink": {
-											"type": "AzurePostgreSQLSink",
-											"writeBatchSize": 1000000,
-											"writeBatchTimeout": "00:30:00",
-											"writeMethod": "CopyCommand"
-										},
-										"enableStaging": false,
-										"translator": {
-											"type": "TabularTranslator",
-											"mappings": [
-												{
-													"source": {
-														"path": "[['aplyBgnDt']"
-													},
-													"sink": {
-														"name": "aplybgndt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['cntySgn']"
-													},
-													"sink": {
-														"name": "cntysgn",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['currSgn']"
-													},
-													"sink": {
-														"name": "currsgn",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['fxrt']"
-													},
-													"sink": {
-														"name": "fxrt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['imexTp']"
-													},
-													"sink": {
-														"name": "imextp",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['mtryUtNm']"
-													},
-													"sink": {
-														"name": "mtryutnm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['date']"
-													},
-													"sink": {
-														"name": "date",
-														"type": "String"
-													}
-												}
-											],
-											"collectionReference": "$['response']['body']['items']['item']",
-											"mapComplexValuesToString": false
-										}
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_API_APIS_XML",
-											"type": "DatasetReference",
-											"parameters": {
-												"url": {
-													"value": "@concat('1220000/retrieveTrifFxrtInfo/getRetrieveTrifFxrtInfo?&serviceKey=rj5HeIJYh3E2HRvmEw3P3%2BeVDZoZj074w7IIt%2BpcAaujPSI9CTx0U88XSd6C9eWwkBMUncCaG4w%2FtYRT898jcw%3D%3D&aplyBgnDt=',item().date,'&weekFxrtTpcd=',item().weekFxrtTpcd)",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_POSTGRESQL_SNK_P02",
-											"type": "DatasetReference",
-											"parameters": {
-												"SinkSchema": {
-													"value": "@pipeline().parameters.SinkSchema",
-													"type": "Expression"
-												},
-												"SinkTable": {
-													"value": "@pipeline().parameters.SinkTable",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								}
-							]
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "tb_apis_retrieve_trif_fxrtinfo"
-					}
-				},
-				"variables": {
-					"date": {
-						"type": "String"
-					},
-					"url": {
-						"type": "String"
-					}
-				},
-				"folder": {
-					"name": "Industry/외부/관세청"
-				},
-				"annotations": [],
-				"lastPublishTime": "2023-01-16T07:55:39Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_ATFIS_CONSUMPTION_BASIC')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "수요기관정보조회",
-				"activities": [
-					{
-						"name": "Lookup1",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": "select * from cd_ods.tb_atfis_cnsmpmtral_master;",
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK_P02",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": {
-										"value": "@pipeline().parameters.SinkSchema",
-										"type": "Expression"
-									},
-									"SinkTable": {
-										"value": "@pipeline().parameters.SinkTable",
-										"type": "Expression"
-									}
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup1').output.value",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"batchCount": 50,
-							"activities": [
-								{
-									"name": "Copy data1",
-									"type": "Copy",
-									"dependsOn": [],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "JsonSource",
-											"storeSettings": {
-												"type": "HttpReadSettings",
-												"requestMethod": "GET"
-											},
-											"formatSettings": {
-												"type": "JsonReadSettings"
-											}
-										},
-										"sink": {
-											"type": "AzurePostgreSQLSink",
-											"writeBatchSize": 1000000,
-											"writeBatchTimeout": "00:30:00",
-											"writeMethod": "CopyCommand"
-										},
-										"enableStaging": false,
-										"translator": {
-											"type": "TabularTranslator",
-											"mappings": [
-												{
-													"source": {
-														"path": "$['cnsmpYear']"
-													},
-													"sink": {
-														"name": "cnsmpyear",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['cnsmpCd']"
-													},
-													"sink": {
-														"name": "cnsmpcd",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['cnsmpMtralUpperNm']"
-													},
-													"sink": {
-														"name": "cnsmpmtraluppernm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['cnsmpMtralNm']"
-													},
-													"sink": {
-														"name": "cnsmpmtralnm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['cnsmpTotUsgqty']"
-													},
-													"sink": {
-														"name": "cnsmptotusgqty",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['cnsmpLocalusgqty']"
-													},
-													"sink": {
-														"name": "cnsmplocalusgqty",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['cnsmpImportUsgqty']"
-													},
-													"sink": {
-														"name": "cnsmpimportusgqty",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['cnsmpLocalRelimp']"
-													},
-													"sink": {
-														"name": "cnsmplocalrelimp",
-														"type": "String"
-													}
-												}
-											],
-											"collectionReference": "",
-											"mapComplexValuesToString": false
-										}
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_API_AFTIS",
-											"type": "DatasetReference",
-											"parameters": {
-												"url": {
-													"value": "@concat('/home/api/consumption/basic.do?apiKey=z9JeRfaB44up466XHs+5pTcV31n58LqRkSHZ8H66xbw=&cnsmpMtralCd=',item().code,\n'&beginYear=2014&endYear=2023')",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_POSTGRESQL_SNK_P02",
-											"type": "DatasetReference",
-											"parameters": {
-												"SinkSchema": {
-													"value": "@pipeline().parameters.SinkSchema",
-													"type": "Expression"
-												},
-												"SinkTable": {
-													"value": "@pipeline().parameters.SinkTable",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								}
-							]
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "tb_atfis_consumption_basic"
-					}
-				},
-				"variables": {
-					"date": {
-						"type": "String"
-					},
-					"url": {
-						"type": "String"
-					}
-				},
-				"folder": {
-					"name": "Industry/외부/식품산업통계정보"
 				},
 				"annotations": [],
 				"lastPublishTime": "2023-01-16T07:55:39Z"
