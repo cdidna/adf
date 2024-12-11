@@ -1,0 +1,243 @@
+{
+	"name": "PIP_API_INDUSTRY_NAVER_SEARCH",
+	"properties": {
+		"description": "수요기관정보조회",
+		"activities": [
+			{
+				"name": "sel_date",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 5,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "select 사업장명 as query\nfrom  cd_ods.tb_cic_restaurant_info_t  \nwhere 영업상태명 ='영업/정상'\nand 사업장명 not in (select title from cd_ods.tb_cic_naver_result_t)\norder by 사업장명\nlimit 25000\n;",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "sel_date",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('sel_date').output.value",
+						"type": "Expression"
+					},
+					"isSequential": true,
+					"activities": [
+						{
+							"name": "Copy data1_copy1",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 3,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "JsonSource",
+									"storeSettings": {
+										"type": "HttpReadSettings",
+										"requestMethod": "GET"
+									},
+									"formatSettings": {
+										"type": "JsonReadSettings"
+									}
+								},
+								"sink": {
+									"type": "AzurePostgreSQLSink",
+									"writeBatchSize": 1000000,
+									"writeBatchTimeout": "00:30:00",
+									"writeMethod": "CopyCommand"
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"mappings": [
+										{
+											"source": {
+												"path": "['PRDLST_REPORT_NO']"
+											},
+											"sink": {
+												"name": "prdlst_report_no",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['PRMS_DT']"
+											},
+											"sink": {
+												"name": "prms_dt",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['LCNS_NO']"
+											},
+											"sink": {
+												"name": "lcns_no",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['PRDLST_NM']"
+											},
+											"sink": {
+												"name": "prdlst_nm",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['BSSH_NM']"
+											},
+											"sink": {
+												"name": "bssh_nm",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['PRDLST_DCNM']"
+											},
+											"sink": {
+												"name": "prdlst_dcnm",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['CHNG_DT']"
+											},
+											"sink": {
+												"name": "chng_dt",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['RAWMTRL_NM']"
+											},
+											"sink": {
+												"name": "rawmtrl_nm",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "$['st']"
+											},
+											"sink": {
+												"name": "st",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "$['ed']"
+											},
+											"sink": {
+												"name": "ed",
+												"type": "String"
+											}
+										}
+									],
+									"collectionReference": "$['C002']['row']",
+									"mapComplexValuesToString": false
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "DTS_NAVER_API",
+									"type": "DatasetReference",
+									"parameters": {
+										"params": {
+											"value": "@concat('?display=5&query=',item().query)",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "DTS_POSTGRESQL_SNK_P02",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": {
+											"value": "@pipeline().parameters.SinkSchema",
+											"type": "Expression"
+										},
+										"SinkTable": {
+											"value": "@pipeline().parameters.SinkTable",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"SinkSchema": {
+				"type": "string",
+				"defaultValue": "cd_ods"
+			},
+			"SinkTable": {
+				"type": "string",
+				"defaultValue": "tb_cic_naver_result_t"
+			}
+		},
+		"variables": {
+			"date": {
+				"type": "String"
+			},
+			"url": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "트렌드/외부/네이버"
+		},
+		"annotations": [],
+		"lastPublishTime": "2023-01-16T07:55:39Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}
