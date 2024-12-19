@@ -1,0 +1,91 @@
+{
+	"name": "PIP_API_GLOBAL_KIMCHI_NEW_LOOP",
+	"properties": {
+		"activities": [
+			{
+				"name": "Lookup1",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "select to_char(min(a.dt),'yyyymmdd') as mi\n        ,to_char(max(a.dt),'yyyymmdd') as mx\n   from (\n\t\t  select date('20240601') + d.d * interval '1 day' as dt    \n\t\t        ,d.d /3 as grp\n\t\t    from (\n\t\t            select generate_series(0,65) as d\n\t\t         ) d\n\t\t ) a\n   group by grp\n   order by grp",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Lookup1",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Lookup1').output.value",
+						"type": "Expression"
+					},
+					"isSequential": false,
+					"activities": [
+						{
+							"name": "Execute Pipeline1",
+							"type": "ExecutePipeline",
+							"dependsOn": [],
+							"policy": {
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"pipeline": {
+									"referenceName": "PIP_API_GLOBAL_KIMCHI_NEWS_INC",
+									"type": "PipelineReference"
+								},
+								"waitOnCompletion": true,
+								"parameters": {
+									"pip_date": {
+										"value": "@item().mi",
+										"type": "Expression"
+									},
+									"pip_date2": {
+										"value": "@item().mx",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					]
+				}
+			}
+		],
+		"folder": {
+			"name": "고객/외부/김치 NEWS"
+		},
+		"annotations": []
+	}
+}
