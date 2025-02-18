@@ -13,276 +13,6 @@
 	},
 	"resources": [
 		{
-			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_WMS_IFWMSONLINE_ER_INC')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "- WHERE SYSTEM_TYPE = \"ER\" 로 구분",
-				"activities": [
-					{
-						"name": "Copy data Previous Month",
-						"type": "Copy",
-						"dependsOn": [
-							{
-								"activity": "Delete Previous Month",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "7.00:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "SELECT *\n  FROM CD_WMS.IFWMSONLINE\n WHERE SYSTEM_TYPE = 'ER'\n   AND SHIPPING_DATE >= TO_CHAR(TRUNC(ADD_MONTHS(SYSDATE,-1), 'MM'),'YYYYMMDD')\n   AND SHIPPING_DATE <= TO_CHAR(LAST_DAY(TRUNC(ADD_MONTHS(SYSDATE,-1), 'MM')),'YYYYMMDD');",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"queryTimeout": "02:00:00"
-							},
-							"sink": {
-								"type": "DelimitedTextSink",
-								"storeSettings": {
-									"type": "AzureBlobFSWriteSettings"
-								},
-								"formatSettings": {
-									"type": "DelimitedTextWriteSettings",
-									"quoteAllText": true,
-									"fileExtension": ".csv"
-								}
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"typeConversion": true,
-								"typeConversionSettings": {
-									"allowDataTruncation": true,
-									"treatBooleanAsNumber": false
-								}
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": {
-										"value": "@pipeline().parameters.SourceSchema",
-										"type": "Expression"
-									},
-									"SourceTable": {
-										"value": "@pipeline().parameters.SourceTable",
-										"type": "Expression"
-									}
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_ADLS_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"AdlsDirectory": {
-										"value": "@pipeline().parameters.AdlsDirectory",
-										"type": "Expression"
-									},
-									"FileName": {
-										"value": "@concat('D_', pipeline().parameters.SourceSchema,'.', pipeline().parameters.SourceTable,'_ER_', addToTime(addHours(utcNow(), 9), -1, 'Month','yyyyMM'),'.csv')",
-										"type": "Expression"
-									}
-								}
-							}
-						]
-					},
-					{
-						"name": "Copy data Current Month",
-						"type": "Copy",
-						"dependsOn": [
-							{
-								"activity": "Delete Current Month",
-								"dependencyConditions": [
-									"Succeeded",
-									"Failed"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "7.00:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "SELECT *\n  FROM CD_WMS.IFWMSONLINE\n WHERE SYSTEM_TYPE = 'ER'\n   AND SHIPPING_DATE >= TO_CHAR(TRUNC(SYSDATE, 'MM'),'YYYYMMDD')\n   AND SHIPPING_DATE <= TO_CHAR(TRUNC(SYSDATE-1),'YYYYMMDD');",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"queryTimeout": "02:00:00"
-							},
-							"sink": {
-								"type": "DelimitedTextSink",
-								"storeSettings": {
-									"type": "AzureBlobFSWriteSettings"
-								},
-								"formatSettings": {
-									"type": "DelimitedTextWriteSettings",
-									"quoteAllText": true,
-									"fileExtension": ".csv"
-								}
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"typeConversion": true,
-								"typeConversionSettings": {
-									"allowDataTruncation": true,
-									"treatBooleanAsNumber": false
-								}
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": {
-										"value": "@pipeline().parameters.SourceSchema",
-										"type": "Expression"
-									},
-									"SourceTable": {
-										"value": "@pipeline().parameters.SourceTable",
-										"type": "Expression"
-									}
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_ADLS_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"AdlsDirectory": {
-										"value": "@pipeline().parameters.AdlsDirectory",
-										"type": "Expression"
-									},
-									"FileName": {
-										"value": "@concat('D_', pipeline().parameters.SourceSchema,'.', pipeline().parameters.SourceTable,'_ER_',formatDateTime(addHours(utcNow(), 9), 'yyyyMM'),'.csv')",
-										"type": "Expression"
-									}
-								}
-							}
-						]
-					},
-					{
-						"name": "Delete Current Month",
-						"type": "Delete",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "7.00:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"dataset": {
-								"referenceName": "DTS_ADLS_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"AdlsDirectory": "@pipeline().parameters.AdlsDirectory",
-									"FileName": {
-										"value": "@concat('D_', pipeline().parameters.SourceSchema,'.', pipeline().parameters.SourceTable,'_ER_', formatDateTime(addHours(utcNow(), 9),'yyyyMM'), '.csv')",
-										"type": "Expression"
-									}
-								}
-							},
-							"enableLogging": false,
-							"storeSettings": {
-								"type": "AzureBlobFSReadSettings",
-								"fileListPath": {
-									"value": "@pipeline().parameters.AdlsDirectory",
-									"type": "Expression"
-								},
-								"enablePartitionDiscovery": false
-							}
-						}
-					},
-					{
-						"name": "Delete Previous Month",
-						"type": "Delete",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "7.00:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"dataset": {
-								"referenceName": "DTS_ADLS_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"AdlsDirectory": "@pipeline().parameters.AdlsDirectory",
-									"FileName": {
-										"value": "@concat('D_', pipeline().parameters.SourceSchema,'.', pipeline().parameters.SourceTable,'_ER_', addToTime(addHours(utcNow(), 9),-1,'Month', 'yyyyMM'), '.csv')",
-										"type": "Expression"
-									}
-								}
-							},
-							"enableLogging": false,
-							"storeSettings": {
-								"type": "AzureBlobFSReadSettings",
-								"fileListPath": {
-									"value": "@pipeline().parameters.AdlsDirectory",
-									"type": "Expression"
-								},
-								"enablePartitionDiscovery": false
-							}
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SourceSchema": {
-						"type": "string",
-						"defaultValue": "CD_WMS"
-					},
-					"SourceTable": {
-						"type": "string",
-						"defaultValue": "IFWMSONLINE"
-					},
-					"AdlsDirectory": {
-						"type": "string",
-						"defaultValue": "매출(주문)/내부/외부쇼핑몰주문"
-					}
-				},
-				"folder": {
-					"name": "매출_주문/내부/WMS"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-12-05T06:31:11Z"
-			},
-			"dependsOn": []
-		},
-		{
 			"name": "[concat(parameters('factoryName'), '/PIP_D_RPA_ODS_RPA_D2B_FULL_PG')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -4175,6 +3905,110 @@
 				},
 				"annotations": [],
 				"lastPublishTime": "2022-11-15T02:02:00Z"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_M_CD_DWRS_TC_COMM_CODE_FULL')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Copy data",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "OracleSource",
+								"partitionOption": "None",
+								"queryTimeout": "02:00:00"
+							},
+							"sink": {
+								"type": "DelimitedTextSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								},
+								"formatSettings": {
+									"type": "DelimitedTextWriteSettings",
+									"quoteAllText": true,
+									"fileExtension": ".csv"
+								}
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_ORACLE_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceSchema": {
+										"value": "@pipeline().parameters.SourceSchema",
+										"type": "Expression"
+									},
+									"SourceTable": {
+										"value": "@pipeline().parameters.SourceTable",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": {
+										"value": "@pipeline().parameters.AdlsDirectory",
+										"type": "Expression"
+									},
+									"FileName": {
+										"value": "@concat('M_', pipeline().parameters.SourceSchema,'.', pipeline().parameters.SourceTable, '.csv')",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SourceSchema": {
+						"type": "string",
+						"defaultValue": "CD_DWRS"
+					},
+					"SourceTable": {
+						"type": "string",
+						"defaultValue": "TC_COMM_CODE"
+					},
+					"AdlsDirectory": {
+						"type": "string",
+						"defaultValue": "판촉/내부/판촉관리정보"
+					}
+				},
+				"folder": {
+					"name": "판촉/내부/판촉관리"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-09-01T06:47:00Z"
 			},
 			"dependsOn": []
 		}
