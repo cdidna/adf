@@ -2881,6 +2881,261 @@
 			"dependsOn": []
 		},
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_FSK_I0490')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "수요기관정보조회",
+				"activities": [
+					{
+						"name": "sel_date",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 5,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "with vw_range as\n(\nselect generate_series(0,999) * 1000 + 1 as st, (generate_series(0,999)+1) * 1000 as ed\n)\nselect st, ed from vw_range\nwhere (st, ed) not in \n(\nselect cast(st as numeric), cast(ed as numeric) from cd_ods.tb_fsk_I0490_temp\n)\n;",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "sel_date",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('sel_date').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Copy data1_copy1",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 3,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "JsonSource",
+											"additionalColumns": [
+												{
+													"name": "st",
+													"value": {
+														"value": "@item().st",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "ed",
+													"value": {
+														"value": "@item().ed",
+														"type": "Expression"
+													}
+												}
+											],
+											"storeSettings": {
+												"type": "HttpReadSettings",
+												"requestMethod": "GET"
+											},
+											"formatSettings": {
+												"type": "JsonReadSettings"
+											}
+										},
+										"sink": {
+											"type": "AzurePostgreSQLSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"path": "[['PRSDNT_NM']"
+													},
+													"sink": {
+														"name": "prsdnt_nm",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['PRMS_DT']"
+													},
+													"sink": {
+														"name": "prms_dt",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['LCNS_NO']"
+													},
+													"sink": {
+														"name": "lcns_no",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['INSTT_NM']"
+													},
+													"sink": {
+														"name": "instt_nm",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['BSSH_NM']"
+													},
+													"sink": {
+														"name": "bssh_nm",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['LOCP_ADDR']"
+													},
+													"sink": {
+														"name": "locp_addr",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['INDUTY_NM']"
+													},
+													"sink": {
+														"name": "induty_nm",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['st']"
+													},
+													"sink": {
+														"name": "st",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['ed']"
+													},
+													"sink": {
+														"name": "ed",
+														"type": "String"
+													}
+												}
+											],
+											"collectionReference": "$['I2832']['row']",
+											"mapComplexValuesToString": false
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_API_FSK",
+											"type": "DatasetReference",
+											"parameters": {
+												"url": {
+													"value": "@concat('/api/f93320322b05463499de/I0490/json/',item().st,'/',item().ed)",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK_P02",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": {
+													"value": "@pipeline().parameters.SinkSchema",
+													"type": "Expression"
+												},
+												"SinkTable": {
+													"value": "@pipeline().parameters.SinkTable",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SinkSchema": {
+						"type": "string",
+						"defaultValue": "cd_ods"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "tb_fsk_I0490_temp"
+					}
+				},
+				"variables": {
+					"date": {
+						"type": "String"
+					},
+					"url": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "Industry/외부/식품의약품안전처"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-01-16T07:55:39Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/API_CUST_OUT_VAIV_D')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -7766,436 +8021,6 @@
 				},
 				"annotations": [],
 				"lastPublishTime": "2022-12-19T01:56:26Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/API_IND_OUT_INDFDINFO_Y_0228')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "식품산업통계 API 파이프라인 포함",
-				"activities": [
-					{
-						"name": "PIP_API_INDUSTRY_FOODINFO_BIZCNT",
-						"type": "ExecutePipeline",
-						"dependsOn": [
-							{
-								"activity": "Input log 2",
-								"dependencyConditions": [
-									"Completed"
-								]
-							}
-						],
-						"policy": {
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"pipeline": {
-								"referenceName": "PIP_API_INDUSTRY_FOODINFO_BIZCNT",
-								"type": "PipelineReference"
-							},
-							"waitOnCompletion": true,
-							"parameters": {}
-						}
-					},
-					{
-						"name": "PIP_API_INDUSTRY_FOODINFO_EMPCNT",
-						"type": "ExecutePipeline",
-						"dependsOn": [
-							{
-								"activity": "Input log 3",
-								"dependencyConditions": [
-									"Completed"
-								]
-							}
-						],
-						"policy": {
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"pipeline": {
-								"referenceName": "PIP_API_INDUSTRY_FOODINFO_EMPCNT",
-								"type": "PipelineReference"
-							},
-							"waitOnCompletion": true,
-							"parameters": {}
-						}
-					},
-					{
-						"name": "PIP_API_INDUSTRY_FOODINFO_SHPTAMT",
-						"type": "ExecutePipeline",
-						"dependsOn": [
-							{
-								"activity": "Input log 4",
-								"dependencyConditions": [
-									"Completed"
-								]
-							}
-						],
-						"policy": {
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"pipeline": {
-								"referenceName": "PIP_API_INDUSTRY_FOODINFO_SHPTAMT",
-								"type": "PipelineReference"
-							},
-							"waitOnCompletion": true,
-							"parameters": {}
-						}
-					},
-					{
-						"name": "Input log 2",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "select CD_IF.FUNC_CDI_LOG(  'I' , p_pipline => 'PIP_API_INDUSTRY_FOODINFO_BIZCNT' ) as result from dual;",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Input log 3",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "select CD_IF.FUNC_CDI_LOG(  'I' , p_pipline => 'PIP_API_INDUSTRY_FOODINFO_EMPCNT' ) as result from dual;",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Input log 4",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "select CD_IF.FUNC_CDI_LOG(  'I' , p_pipline => 'PIP_API_INDUSTRY_FOODINFO_SHPTAMT' ) as result from dual;",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Success log 2",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_API_INDUSTRY_FOODINFO_BIZCNT",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log 2').output.firstRow.RESULT, ''', p_result => ''S'') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Success log 3",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_API_INDUSTRY_FOODINFO_EMPCNT",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log 3').output.firstRow.RESULT, ''', p_result => ''S'') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Success log 4",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_API_INDUSTRY_FOODINFO_SHPTAMT",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log 4').output.firstRow.RESULT, ''', p_result => ''S'') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Error log 2",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_API_INDUSTRY_FOODINFO_BIZCNT",
-								"dependencyConditions": [
-									"Failed"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log 2').output.firstRow.RESULT, ''', p_result => ''E'', p_error_msg => ''', replace(activity('PIP_API_INDUSTRY_FOODINFO_BIZCNT').Error.Message, '''','‘'),''') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Error log 3",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_API_INDUSTRY_FOODINFO_EMPCNT",
-								"dependencyConditions": [
-									"Failed"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log 3').output.firstRow.RESULT, ''', p_result => ''E'', p_error_msg => ''', replace(activity('PIP_API_INDUSTRY_FOODINFO_EMPCNT').Error.Message, '''','‘'),''') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Output Error log 4",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "PIP_API_INDUSTRY_FOODINFO_SHPTAMT",
-								"dependencyConditions": [
-									"Failed"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('select CD_IF.FUNC_CDI_LOG(''U'' , p_seq => ''', activity('Input log 4').output.firstRow.RESULT, ''', p_result => ''E'', p_error_msg => ''', replace(activity('PIP_API_INDUSTRY_FOODINFO_SHPTAMT').Error.Message, '''','‘'),''') as result from dual')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"folder": {
-					"name": "실행/Yearly"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-12-19T08:35:41Z"
 			},
 			"dependsOn": []
 		}
