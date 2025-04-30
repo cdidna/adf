@@ -13,6 +13,626 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_CUSTOMER_BRAND_NEWS_M')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "select_cnt",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('select_cnt').output.value",
+								"type": "Expression"
+							},
+							"isSequential": false,
+							"batchCount": 50,
+							"activities": [
+								{
+									"name": "PIP_API_CUSTOMER_BRAND_NEWS_copy1",
+									"type": "ExecutePipeline",
+									"dependsOn": [],
+									"policy": {
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"pipeline": {
+											"referenceName": "PIP_API_CUSTOMER_BRAND_NEWS",
+											"type": "PipelineReference"
+										},
+										"waitOnCompletion": true,
+										"parameters": {
+											"no": {
+												"value": "@item().cnt",
+												"type": "Expression"
+											}
+										}
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "select_cnt",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "SELECT DISTINCT  CAST(seq / 1000 + 1 AS varchar) as cnt\nFROM cd_ods.tb_fc_news_keyword_t\norder by cnt\n",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK_P02",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SinkSckema": {
+						"type": "string",
+						"defaultValue": "cd_ods"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "tb_fc_brand_news_t"
+					}
+				},
+				"variables": {
+					"date": {
+						"type": "String"
+					},
+					"date2": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "고객/외부/브랜드 NEWS"
+				},
+				"annotations": []
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_CUSTOMER_KIMCHI_NEWS_M')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Lookup1",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "select min(a.base_date) as strdt\n      ,max(a.base_date) as enddt\n from (\n    select to_char(base_date,'YYYYMMDD') as base_date\n          ,row_number() over (order by base_date desc)/5 as pri\n     from cd_ods.aps_sdc_pw_mst\n    where cmonth2 between '202406' and '202406'\n      and  to_char(base_date,'YYYYMMDD') BETWEEN '20240622' AND '20240624'\n     ) a\ngroup by a.pri     \norder by a.pri",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup1').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Execute Pipeline1",
+									"type": "ExecutePipeline",
+									"dependsOn": [],
+									"policy": {
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"pipeline": {
+											"referenceName": "PIP_API_CUSTOMER_KIMCHI_NEWS_SIN",
+											"type": "PipelineReference"
+										},
+										"waitOnCompletion": true,
+										"parameters": {
+											"pip_date": {
+												"value": "@item().strdt",
+												"type": "Expression"
+											},
+											"pip_date2": {
+												"value": "@item().enddt",
+												"type": "Expression"
+											}
+										}
+									}
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SinkSckema": {
+						"type": "string",
+						"defaultValue": "cd_ods"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "tb_kimchi_boh_news_data_t"
+					},
+					"pip_date": {
+						"type": "string"
+					}
+				},
+				"variables": {
+					"date": {
+						"type": "String"
+					},
+					"date2": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "고객/외부/김치 NEWS"
+				},
+				"annotations": []
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_CUSTOMER_MENU_NEWS_M_copy1')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "select_cnt",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('select_cnt').output.value",
+								"type": "Expression"
+							},
+							"isSequential": false,
+							"batchCount": 50,
+							"activities": [
+								{
+									"name": "PIP_API_CUSTOMER_MENU_NEWS_copy1",
+									"type": "ExecutePipeline",
+									"dependsOn": [],
+									"policy": {
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"pipeline": {
+											"referenceName": "PIP_API_CUSTOMER_MENU_NEWS_copy1",
+											"type": "PipelineReference"
+										},
+										"waitOnCompletion": true,
+										"parameters": {
+											"no": {
+												"value": "@item().cnt",
+												"type": "Expression"
+											}
+										}
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "select_cnt",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "SELECT DISTINCT  CAST(seq / 3000 + 1 AS varchar) as cnt\nFROM cd_ods.tb_fc_news_keyword_t\norder by cnt\n",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK_P02",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SinkSckema": {
+						"type": "string",
+						"defaultValue": "cd_ods"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "tb_fc_menu_news_t"
+					}
+				},
+				"variables": {
+					"date": {
+						"type": "String"
+					},
+					"date2": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "고객/외부/브랜드 NEWS"
+				},
+				"annotations": []
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_CUSTOMER_OPINION_ALL_M')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "소셜 고객 의견 데이터 블로그",
+				"activities": [
+					{
+						"name": "conf all",
+						"description": "21년 부터 갱신하도록 conf파일 일자 업데이트",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "OracleSource",
+								"oracleReaderQuery": {
+									"value": "WITH VW_DATE AS\n  (   \n    SELECT -1 * (LEVEL-1)              AS SDATE\n          ,(TRUNC(SYSDATE) - (LEVEL-1)) AS SDATE2\n      FROM (\n             SELECT TO_DATE('2021-01-01','YYYY-MM-DD')   AS STR_DATE\n                   ,(TRUNC(SYSDATE)-1)                   AS END_DATE            \n                FROM DUAL\n           )\n    CONNECT BY LEVEL <= -1 * ( -2 + STR_DATE - END_DATE )   -- 일수 토탈 \n  )\n  SELECT round(SDATE) AS \"date\"\n    FROM VW_DATE \n    WHERE SDATE != 0 \n   ORDER BY SDATE \n",
+									"type": "Expression"
+								},
+								"partitionOption": "None",
+								"convertDecimalToInteger": false,
+								"queryTimeout": "02:00:00"
+							},
+							"sink": {
+								"type": "DelimitedTextSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings",
+									"maxConcurrentConnections": 1
+								},
+								"formatSettings": {
+									"type": "DelimitedTextWriteSettings",
+									"quoteAllText": true,
+									"fileExtension": ".txt"
+								}
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_ORACLE_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceSchema": "1",
+									"SourceTable": "1"
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": "고객/외부/소셜고객의견데이터/conf",
+									"FileName": "소셜고객의견데이터_COM_MANUAL_conf.csv"
+								}
+							}
+						]
+					},
+					{
+						"name": "blog",
+						"description": "소셜고객의견데이터 blog",
+						"type": "ExecutePipeline",
+						"dependsOn": [
+							{
+								"activity": "conf all",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"pipeline": {
+								"referenceName": "PIP_API_CUSTOMER_OPINION_BLOG_M",
+								"type": "PipelineReference"
+							},
+							"waitOnCompletion": true,
+							"parameters": {}
+						}
+					},
+					{
+						"name": "community",
+						"description": "소셜고객의견데이터 community",
+						"type": "ExecutePipeline",
+						"dependsOn": [
+							{
+								"activity": "blog",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"pipeline": {
+								"referenceName": "PIP_API_CUSTOMER_OPINION_COMMUNITY_M",
+								"type": "PipelineReference"
+							},
+							"waitOnCompletion": true,
+							"parameters": {}
+						}
+					},
+					{
+						"name": "insta",
+						"description": "소셜고객의견데이터 instagram",
+						"type": "ExecutePipeline",
+						"dependsOn": [
+							{
+								"activity": "community",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"pipeline": {
+								"referenceName": "PIP_API_CUSTOMER_OPINION_INSTA_M",
+								"type": "PipelineReference"
+							},
+							"waitOnCompletion": true,
+							"parameters": {}
+						}
+					},
+					{
+						"name": "news",
+						"description": "소셜고객의견데이터 news",
+						"type": "ExecutePipeline",
+						"dependsOn": [
+							{
+								"activity": "insta",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"pipeline": {
+								"referenceName": "PIP_API_CUSTOMER_OPINION_NEWS_M",
+								"type": "PipelineReference"
+							},
+							"waitOnCompletion": true,
+							"parameters": {}
+						}
+					},
+					{
+						"name": "twitter",
+						"description": "소셜고객의견데이터 twitter",
+						"type": "ExecutePipeline",
+						"dependsOn": [
+							{
+								"activity": "news",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"pipeline": {
+								"referenceName": "PIP_API_CUSTOMER_OPINION_TWITTER_M",
+								"type": "PipelineReference"
+							},
+							"waitOnCompletion": true,
+							"parameters": {}
+						}
+					},
+					{
+						"name": "youtube",
+						"description": "소셜고객의견데이터 youtube",
+						"type": "ExecutePipeline",
+						"dependsOn": [
+							{
+								"activity": "twitter",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"pipeline": {
+								"referenceName": "PIP_API_CUSTOMER_OPINION_YOUTUBE_M",
+								"type": "PipelineReference"
+							},
+							"waitOnCompletion": true,
+							"parameters": {}
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"AdlsDirectory": {
+						"type": "string",
+						"defaultValue": "고객/외부/소셜고객의견데이터/블로그"
+					},
+					"FileName": {
+						"type": "string",
+						"defaultValue": "소셜고객의견데이터_블로그"
+					},
+					"AdlsDirectoryConf": {
+						"type": "string",
+						"defaultValue": "고객/외부/소셜고객의견데이터/conf"
+					},
+					"ConfFile": {
+						"type": "string",
+						"defaultValue": "소셜고객의견데이터_BLOG_conf"
+					},
+					"Apikey": {
+						"type": "string",
+						"defaultValue": "50151fed78146d9974fc10b335738ef395cc6d0c20998505442c7d1c75642242"
+					},
+					"Channel": {
+						"type": "string",
+						"defaultValue": "ko.blog"
+					},
+					"Category1": {
+						"type": "string",
+						"defaultValue": "doc"
+					},
+					"Category2": {
+						"type": "string",
+						"defaultValue": "DOC"
+					},
+					"SinkSchema": {
+						"type": "string",
+						"defaultValue": "cd_mart"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "dm_sl_documents_summary_t"
+					}
+				},
+				"folder": {
+					"name": "고객/외부/소셜고객의견데이터"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-01-12T10:18:01Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_API_CUSTOMER_TOPKEYWORD_ALL_M_csv')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -1126,1928 +1746,6 @@
 			"dependsOn": []
 		},
 		{
-			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_D2B_BID_ITEM_DETAIL_M')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "국내 품목명세서_멀",
-				"activities": [
-					{
-						"name": "Lookup1",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "SELECT\ndemandyear , dcsno , orntcode \nFROM \n(\nSELECT COALESCE (b.dcsno, 'xxxxx') AS b_dcsno \n     , a.dcsno AS dcsno\n     , a.orntcode  AS orntcode\n     , a.demandyear  AS demandyear\nFROM cd_ods.tb_d2b_cmpt_bid_notice_list a\n  LEFT OUTER join   cd_ods.tb_d2b_bid_item_detail b\non a.dcsno  = b.dcsno\n  AND a.demandyear = b.demandyear\n  AND a.orntcode = b.orntcode\n) a\nWHERE a.b_dcsno = 'xxxxx'\n;",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup1').output.value",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"batchCount": 50,
-							"activities": [
-								{
-									"name": "Execute Pipeline1",
-									"type": "ExecutePipeline",
-									"dependsOn": [],
-									"policy": {
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"pipeline": {
-											"referenceName": "PIP_API_INDUSTRY_D2B_BID_ITEM_DETAIL",
-											"type": "PipelineReference"
-										},
-										"waitOnCompletion": true,
-										"parameters": {
-											"pipdemandyear": {
-												"value": "@item().demandYear",
-												"type": "Expression"
-											},
-											"pipdcsno": {
-												"value": "@item().dcsNo",
-												"type": "Expression"
-											},
-											"piporntcode": {
-												"value": "@item().orntCode",
-												"type": "Expression"
-											}
-										}
-									}
-								}
-							]
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"variables": {
-					"list_total_count": {
-						"type": "String"
-					}
-				},
-				"folder": {
-					"name": "Industry/외부/방위사업청"
-				},
-				"annotations": []
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_D2B_CMPT_BID_NOTICE_INC')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "국내 경쟁입찰공고 목록\n",
-				"activities": [
-					{
-						"name": "set anmtDateBegin",
-						"description": "당일자",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "anmtDateBegin",
-							"value": {
-								"value": "@formatDateTime(adddays(addHours(utcNow(), 9), -40), 'yyyyMMdd')",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "set anmtDateEnd",
-						"description": "당일자",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "anmtDateEnd",
-							"value": {
-								"value": "@formatDateTime(addHours(utcNow(), 9), 'yyyyMMdd')",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "If Condition1",
-						"type": "IfCondition",
-						"dependsOn": [
-							{
-								"activity": "delet table",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"expression": {
-								"value": "@greaterOrEquals(activity('get totalcount').output.firstRow.response.body.totalCount, 2)",
-								"type": "Expression"
-							},
-							"ifFalseActivities": [
-								{
-									"name": "Copy data2",
-									"type": "Copy",
-									"dependsOn": [],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 5,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "JsonSource",
-											"storeSettings": {
-												"type": "HttpReadSettings",
-												"requestMethod": "GET"
-											},
-											"formatSettings": {
-												"type": "JsonReadSettings"
-											}
-										},
-										"sink": {
-											"type": "AzurePostgreSQLSink",
-											"writeBatchSize": 1000000,
-											"writeBatchTimeout": "00:30:00",
-											"writeMethod": "CopyCommand"
-										},
-										"enableStaging": false,
-										"translator": {
-											"type": "TabularTranslator",
-											"mappings": [
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['bidNm']"
-													},
-													"sink": {
-														"name": "bidnm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['bidPartcptRegistClosDt']"
-													},
-													"sink": {
-														"name": "bidpartcptregistclosdt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['bidStle']"
-													},
-													"sink": {
-														"name": "bidstle",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['biddocPresentnClosDt']"
-													},
-													"sink": {
-														"name": "biddocpresentnclosdt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['bsisPrdprcApplcAt']"
-													},
-													"sink": {
-														"name": "bsisprdprcapplcat",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['bsisPrdprcOthbcAt']"
-													},
-													"sink": {
-														"name": "bsisprdprcothbcat",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['busiDivs']"
-													},
-													"sink": {
-														"name": "busidivs",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['cntrctMth']"
-													},
-													"sink": {
-														"name": "cntrctmth",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['dcsNo']"
-													},
-													"sink": {
-														"name": "dcsno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['demandYear']"
-													},
-													"sink": {
-														"name": "demandyear",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['excutTy']"
-													},
-													"sink": {
-														"name": "excutty",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['excutTyCode']"
-													},
-													"sink": {
-														"name": "excuttycode",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['g2bPblancNo']"
-													},
-													"sink": {
-														"name": "g2bpblancno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['g2bPblancOdr']"
-													},
-													"sink": {
-														"name": "g2bpblancodr",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['opengDt']"
-													},
-													"sink": {
-														"name": "opengdt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['ornt']"
-													},
-													"sink": {
-														"name": "ornt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['orntCode']"
-													},
-													"sink": {
-														"name": "orntcode",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['pblancDate']"
-													},
-													"sink": {
-														"name": "pblancdate",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['pblancNo']"
-													},
-													"sink": {
-														"name": "pblancno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['pblancOdr']"
-													},
-													"sink": {
-														"name": "pblancodr",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['pblancSe']"
-													},
-													"sink": {
-														"name": "pblancse",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['pblancSeCode']"
-													},
-													"sink": {
-														"name": "pblancsecode",
-														"type": "String"
-													}
-												}
-											],
-											"collectionReference": ""
-										}
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_API_D2B",
-											"type": "DatasetReference",
-											"parameters": {
-												"url": {
-													"value": "@concat(pipeline().parameters.service,'?anmtDateBegin=',variables('anmtDateBegin'),'&anmtDateEnd=',variables('anmtDateEnd'),'&numOfRows=1&_type=json')",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_POSTGRESQL_SNK_P02",
-											"type": "DatasetReference",
-											"parameters": {
-												"SinkSchema": {
-													"value": "@pipeline().parameters.SinkSchema",
-													"type": "Expression"
-												},
-												"SinkTable": {
-													"value": "@pipeline().parameters.SinkTable",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								}
-							],
-							"ifTrueActivities": [
-								{
-									"name": "Copy data3",
-									"type": "Copy",
-									"dependsOn": [],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 5,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "JsonSource",
-											"storeSettings": {
-												"type": "HttpReadSettings",
-												"requestMethod": "GET"
-											},
-											"formatSettings": {
-												"type": "JsonReadSettings"
-											}
-										},
-										"sink": {
-											"type": "AzurePostgreSQLSink",
-											"writeBatchSize": 1000000,
-											"writeBatchTimeout": "00:30:00",
-											"writeMethod": "CopyCommand"
-										},
-										"enableStaging": false,
-										"translator": {
-											"type": "TabularTranslator",
-											"mappings": [
-												{
-													"source": {
-														"path": "[['bidNm']"
-													},
-													"sink": {
-														"name": "bidnm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bidPartcptRegistClosDt']"
-													},
-													"sink": {
-														"name": "bidpartcptregistclosdt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bidStle']"
-													},
-													"sink": {
-														"name": "bidstle",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['biddocPresentnClosDt']"
-													},
-													"sink": {
-														"name": "biddocpresentnclosdt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bsisPrdprcApplcAt']"
-													},
-													"sink": {
-														"name": "bsisprdprcapplcat",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bsisPrdprcOthbcAt']"
-													},
-													"sink": {
-														"name": "bsisprdprcothbcat",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['busiDivs']"
-													},
-													"sink": {
-														"name": "busidivs",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['cntrctMth']"
-													},
-													"sink": {
-														"name": "cntrctmth",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['dcsNo']"
-													},
-													"sink": {
-														"name": "dcsno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['demandYear']"
-													},
-													"sink": {
-														"name": "demandyear",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['excutTy']"
-													},
-													"sink": {
-														"name": "excutty",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['excutTyCode']"
-													},
-													"sink": {
-														"name": "excuttycode",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['g2bPblancNo']"
-													},
-													"sink": {
-														"name": "g2bpblancno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['g2bPblancOdr']"
-													},
-													"sink": {
-														"name": "g2bpblancodr",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['opengDt']"
-													},
-													"sink": {
-														"name": "opengdt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['ornt']"
-													},
-													"sink": {
-														"name": "ornt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['orntCode']"
-													},
-													"sink": {
-														"name": "orntcode",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['pblancDate']"
-													},
-													"sink": {
-														"name": "pblancdate",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['pblancNo']"
-													},
-													"sink": {
-														"name": "pblancno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['pblancOdr']"
-													},
-													"sink": {
-														"name": "pblancodr",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['pblancSe']"
-													},
-													"sink": {
-														"name": "pblancse",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['pblancSeCode']"
-													},
-													"sink": {
-														"name": "pblancsecode",
-														"type": "String"
-													}
-												}
-											],
-											"collectionReference": "$['response']['body']['items']['item']"
-										}
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_API_D2B",
-											"type": "DatasetReference",
-											"parameters": {
-												"url": {
-													"value": "@concat(pipeline().parameters.service,'?anmtDateBegin=',variables('anmtDateBegin'),'&anmtDateEnd=',variables('anmtDateEnd'),'&numOfRows=',activity('get totalcount').output.firstRow.response.body.totalCount,'&_type=json')",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_POSTGRESQL_SNK_P02",
-											"type": "DatasetReference",
-											"parameters": {
-												"SinkSchema": {
-													"value": "@pipeline().parameters.SinkSchema",
-													"type": "Expression"
-												},
-												"SinkTable": {
-													"value": "@pipeline().parameters.SinkTable",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								}
-							]
-						}
-					},
-					{
-						"name": "get totalcount",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "set anmtDateBegin",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							},
-							{
-								"activity": "set anmtDateEnd",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 5,
-							"retryIntervalInSeconds": 60,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "JsonSource",
-								"storeSettings": {
-									"type": "HttpReadSettings",
-									"requestMethod": "GET"
-								},
-								"formatSettings": {
-									"type": "JsonReadSettings"
-								}
-							},
-							"dataset": {
-								"referenceName": "DTS_API_D2B",
-								"type": "DatasetReference",
-								"parameters": {
-									"url": {
-										"value": "@concat(pipeline().parameters.service,'?_type=json&anmtDateBegin=',variables('anmtDateBegin'),'&anmtDateEnd=',variables('anmtDateEnd'),'&numOfRows=1')",
-										"type": "Expression"
-									}
-								}
-							}
-						}
-					},
-					{
-						"name": "delet table",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "get totalcount",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "delete from  cd_ods.tb_d2b_cmpt_bid_notice_list\n WHERE pblancdate BETWEEN '@{variables('anmtDateBegin')}' AND '@{variables('anmtDateEnd')}';\n \nselect 1 as success",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Lookup1",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "If Condition1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "SELECT \ndistinct demandyear , dcsno , orntcode ,  pblancNo, pblancOdr,pblancdate \nFROM cd_ods.tb_d2b_cmpt_bid_notice_list\nWHERE to_char(if_date, 'YYYYMMDD') = to_char(now(), 'YYYYMMDD');",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup1').output.value",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"batchCount": 30,
-							"activities": [
-								{
-									"name": "Execute Pipeline1",
-									"type": "ExecutePipeline",
-									"dependsOn": [],
-									"policy": {
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"pipeline": {
-											"referenceName": "PIP_API_INDUSTRY_D2B_CMPT_BID_NOTICE_DETAIL",
-											"type": "PipelineReference"
-										},
-										"waitOnCompletion": true,
-										"parameters": {
-											"pippblancdate": {
-												"value": "@item().pblancdate",
-												"type": "Expression"
-											},
-											"pipdcsno": {
-												"value": "@item().dcsNo",
-												"type": "Expression"
-											},
-											"piporntcode": {
-												"value": "@item().orntCode",
-												"type": "Expression"
-											},
-											"pippblancno": {
-												"value": "@item().pblancNo",
-												"type": "Expression"
-											},
-											"pippblancodr": {
-												"value": "@item().pblancOdr",
-												"type": "Expression"
-											},
-											"pipdemandyear": {
-												"value": "@item().demandyear",
-												"type": "Expression"
-											}
-										}
-									}
-								}
-							]
-						}
-					},
-					{
-						"name": "Lookup1_copy1",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "ForEach1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "SELECT DISTINCT demandyear , dcsno , orntcode\nFROM cd_ods.tb_d2b_cmpt_bid_notice_list\nWHERE to_char(if_date, 'YYYYMMDD') = to_char(now(), 'YYYYMMDD');",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1_copy1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup1_copy1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup1').output.value",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"batchCount": 30,
-							"activities": [
-								{
-									"name": "Execute Pipeline1_copy1",
-									"type": "ExecutePipeline",
-									"dependsOn": [],
-									"policy": {
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"pipeline": {
-											"referenceName": "PIP_API_INDUSTRY_D2B_BID_ITEM_DETAIL",
-											"type": "PipelineReference"
-										},
-										"waitOnCompletion": true,
-										"parameters": {
-											"pipdemandyear": {
-												"value": "@item().demandYear",
-												"type": "Expression"
-											},
-											"pipdcsno": {
-												"value": "@item().dcsNo",
-												"type": "Expression"
-											},
-											"piporntcode": {
-												"value": "@item().orntCode",
-												"type": "Expression"
-											}
-										}
-									}
-								}
-							]
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"Apikey": {
-						"type": "string",
-						"defaultValue": "W26gwh49fADZe9fVLqkaAlzn5IPh6n9jf9FCHkThIs6UDblFv46xFoLaNzl011vFX8daAemoPlw4BubABfFBRg%3D%3D"
-					},
-					"service": {
-						"type": "string",
-						"defaultValue": "/openapi/service/BidPblancInfoService/getDmstcCmpetBidPblancList"
-					},
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "tb_d2b_cmpt_bid_notice_list"
-					},
-					"one_page_row": {
-						"type": "string",
-						"defaultValue": "999"
-					},
-					"pipanmtDateBegin": {
-						"type": "string"
-					},
-					"pipanmtDateEnd": {
-						"type": "string"
-					}
-				},
-				"variables": {
-					"anmtDateBegin": {
-						"type": "String"
-					},
-					"anmtDateEnd": {
-						"type": "String"
-					}
-				},
-				"folder": {
-					"name": "Industry/외부/방위사업청"
-				},
-				"annotations": [],
-				"lastPublishTime": "2023-01-16T07:55:39Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_D2B_CMPT_BID_NOTICE_INC_d')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "국내 경쟁입찰공고 목록\n",
-				"activities": [
-					{
-						"name": "set anmtDateBegin",
-						"description": "당일자",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "anmtDateBegin",
-							"value": {
-								"value": "@formatDateTime(adddays(addHours(utcNow(), 9), -7), 'yyyyMMdd')",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "set anmtDateEnd",
-						"description": "당일자",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "anmtDateEnd",
-							"value": {
-								"value": "@formatDateTime(addHours(utcNow(), 9), 'yyyyMMdd')",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "If Condition1",
-						"type": "IfCondition",
-						"dependsOn": [
-							{
-								"activity": "get totalcount",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"expression": {
-								"value": "@greaterOrEquals(activity('get totalcount').output.firstRow.response.body.totalCount, 2)",
-								"type": "Expression"
-							},
-							"ifFalseActivities": [
-								{
-									"name": "Copy data2",
-									"type": "Copy",
-									"dependsOn": [],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 5,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "JsonSource",
-											"storeSettings": {
-												"type": "HttpReadSettings",
-												"requestMethod": "GET"
-											},
-											"formatSettings": {
-												"type": "JsonReadSettings"
-											}
-										},
-										"sink": {
-											"type": "AzurePostgreSQLSink",
-											"writeBatchSize": 1000000,
-											"writeBatchTimeout": "00:30:00",
-											"writeMethod": "CopyCommand"
-										},
-										"enableStaging": false,
-										"translator": {
-											"type": "TabularTranslator",
-											"mappings": [
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['bidNm']"
-													},
-													"sink": {
-														"name": "bidnm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['bidPartcptRegistClosDt']"
-													},
-													"sink": {
-														"name": "bidpartcptregistclosdt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['bidStle']"
-													},
-													"sink": {
-														"name": "bidstle",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['biddocPresentnClosDt']"
-													},
-													"sink": {
-														"name": "biddocpresentnclosdt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['bsisPrdprcApplcAt']"
-													},
-													"sink": {
-														"name": "bsisprdprcapplcat",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['bsisPrdprcOthbcAt']"
-													},
-													"sink": {
-														"name": "bsisprdprcothbcat",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['busiDivs']"
-													},
-													"sink": {
-														"name": "busidivs",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['cntrctMth']"
-													},
-													"sink": {
-														"name": "cntrctmth",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['dcsNo']"
-													},
-													"sink": {
-														"name": "dcsno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['demandYear']"
-													},
-													"sink": {
-														"name": "demandyear",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['excutTy']"
-													},
-													"sink": {
-														"name": "excutty",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['excutTyCode']"
-													},
-													"sink": {
-														"name": "excuttycode",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['g2bPblancNo']"
-													},
-													"sink": {
-														"name": "g2bpblancno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['g2bPblancOdr']"
-													},
-													"sink": {
-														"name": "g2bpblancodr",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['opengDt']"
-													},
-													"sink": {
-														"name": "opengdt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['ornt']"
-													},
-													"sink": {
-														"name": "ornt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['orntCode']"
-													},
-													"sink": {
-														"name": "orntcode",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['pblancDate']"
-													},
-													"sink": {
-														"name": "pblancdate",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['pblancNo']"
-													},
-													"sink": {
-														"name": "pblancno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['pblancOdr']"
-													},
-													"sink": {
-														"name": "pblancodr",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['pblancSe']"
-													},
-													"sink": {
-														"name": "pblancse",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['response']['body']['items']['item']['pblancSeCode']"
-													},
-													"sink": {
-														"name": "pblancsecode",
-														"type": "String"
-													}
-												}
-											],
-											"collectionReference": ""
-										}
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_API_D2B",
-											"type": "DatasetReference",
-											"parameters": {
-												"url": {
-													"value": "@concat(pipeline().parameters.service,'?anmtDateBegin=',variables('anmtDateBegin'),'&anmtDateEnd=',variables('anmtDateEnd'),'&numOfRows=1&_type=json')",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_POSTGRESQL_SNK",
-											"type": "DatasetReference",
-											"parameters": {
-												"SinkSchema": {
-													"value": "@pipeline().parameters.SinkSchema",
-													"type": "Expression"
-												},
-												"SinkTable": {
-													"value": "@pipeline().parameters.SinkTable",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								}
-							],
-							"ifTrueActivities": [
-								{
-									"name": "Copy data3",
-									"type": "Copy",
-									"dependsOn": [],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 5,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "JsonSource",
-											"storeSettings": {
-												"type": "HttpReadSettings",
-												"requestMethod": "GET",
-												"additionalHeaders": {
-													"value": "@{concat('User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0 , Accept: application/json, text/plain, */*')}",
-													"type": "Expression"
-												}
-											},
-											"formatSettings": {
-												"type": "JsonReadSettings"
-											}
-										},
-										"sink": {
-											"type": "AzurePostgreSQLSink",
-											"writeBatchSize": 1000000,
-											"writeBatchTimeout": "00:30:00",
-											"writeMethod": "CopyCommand"
-										},
-										"enableStaging": false,
-										"translator": {
-											"type": "TabularTranslator",
-											"mappings": [
-												{
-													"source": {
-														"path": "[['bidNm']"
-													},
-													"sink": {
-														"name": "bidnm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bidPartcptRegistClosDt']"
-													},
-													"sink": {
-														"name": "bidpartcptregistclosdt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bidStle']"
-													},
-													"sink": {
-														"name": "bidstle",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['biddocPresentnClosDt']"
-													},
-													"sink": {
-														"name": "biddocpresentnclosdt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bsisPrdprcApplcAt']"
-													},
-													"sink": {
-														"name": "bsisprdprcapplcat",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['bsisPrdprcOthbcAt']"
-													},
-													"sink": {
-														"name": "bsisprdprcothbcat",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['busiDivs']"
-													},
-													"sink": {
-														"name": "busidivs",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['cntrctMth']"
-													},
-													"sink": {
-														"name": "cntrctmth",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['dcsNo']"
-													},
-													"sink": {
-														"name": "dcsno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['demandYear']"
-													},
-													"sink": {
-														"name": "demandyear",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['excutTy']"
-													},
-													"sink": {
-														"name": "excutty",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['excutTyCode']"
-													},
-													"sink": {
-														"name": "excuttycode",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['g2bPblancNo']"
-													},
-													"sink": {
-														"name": "g2bpblancno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['g2bPblancOdr']"
-													},
-													"sink": {
-														"name": "g2bpblancodr",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['opengDt']"
-													},
-													"sink": {
-														"name": "opengdt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['ornt']"
-													},
-													"sink": {
-														"name": "ornt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['orntCode']"
-													},
-													"sink": {
-														"name": "orntcode",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['pblancDate']"
-													},
-													"sink": {
-														"name": "pblancdate",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['pblancNo']"
-													},
-													"sink": {
-														"name": "pblancno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['pblancOdr']"
-													},
-													"sink": {
-														"name": "pblancodr",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['pblancSe']"
-													},
-													"sink": {
-														"name": "pblancse",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['pblancSeCode']"
-													},
-													"sink": {
-														"name": "pblancsecode",
-														"type": "String"
-													}
-												}
-											],
-											"collectionReference": "$['response']['body']['items']['item']"
-										}
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_API_D2B",
-											"type": "DatasetReference",
-											"parameters": {
-												"url": {
-													"value": "@concat(pipeline().parameters.service,'?anmtDateBegin=20240227&anmtDateEnd=20240227&numOfRows=2&_type=json')",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_POSTGRESQL_SNK_P02",
-											"type": "DatasetReference",
-											"parameters": {
-												"SinkSchema": {
-													"value": "@pipeline().parameters.SinkSchema",
-													"type": "Expression"
-												},
-												"SinkTable": {
-													"value": "@pipeline().parameters.SinkTable",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								}
-							]
-						}
-					},
-					{
-						"name": "get totalcount",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "set anmtDateBegin",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							},
-							{
-								"activity": "set anmtDateEnd",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 5,
-							"retryIntervalInSeconds": 60,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "JsonSource",
-								"storeSettings": {
-									"type": "HttpReadSettings",
-									"requestMethod": "GET"
-								},
-								"formatSettings": {
-									"type": "JsonReadSettings"
-								}
-							},
-							"dataset": {
-								"referenceName": "DTS_API_D2B",
-								"type": "DatasetReference",
-								"parameters": {
-									"url": {
-										"value": "@concat(pipeline().parameters.service,'?_type=json&anmtDateBegin=',variables('anmtDateBegin'),'&anmtDateEnd=',variables('anmtDateEnd'),'&numOfRows=1')",
-										"type": "Expression"
-									}
-								}
-							}
-						}
-					},
-					{
-						"name": "Lookup1",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "If Condition1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "SELECT \ndistinct demandyear , dcsno , orntcode ,  pblancNo, pblancOdr,pblancdate \nFROM cd_ods.tb_d2b_cmpt_bid_notice_list\nWHERE to_char(if_date, 'YYYYMMDD') = to_char(now(), 'YYYYMMDD');",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup1').output.value",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"batchCount": 30,
-							"activities": [
-								{
-									"name": "Execute Pipeline1",
-									"type": "ExecutePipeline",
-									"dependsOn": [],
-									"policy": {
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"pipeline": {
-											"referenceName": "PIP_API_INDUSTRY_D2B_CMPT_BID_NOTICE_DETAIL",
-											"type": "PipelineReference"
-										},
-										"waitOnCompletion": true,
-										"parameters": {
-											"pippblancdate": {
-												"value": "@item().pblancdate",
-												"type": "Expression"
-											},
-											"pipdcsno": {
-												"value": "@item().dcsNo",
-												"type": "Expression"
-											},
-											"piporntcode": {
-												"value": "@item().orntCode",
-												"type": "Expression"
-											},
-											"pippblancno": {
-												"value": "@item().pblancNo",
-												"type": "Expression"
-											},
-											"pippblancodr": {
-												"value": "@item().pblancOdr",
-												"type": "Expression"
-											},
-											"pipdemandyear": {
-												"value": "@item().demandyear",
-												"type": "Expression"
-											}
-										}
-									}
-								}
-							]
-						}
-					},
-					{
-						"name": "Lookup1_copy1",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "ForEach1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "SELECT DISTINCT demandyear , dcsno , orntcode\nFROM cd_ods.tb_d2b_cmpt_bid_notice_list\nWHERE to_char(if_date, 'YYYYMMDD') = to_char(now(), 'YYYYMMDD');",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1_copy1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup1_copy1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup1').output.value",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"batchCount": 30,
-							"activities": [
-								{
-									"name": "Execute Pipeline1_copy1",
-									"type": "ExecutePipeline",
-									"dependsOn": [],
-									"policy": {
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"pipeline": {
-											"referenceName": "PIP_API_INDUSTRY_D2B_BID_ITEM_DETAIL",
-											"type": "PipelineReference"
-										},
-										"waitOnCompletion": true,
-										"parameters": {
-											"pipdemandyear": {
-												"value": "@item().demandYear",
-												"type": "Expression"
-											},
-											"pipdcsno": {
-												"value": "@item().dcsNo",
-												"type": "Expression"
-											},
-											"piporntcode": {
-												"value": "@item().orntCode",
-												"type": "Expression"
-											}
-										}
-									}
-								}
-							]
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"Apikey": {
-						"type": "string",
-						"defaultValue": "W26gwh49fADZe9fVLqkaAlzn5IPh6n9jf9FCHkThIs6UDblFv46xFoLaNzl011vFX8daAemoPlw4BubABfFBRg%3D%3D"
-					},
-					"service": {
-						"type": "string",
-						"defaultValue": "/openapi/service/BidPblancInfoService/getDmstcCmpetBidPblancList"
-					},
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "tb_d2b_cmpt_bid_notice_list"
-					},
-					"one_page_row": {
-						"type": "string",
-						"defaultValue": "999"
-					},
-					"pipanmtDateBegin": {
-						"type": "string"
-					},
-					"pipanmtDateEnd": {
-						"type": "string"
-					}
-				},
-				"variables": {
-					"anmtDateBegin": {
-						"type": "String"
-					},
-					"anmtDateEnd": {
-						"type": "String"
-					}
-				},
-				"folder": {
-					"name": "Industry/외부/방위사업청"
-				},
-				"annotations": [],
-				"lastPublishTime": "2023-01-16T07:55:39Z"
-			},
-			"dependsOn": []
-		},
-		{
 			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_DART_COMPANY_M')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -3777,991 +2475,6 @@
 					"name": "Industry/외부/조달청"
 				},
 				"annotations": []
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_MAS_PROCUREMENT_CORPORATION_INC')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "조달업체기본정보",
-				"activities": [
-					{
-						"name": "set strdt",
-						"description": "당일자",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "strdt",
-							"value": {
-								"value": "@concat(formatDateTime(adddays(addHours(utcNow(), 9), -2), 'yyyyMMdd'),'0000')",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "set enddt",
-						"description": "당일자",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "enddt",
-							"value": {
-								"value": "@concat(formatDateTime(adddays(addHours(utcNow(), 9), -1), 'yyyyMMdd'),'2359')",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "delet table",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "set strdt",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							},
-							{
-								"activity": "set enddt",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "delete from  @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}       \n;\n \nselect 1 as success",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "get page",
-						"description": "대표 제품의 생성 기간동안 토탈 건수 ",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "delet table",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 5,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "JsonSource",
-								"storeSettings": {
-									"type": "HttpReadSettings",
-									"requestMethod": "GET"
-								},
-								"formatSettings": {
-									"type": "JsonReadSettings"
-								}
-							},
-							"dataset": {
-								"referenceName": "DTS_PPS_API_JSON",
-								"type": "DatasetReference",
-								"parameters": {
-									"params": {
-										"value": "@concat('/1230000/ao/UsrInfoService/',pipeline().parameters.service,'?type=json&inqryDiv=1&pageNo=1&numOfRows=10&inqryBgnDt=',variables('strdt'),'&inqryEndDt=',variables('enddt'),'&ServiceKey=',pipeline().parameters.Apikey)",
-										"type": "Expression"
-									}
-								}
-							}
-						}
-					},
-					{
-						"name": "ForEach1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "get page",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@range(1  \n      ,add(\n             div(\n                  int(activity('get page').output.firstRow.response.body.totalCount) \n                 ,int(pipeline().parameters.one_page_row)                  \n                )\n            ,if(\n                greater(\n                        mod(\n                            int(activity('get page').output.firstRow.response.body.totalCount) \n                        ,int(pipeline().parameters.one_page_row)   \n                            )\n                       ,0\n                       )\n                ,1,0\n            )           \n       )\n)",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"batchCount": 40,
-							"activities": [
-								{
-									"name": "Copy data1_copy1",
-									"type": "Copy",
-									"dependsOn": [],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 5,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "JsonSource",
-											"storeSettings": {
-												"type": "HttpReadSettings",
-												"requestMethod": "GET"
-											},
-											"formatSettings": {
-												"type": "JsonReadSettings"
-											}
-										},
-										"sink": {
-											"type": "AzurePostgreSQLSink",
-											"writeBatchSize": 1000000,
-											"writeBatchTimeout": "00:30:00",
-											"writeMethod": "CopyCommand"
-										},
-										"enableStaging": false,
-										"enableSkipIncompatibleRow": false,
-										"translator": {
-											"type": "TabularTranslator",
-											"mappings": [
-												{
-													"source": {
-														"path": "[['bizno']"
-													},
-													"sink": {
-														"name": "bizno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['corpNm']"
-													},
-													"sink": {
-														"name": "corp_nm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['engCorpNm']"
-													},
-													"sink": {
-														"name": "eng_corp_nm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['opbizDt']"
-													},
-													"sink": {
-														"name": "opbiz_dt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['rgnCd']"
-													},
-													"sink": {
-														"name": "rgn_cd",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['rgnNm']"
-													},
-													"sink": {
-														"name": "rgn_nm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['zip']"
-													},
-													"sink": {
-														"name": "zip",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['adrs']"
-													},
-													"sink": {
-														"name": "adrs",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['dtlAdrs']"
-													},
-													"sink": {
-														"name": "dtl_adrs",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['telNo']"
-													},
-													"sink": {
-														"name": "tel_no",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['faxNo']"
-													},
-													"sink": {
-														"name": "fax_no",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['cntryNm']"
-													},
-													"sink": {
-														"name": "cntry_nm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['hmpgAdrs']"
-													},
-													"sink": {
-														"name": "hmpg_adrs",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['mnfctDivCd']"
-													},
-													"sink": {
-														"name": "mnfct_div_cd",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['mnfctDivNm']"
-													},
-													"sink": {
-														"name": "mnfct_div_nm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['emplyeNum']"
-													},
-													"sink": {
-														"name": "emplye_num",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['corpBsnsDivCd']"
-													},
-													"sink": {
-														"name": "corp_bsns_div_cd",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['corpBsnsDivNm']"
-													},
-													"sink": {
-														"name": "corp_bsns_div_nm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['hdoffceDivNm']"
-													},
-													"sink": {
-														"name": "hdoffce_div_nm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['rgstDt']"
-													},
-													"sink": {
-														"name": "rgst_dt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['chgDt']"
-													},
-													"sink": {
-														"name": "chg_dt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['esntlNoCertRgstYn']"
-													},
-													"sink": {
-														"name": "esntl_no_cert_rgst_yn",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['ceoNm']"
-													},
-													"sink": {
-														"name": "ceo_nm",
-														"type": "String"
-													}
-												}
-											],
-											"collectionReference": "$['response']['body']['items']",
-											"mapComplexValuesToString": false
-										}
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_PPS_API_JSON",
-											"type": "DatasetReference",
-											"parameters": {
-												"params": {
-													"value": "@concat('/1230000/ao/UsrInfoService/',pipeline().parameters.service,'?type=json&inqryDiv=1&pageNo=',item(),'&numOfRows=',pipeline().parameters.one_page_row,'&inqryBgnDt=',variables('strdt'),'&inqryEndDt=',variables('enddt'),'&ServiceKey=',pipeline().parameters.Apikey)",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_POSTGRESQL_SNK",
-											"type": "DatasetReference",
-											"parameters": {
-												"SinkSchema": {
-													"value": "@pipeline().parameters.SinkSchema",
-													"type": "Expression"
-												},
-												"SinkTable": {
-													"value": "@pipeline().parameters.SinkTable",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								}
-							]
-						}
-					},
-					{
-						"name": "get page_copy1",
-						"description": "대표 제품의 생성 기간동안 토탈 건수 ",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "ForEach1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 5,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "JsonSource",
-								"storeSettings": {
-									"type": "HttpReadSettings",
-									"requestMethod": "GET"
-								},
-								"formatSettings": {
-									"type": "JsonReadSettings"
-								}
-							},
-							"dataset": {
-								"referenceName": "DTS_PPS_API_JSON",
-								"type": "DatasetReference",
-								"parameters": {
-									"params": {
-										"value": "@concat('/1230000/ao/UsrInfoService/',pipeline().parameters.service,'?type=json&inqryDiv=2&pageNo=1&numOfRows=1&inqryBgnDt=',variables('strdt'),'&inqryEndDt=',variables('enddt'),'&ServiceKey=',pipeline().parameters.Apikey)",
-										"type": "Expression"
-									}
-								}
-							}
-						}
-					},
-					{
-						"name": "ForEach1_copy1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "get page_copy1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@range(1  \n      ,add(\n             div(\n                  int(activity('get page_copy1').output.firstRow.response.body.totalCount) \n                 ,int(pipeline().parameters.one_page_row)                  \n                )\n            ,if(\n                greater(\n                        mod(\n                            int(activity('get page_copy1').output.firstRow.response.body.totalCount) \n                        ,int(pipeline().parameters.one_page_row)   \n                            )\n                       ,0\n                       )\n                ,1,0\n            )           \n       )\n)",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"batchCount": 40,
-							"activities": [
-								{
-									"name": "Copy data1_copy1_copy1",
-									"type": "Copy",
-									"dependsOn": [],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 5,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "JsonSource",
-											"storeSettings": {
-												"type": "HttpReadSettings",
-												"requestMethod": "GET"
-											},
-											"formatSettings": {
-												"type": "JsonReadSettings"
-											}
-										},
-										"sink": {
-											"type": "AzurePostgreSQLSink",
-											"writeBatchSize": 1000000,
-											"writeBatchTimeout": "00:30:00",
-											"writeMethod": "CopyCommand"
-										},
-										"enableStaging": false,
-										"enableSkipIncompatibleRow": false,
-										"translator": {
-											"type": "TabularTranslator",
-											"mappings": [
-												{
-													"source": {
-														"path": "[['bizno']"
-													},
-													"sink": {
-														"name": "bizno",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['corpNm']"
-													},
-													"sink": {
-														"name": "corp_nm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['engCorpNm']"
-													},
-													"sink": {
-														"name": "eng_corp_nm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['opbizDt']"
-													},
-													"sink": {
-														"name": "opbiz_dt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['rgnCd']"
-													},
-													"sink": {
-														"name": "rgn_cd",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['rgnNm']"
-													},
-													"sink": {
-														"name": "rgn_nm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['zip']"
-													},
-													"sink": {
-														"name": "zip",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['adrs']"
-													},
-													"sink": {
-														"name": "adrs",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['dtlAdrs']"
-													},
-													"sink": {
-														"name": "dtl_adrs",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['telNo']"
-													},
-													"sink": {
-														"name": "tel_no",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['faxNo']"
-													},
-													"sink": {
-														"name": "fax_no",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['cntryNm']"
-													},
-													"sink": {
-														"name": "cntry_nm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['hmpgAdrs']"
-													},
-													"sink": {
-														"name": "hmpg_adrs",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['mnfctDivCd']"
-													},
-													"sink": {
-														"name": "mnfct_div_cd",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['mnfctDivNm']"
-													},
-													"sink": {
-														"name": "mnfct_div_nm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['emplyeNum']"
-													},
-													"sink": {
-														"name": "emplye_num",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['corpBsnsDivCd']"
-													},
-													"sink": {
-														"name": "corp_bsns_div_cd",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['corpBsnsDivNm']"
-													},
-													"sink": {
-														"name": "corp_bsns_div_nm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['hdoffceDivNm']"
-													},
-													"sink": {
-														"name": "hdoffce_div_nm",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['rgstDt']"
-													},
-													"sink": {
-														"name": "rgst_dt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['chgDt']"
-													},
-													"sink": {
-														"name": "chg_dt",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['esntlNoCertRgstYn']"
-													},
-													"sink": {
-														"name": "esntl_no_cert_rgst_yn",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['ceoNm']"
-													},
-													"sink": {
-														"name": "ceo_nm",
-														"type": "String"
-													}
-												}
-											],
-											"collectionReference": "$['response']['body']['items']",
-											"mapComplexValuesToString": false
-										}
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_PPS_API_JSON",
-											"type": "DatasetReference",
-											"parameters": {
-												"params": {
-													"value": "@concat('/1230000/ao/UsrInfoService/',pipeline().parameters.service,'?type=json&inqryDiv=2&pageNo=',item(),'&numOfRows=',pipeline().parameters.one_page_row,'&inqryBgnDt=',variables('strdt'),'&inqryEndDt=',variables('enddt'),'&ServiceKey=',pipeline().parameters.Apikey)",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_POSTGRESQL_SNK",
-											"type": "DatasetReference",
-											"parameters": {
-												"SinkSchema": {
-													"value": "@pipeline().parameters.SinkSchema",
-													"type": "Expression"
-												},
-												"SinkTable": {
-													"value": "@pipeline().parameters.SinkTable",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								}
-							]
-						}
-					},
-					{
-						"name": "Lookup1",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "ForEach1_copy1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "select bizno from cd_ods.tb_mas_procurement_corporation_increase",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1_copy2",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup1').output.value",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"batchCount": 40,
-							"activities": [
-								{
-									"name": "Execute Pipeline1_copy1",
-									"type": "ExecutePipeline",
-									"dependsOn": [],
-									"policy": {
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"pipeline": {
-											"referenceName": "PIP_API_INDUSTRY_MAS_PROCUREMENT_CORPORATION_INDUSTRY_INFO",
-											"type": "PipelineReference"
-										},
-										"waitOnCompletion": true,
-										"parameters": {
-											"pipbizno": {
-												"value": "@item().bizno",
-												"type": "Expression"
-											}
-										}
-									}
-								}
-							]
-						}
-					},
-					{
-						"name": "Lookup1_copy1",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "ForEach1_copy2",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "select bizno from cd_ods.tb_mas_procurement_corporation_increase \nWHERE bizno IN (\nSELECT DISTINCT bizno FROM  cd_ods.tb_mas_procurement_corporation_industry_info\nWHERE indstryty_nm LIKE '%식품%'\n)",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1_copy3",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup1_copy1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup1').output.value",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"batchCount": 40,
-							"activities": [
-								{
-									"name": "Execute Pipeline1_copy2",
-									"type": "ExecutePipeline",
-									"dependsOn": [],
-									"policy": {
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"pipeline": {
-											"referenceName": "PIP_API_INDUSTRY_MAS_PROCUREMENT_CORPORATION_SUPPLY_PRODUCT_INFO",
-											"type": "PipelineReference"
-										},
-										"waitOnCompletion": true,
-										"parameters": {
-											"pipbizno": {
-												"value": "@item().bizno",
-												"type": "Expression"
-											}
-										}
-									}
-								}
-							]
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"Apikey": {
-						"type": "string",
-						"defaultValue": "rj5HeIJYh3E2HRvmEw3P3%2BeVDZoZj074w7IIt%2BpcAaujPSI9CTx0U88XSd6C9eWwkBMUncCaG4w%2FtYRT898jcw%3D%3D"
-					},
-					"service": {
-						"type": "string",
-						"defaultValue": "getPrcrmntCorpBasicInfo"
-					},
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "tb_mas_procurement_corporation_increase"
-					},
-					"one_page_row": {
-						"type": "string",
-						"defaultValue": "10"
-					},
-					"pipstrdt": {
-						"type": "string"
-					},
-					"pipenddt": {
-						"type": "string"
-					}
-				},
-				"variables": {
-					"strdt": {
-						"type": "String"
-					},
-					"enddt": {
-						"type": "String"
-					}
-				},
-				"folder": {
-					"name": "Industry/외부/조달청"
-				},
-				"annotations": [],
-				"lastPublishTime": "2023-01-16T07:55:39Z"
 			},
 			"dependsOn": []
 		}
