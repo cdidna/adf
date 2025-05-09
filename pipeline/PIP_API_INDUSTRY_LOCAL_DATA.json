@@ -1,0 +1,480 @@
+{
+	"name": "PIP_API_INDUSTRY_LOCAL_DATA",
+	"properties": {
+		"description": "낙찰된 목록 현황 물품조회",
+		"activities": [
+			{
+				"name": "set strdt",
+				"description": "당일자",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "strdt",
+					"value": {
+						"value": "@formatDateTime(adddays(addHours(utcNow(), 9), -15), 'yyyyMMdd')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "set enddt",
+				"description": "당일자",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "enddt",
+					"value": {
+						"value": "@formatDateTime(adddays(addHours(utcNow(), 9), -2), 'yyyyMMdd')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "get page",
+				"description": "대표 제품의 생성 기간동안 토탈 건수 ",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "set strdt",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "set enddt",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "XmlSource",
+						"storeSettings": {
+							"type": "HttpReadSettings",
+							"requestMethod": "GET"
+						},
+						"formatSettings": {
+							"type": "XmlReadSettings",
+							"validationMode": "none",
+							"namespaces": true
+						}
+					},
+					"dataset": {
+						"referenceName": "DTS_API_LOCAL_XML",
+						"type": "DatasetReference",
+						"parameters": {
+							"url": {
+								"value": "@concat('?authKey=SnrFjVsIDd7em8QQMUZ4WCuuNOwsNA1PvvZekj4=MdE=&pageSize=10&lastModTsBgn=',variables('strdt'), '&lastModTsEnd=',variables('enddt'))",
+								"type": "Expression"
+							}
+						}
+					}
+				}
+			},
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "get page",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@range(1  \n      ,add(\n             div(\n                  int(activity('get page').output.firstRow.response.header.paging.totalCount) \n                 ,int(pipeline().parameters.one_page_row)                  \n                )\n            ,if(\n                greater(\n                        mod(\n                            int(activity('get page').output.firstRow.response.header.paging.totalCount) \n                        ,int(pipeline().parameters.one_page_row)   \n                            )\n                       ,0\n                       )\n                ,1,0\n            )           \n       )\n)",
+						"type": "Expression"
+					},
+					"activities": [
+						{
+							"name": "Copy data1_copy1",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "XmlSource",
+									"storeSettings": {
+										"type": "HttpReadSettings",
+										"requestMethod": "GET"
+									},
+									"formatSettings": {
+										"type": "XmlReadSettings",
+										"validationMode": "none",
+										"namespaces": true
+									}
+								},
+								"sink": {
+									"type": "AzurePostgreSQLSink",
+									"writeBatchSize": 1000000,
+									"writeBatchTimeout": "00:30:00",
+									"writeMethod": "CopyCommand"
+								},
+								"enableStaging": false,
+								"enableSkipIncompatibleRow": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"mappings": [
+										{
+											"source": {
+												"path": "['rowNum']"
+											},
+											"sink": {
+												"name": "rownum",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['opnSfTeamCode']"
+											},
+											"sink": {
+												"name": "opnsfteamcode",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['mgtNo']"
+											},
+											"sink": {
+												"name": "mgtno",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['opnSvcId']"
+											},
+											"sink": {
+												"name": "opnsvcid",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['updateGbn']"
+											},
+											"sink": {
+												"name": "updategbn",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['updateDt']"
+											},
+											"sink": {
+												"name": "updatedt",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['opnSvcNm']"
+											},
+											"sink": {
+												"name": "opnsvcnm",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['bplcNm']"
+											},
+											"sink": {
+												"name": "bplcnm",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['sitePostNo']"
+											},
+											"sink": {
+												"name": "sitepostno",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['siteWhlAddr']"
+											},
+											"sink": {
+												"name": "sitewhladdr",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['rdnPostNo']"
+											},
+											"sink": {
+												"name": "rdnpostno",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['rdnWhlAddr']"
+											},
+											"sink": {
+												"name": "rdnwhladdr",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['siteArea']"
+											},
+											"sink": {
+												"name": "sitearea",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['apvPermYmd']"
+											},
+											"sink": {
+												"name": "apvpermymd",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['apvCancelYmd']"
+											},
+											"sink": {
+												"name": "apvcancelymd",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['dcbYmd']"
+											},
+											"sink": {
+												"name": "dcbymd",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['clgStdt']"
+											},
+											"sink": {
+												"name": "clgstdt",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['clgEnddt']"
+											},
+											"sink": {
+												"name": "clgenddt",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['ropnYmd']"
+											},
+											"sink": {
+												"name": "ropnymd",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['trdStateGbn']"
+											},
+											"sink": {
+												"name": "trdstategbn",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['trdStateNm']"
+											},
+											"sink": {
+												"name": "trdstatenm",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['dtlStateGbn']"
+											},
+											"sink": {
+												"name": "dtlstategbn",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['dtlStateNm']"
+											},
+											"sink": {
+												"name": "dtlstatenm",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['x']"
+											},
+											"sink": {
+												"name": "x",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['y']"
+											},
+											"sink": {
+												"name": "y",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['lastModTs']"
+											},
+											"sink": {
+												"name": "lastmodts",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['uptaeNm']"
+											},
+											"sink": {
+												"name": "uptaenm",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['siteTel']"
+											},
+											"sink": {
+												"name": "sitetel",
+												"type": "String"
+											}
+										}
+									],
+									"collectionReference": "$['result']['body']['rows']['row']",
+									"mapComplexValuesToString": false
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "DTS_API_LOCAL_XML",
+									"type": "DatasetReference",
+									"parameters": {
+										"url": {
+											"value": "@concat('?authKey=SnrFjVsIDd7em8QQMUZ4WCuuNOwsNA1PvvZekj4=MdE=&pageSize=1000&pageIndex=',item(),'&lastModTsBgn=',variables('strdt'), '&lastModTsEnd=',variables('enddt'))",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "DTS_POSTGRESQL_SNK",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": {
+											"value": "@pipeline().parameters.SinkSchema",
+											"type": "Expression"
+										},
+										"SinkTable": {
+											"value": "@pipeline().parameters.SinkTable",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"Apikey": {
+				"type": "string",
+				"defaultValue": "rj5HeIJYh3E2HRvmEw3P3%2BeVDZoZj074w7IIt%2BpcAaujPSI9CTx0U88XSd6C9eWwkBMUncCaG4w%2FtYRT898jcw%3D%3D"
+			},
+			"service": {
+				"type": "string",
+				"defaultValue": "getScsbidListSttusThng"
+			},
+			"SinkSchema": {
+				"type": "string",
+				"defaultValue": "cd_ods"
+			},
+			"SinkTable": {
+				"type": "string",
+				"defaultValue": "tb_cic_restaurant_info_temp"
+			},
+			"one_page_row": {
+				"type": "string",
+				"defaultValue": "1000"
+			},
+			"pipstrdt": {
+				"type": "string"
+			},
+			"pipenddt": {
+				"type": "string"
+			}
+		},
+		"variables": {
+			"strdt": {
+				"type": "String"
+			},
+			"enddt": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "Industry/외부/인허가데이터"
+		},
+		"annotations": [],
+		"lastPublishTime": "2023-01-16T07:55:39Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}
