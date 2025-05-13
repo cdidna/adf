@@ -6186,6 +6186,531 @@
 			"dependsOn": []
 		},
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_LOCAL_DATA')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "낙찰된 목록 현황 물품조회",
+				"activities": [
+					{
+						"name": "set strdt",
+						"description": "당일자",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "strdt",
+							"value": {
+								"value": "@formatDateTime(adddays(addHours(utcNow(), 9), -2), 'yyyyMMdd')",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "set enddt",
+						"description": "당일자",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "enddt",
+							"value": {
+								"value": "@formatDateTime(adddays(addHours(utcNow(), 9), -2), 'yyyyMMdd')",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "get page",
+						"description": "대표 제품의 생성 기간동안 토탈 건수 ",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "set strdt",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "set enddt",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "XmlSource",
+								"storeSettings": {
+									"type": "HttpReadSettings",
+									"requestMethod": "GET"
+								},
+								"formatSettings": {
+									"type": "XmlReadSettings",
+									"validationMode": "none",
+									"namespaces": true
+								}
+							},
+							"dataset": {
+								"referenceName": "DTS_API_LOCAL_XML",
+								"type": "DatasetReference",
+								"parameters": {
+									"url": {
+										"value": "@concat('?authKey=SnrFjVsIDd7em8QQMUZ4WCuuNOwsNA1PvvZekj4=MdE=&pageSize=10&lastModTsBgn=',variables('strdt'), '&lastModTsEnd=',variables('enddt'))",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "get page",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@range(1  \n      ,add(\n             div(\n                  int(activity('get page').output.firstRow.result.header.paging.totalCount) \n                 ,int(pipeline().parameters.one_page_row)                  \n                )\n            ,if(\n                greater(\n                        mod(\n                            int(activity('get page').output.firstRow.result.header.paging.totalCount) \n                        ,int(pipeline().parameters.one_page_row)   \n                            )\n                       ,0\n                       )\n                ,1,0\n            )           \n       )\n)",
+								"type": "Expression"
+							},
+							"batchCount": 5,
+							"activities": [
+								{
+									"name": "Copy data1_copy1",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "XmlSource",
+											"storeSettings": {
+												"type": "HttpReadSettings",
+												"requestMethod": "GET"
+											},
+											"formatSettings": {
+												"type": "XmlReadSettings",
+												"validationMode": "none",
+												"namespaces": true
+											}
+										},
+										"sink": {
+											"type": "AzurePostgreSQLSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"enableSkipIncompatibleRow": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"path": "[['rowNum']"
+													},
+													"sink": {
+														"name": "번호",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['opnSfTeamCode']"
+													},
+													"sink": {
+														"name": "개방자치단체코드",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['mgtNo']"
+													},
+													"sink": {
+														"name": "관리번호",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['opnSvcId']"
+													},
+													"sink": {
+														"name": "개방서비스아이디",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['updateGbn']"
+													},
+													"sink": {
+														"name": "데이터갱신구분",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['updateDt']"
+													},
+													"sink": {
+														"name": "데이터갱신일자",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['opnSvcNm']"
+													},
+													"sink": {
+														"name": "개방서비스명",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['bplcNm']"
+													},
+													"sink": {
+														"name": "사업장명",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['sitePostNo']"
+													},
+													"sink": {
+														"name": "소재지우편번호",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['siteWhlAddr']"
+													},
+													"sink": {
+														"name": "소재지전체주소",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['rdnPostNo']"
+													},
+													"sink": {
+														"name": "도로명우편번호",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['rdnWhlAddr']"
+													},
+													"sink": {
+														"name": "도로명전체주소",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['siteArea']"
+													},
+													"sink": {
+														"name": "소재지면적",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['apvPermYmd']"
+													},
+													"sink": {
+														"name": "인허가일자",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['apvCancelYmd']"
+													},
+													"sink": {
+														"name": "인허가취소일자",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['dcbYmd']"
+													},
+													"sink": {
+														"name": "폐업일자",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['clgStdt']"
+													},
+													"sink": {
+														"name": "휴업시작일자",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['clgEnddt']"
+													},
+													"sink": {
+														"name": "휴업종료일자",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['ropnYmd']"
+													},
+													"sink": {
+														"name": "재개업일자",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['trdStateGbn']"
+													},
+													"sink": {
+														"name": "영업상태구분코드",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['trdStateNm']"
+													},
+													"sink": {
+														"name": "영업상태명",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['dtlStateGbn']"
+													},
+													"sink": {
+														"name": "상세영업상태코드",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['dtlStateNm']"
+													},
+													"sink": {
+														"name": "상세영업상태명",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['x']"
+													},
+													"sink": {
+														"name": "좌표정보(x)",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['y']"
+													},
+													"sink": {
+														"name": "좌표정보(y)",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['lastModTs']"
+													},
+													"sink": {
+														"name": "최종수정시점",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['uptaeNm']"
+													},
+													"sink": {
+														"name": "업태구분명",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['siteTel']"
+													},
+													"sink": {
+														"name": "소재지전화",
+														"type": "String"
+													}
+												}
+											],
+											"collectionReference": "$['result']['body']['rows']['row']",
+											"mapComplexValuesToString": false
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_API_LOCAL_XML",
+											"type": "DatasetReference",
+											"parameters": {
+												"url": {
+													"value": "@concat('?authKey=SnrFjVsIDd7em8QQMUZ4WCuuNOwsNA1PvvZekj4=MdE=&pageSize=1000&pageIndex=',item(),'&lastModTsBgn=',variables('strdt'), '&lastModTsEnd=',variables('enddt'))",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK_P02",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": {
+													"value": "@pipeline().parameters.SinkSchema",
+													"type": "Expression"
+												},
+												"SinkTable": {
+													"value": "@pipeline().parameters.SinkTable",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					},
+					{
+						"name": "Lookup1",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "ForEach1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "select cd_ods.fn_cic_restaurant_info_increase();",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK_P02",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"Apikey": {
+						"type": "string",
+						"defaultValue": "rj5HeIJYh3E2HRvmEw3P3%2BeVDZoZj074w7IIt%2BpcAaujPSI9CTx0U88XSd6C9eWwkBMUncCaG4w%2FtYRT898jcw%3D%3D"
+					},
+					"service": {
+						"type": "string",
+						"defaultValue": "getScsbidListSttusThng"
+					},
+					"SinkSchema": {
+						"type": "string",
+						"defaultValue": "cd_ods"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "tb_cic_restaurant_info_temp"
+					},
+					"one_page_row": {
+						"type": "string",
+						"defaultValue": "1000"
+					},
+					"pipstrdt": {
+						"type": "string"
+					},
+					"pipenddt": {
+						"type": "string"
+					}
+				},
+				"variables": {
+					"strdt": {
+						"type": "String"
+					},
+					"enddt": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "Industry/외부/인허가데이터"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-01-16T07:55:39Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_MAFRA_ARDD_PRDCTN_ACMSLT')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -11308,86 +11833,6 @@
 				},
 				"annotations": [],
 				"lastPublishTime": "2022-12-15T09:05:35Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_PG_STORE_DATA')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "Copy data1",
-						"type": "Copy",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "DelimitedTextSource",
-								"storeSettings": {
-									"type": "AzureBlobFSReadSettings",
-									"recursive": true,
-									"enablePartitionDiscovery": false
-								},
-								"formatSettings": {
-									"type": "DelimitedTextReadSettings"
-								}
-							},
-							"sink": {
-								"type": "AzurePostgreSQLSink",
-								"writeBatchSize": 1000000,
-								"writeBatchTimeout": "00:30:00",
-								"preCopyScript": "truncate table cd_mart.dm_cm_rsn_store_data_master_t;",
-								"writeMethod": "CopyCommand"
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"typeConversion": true,
-								"typeConversionSettings": {
-									"allowDataTruncation": true,
-									"treatBooleanAsNumber": false
-								}
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_ADLS_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"AdlsDirectory": "고객/외부/온라인몰정보/RSN_온라인몰_상품정보(중복제거)",
-									"FileName": "D_RSN_온라인몰_상품정보(중복제거)_STORE_DATA.csv"
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_POSTGRESQL_SNK_P02",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "cd_mart",
-									"SinkTable": "dm_cm_rsn_store_data_master_t"
-								}
-							}
-						]
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"folder": {
-					"name": "고객/외부/온라인몰정보"
-				},
-				"annotations": [],
-				"lastPublishTime": "2023-01-25T01:23:44Z"
 			},
 			"dependsOn": []
 		}
