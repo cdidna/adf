@@ -13,6 +13,528 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_QUALITY_DITBCD_D')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "식품의약품안전처(식품안전나라)\n유통바코드",
+				"activities": [
+					{
+						"name": "ForEach Copy data",
+						"description": "cdi-root 품질/외부/식품안전나라/유통바코드 위치에 항목별로 복사합니다.",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "ORA GET CNT",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "API GET CNT",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@range(\n    1\n    ,add(\n        div(\n            sub(\n                activity('API GET CNT').output.firstRow.I2570.total_count\n                ,int(activity('ORA GET CNT').output.firstRow.total_cnt)\n            )\n            , 1000\n        )\n        ,if(\n            greater(\n                mod(\n                    sub(\n                        activity('API GET CNT').output.firstRow.I2570.total_count\n                        ,int(activity('ORA GET CNT').output.firstRow.total_cnt)\n                    )\n                    , 1000\n                )\n                , 0\n            )\n            , 1\n            , 0\n        )\n    )\n)",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "API REQ_copy1",
+									"description": "각 API 호출",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Set endIndex",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "XmlSource",
+											"storeSettings": {
+												"type": "HttpReadSettings",
+												"requestMethod": "GET"
+											},
+											"formatSettings": {
+												"type": "XmlReadSettings",
+												"validationMode": "none",
+												"namespaces": true
+											}
+										},
+										"sink": {
+											"type": "DelimitedTextSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "DelimitedTextWriteSettings",
+												"quoteAllText": true,
+												"fileExtension": ".txt"
+											}
+										},
+										"enableStaging": false,
+										"parallelCopies": 1,
+										"enableSkipIncompatibleRow": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"path": "[['PRDLST_REPORT_NO']"
+													},
+													"sink": {
+														"name": "PRDLST_REPORT_NO",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['HTRK_PRDLST_NM']"
+													},
+													"sink": {
+														"name": "HTRK_PRDLST_NM",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['LAST_UPDT_DTM']"
+													},
+													"sink": {
+														"name": "LAST_UPDT_DTM",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['HRNK_PRDLST_NM']"
+													},
+													"sink": {
+														"name": "HRNK_PRDLST_NM",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['BRCD_NO']"
+													},
+													"sink": {
+														"name": "BRCD_NO",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['PRDLST_NM']"
+													},
+													"sink": {
+														"name": "PRDLST_NM",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['PRDT_NM']"
+													},
+													"sink": {
+														"name": "PRDT_NM",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['CMPNY_NM']"
+													},
+													"sink": {
+														"name": "CMPNY_NM",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['@id']"
+													},
+													"sink": {
+														"name": "ROW_ID",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['I2570']['total_count']"
+													},
+													"sink": {
+														"name": "total_count",
+														"type": "String"
+													}
+												}
+											],
+											"collectionReference": "$['I2570']['row']"
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_API_DITBCD_SRC",
+											"type": "DatasetReference",
+											"parameters": {
+												"ApiKey": {
+													"value": "@pipeline().parameters.Apikey",
+													"type": "Expression"
+												},
+												"StartIdx": {
+													"value": "@variables('startIdx')",
+													"type": "Expression"
+												},
+												"EndIdx": {
+													"value": "@variables('endIdx')",
+													"type": "Expression"
+												},
+												"ServiceId": {
+													"value": "@pipeline().parameters.ServiceId",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_ADLS_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"AdlsDirectory": {
+													"value": "@concat(pipeline().parameters.AdlsDirectoryOri,'/',formatDateTime(addHours(utcNow(), 9), 'yyyyMM'))",
+													"type": "Expression"
+												},
+												"FileName": {
+													"value": "@concat(pipeline().parameters.FileName, '_', replace(variables('endIdx'), '/', '_'),'_',formatDateTime(addHours(utcNow(), 9), 'yyyyMMdd'), '.csv')",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "Set startIdx",
+									"description": "시 인덱스 값을 정의한다.",
+									"type": "SetVariable",
+									"dependsOn": [],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "startIdx",
+										"value": {
+											"value": "@string(sub(\n    add(\n        int(activity('ORA GET CNT').output.firstRow.total_cnt)\n        , add(mul(1000, item()), 1)\n    )\n, 1000))",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "Set endIndex",
+									"description": "종료 인덱스 값을 정의한다.",
+									"type": "SetVariable",
+									"dependsOn": [
+										{
+											"activity": "Set startIdx",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "endIdx",
+										"value": {
+											"value": "@string(add(\n    int(variables('startIdx'))\n    , if(\n        greater(\n            sub(\n                activity('API GET CNT').output.firstRow.I2570.total_count\n                , int(variables('startIdx'))\n            )\n            , 1000\n        )\n        , 999\n        , sub(\n            activity('API GET CNT').output.firstRow.I2570.total_count\n            , int(variables('startIdx'))\n        )\n    )\n))",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "Insert Sequence",
+									"description": "cd_if.cd_fdsfty_seq 값 Insert",
+									"type": "Script",
+									"dependsOn": [
+										{
+											"activity": "API REQ_copy1",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"linkedServiceName": {
+										"referenceName": "LKS_ORA_P01",
+										"type": "LinkedServiceReference"
+									},
+									"typeProperties": {
+										"scripts": [
+											{
+												"type": "Query",
+												"text": {
+													"value": "INSERT INTO cd_if.cd_fdsfty_seq (type, row_id, qty, crt_dt, crt_user) \nVALUES (\n  '@{pipeline().parameters.ServiceId}'\n  , (SELECT NVL(MAX(row_id), 0) + 1 FROM cd_if.cd_fdsfty_seq WHERE type = '@{pipeline().parameters.ServiceId}')\n  , '@{variables('endIdx')}'\n  , to_char(sysdate, 'yyyymmddhhmiss')\n, 'system'\n);",
+													"type": "Expression"
+												}
+											}
+										],
+										"scriptBlockExecutionTimeout": "02:00:00"
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "Merge Data",
+						"description": "cdi-root /품질/외부/식품안전나라/ 위치에 항목별로 복사합니다.",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "ForEach Copy data",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"maxConcurrentConnections": 1,
+									"recursive": true,
+									"wildcardFolderPath": {
+										"value": "@concat(pipeline().parameters.AdlsDirectoryOri,'/',formatDateTime(addHours(utcNow(), 9), 'yyyyMM'))",
+										"type": "Expression"
+									},
+									"wildcardFileName": "*",
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "DelimitedTextSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings",
+									"maxConcurrentConnections": 1,
+									"copyBehavior": "MergeFiles"
+								},
+								"formatSettings": {
+									"type": "DelimitedTextWriteSettings",
+									"quoteAllText": true,
+									"fileExtension": ".txt"
+								}
+							},
+							"enableStaging": false,
+							"parallelCopies": 1,
+							"enableSkipIncompatibleRow": true,
+							"validateDataConsistency": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": {
+										"value": "@pipeline().parameters.AdlsDirectory",
+										"type": "Expression"
+									},
+									"FileName": {
+										"value": "@pipeline().parameters.FileName",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": {
+										"value": "@pipeline().parameters.AdlsDirectory",
+										"type": "Expression"
+									},
+									"FileName": {
+										"value": "@concat(pipeline().parameters.FileName,'_', formatDateTime(addHours(utcNow(), 9), 'yyyyMM'),'.csv')\n\n",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					},
+					{
+						"name": "ORA GET CNT",
+						"description": "저장된 값의 Total 값을 확인하기 위해 DB조",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "OracleSource",
+								"oracleReaderQuery": {
+									"value": "@concat('SELECT NVL(max(qty), 0) as total_cnt FROM cd_if.cd_fdsfty_seq WHERE type = ''', pipeline().parameters.ServiceId, ''' ORDER BY row_id DESC ')",
+									"type": "Expression"
+								},
+								"partitionOption": "None",
+								"convertDecimalToInteger": false,
+								"queryTimeout": "02:00:00"
+							},
+							"dataset": {
+								"referenceName": "DTS_ORACLE_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceSchema": "1",
+									"SourceTable": "1"
+								}
+							},
+							"firstRowOnly": true
+						}
+					},
+					{
+						"name": "API GET CNT",
+						"description": "API의 총 건 수를 확인하기 위해 API 1회 호출.",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "XmlSource",
+								"storeSettings": {
+									"type": "HttpReadSettings",
+									"requestMethod": "GET"
+								},
+								"formatSettings": {
+									"type": "XmlReadSettings",
+									"validationMode": "none",
+									"detectDataType": true,
+									"namespaces": true
+								}
+							},
+							"dataset": {
+								"referenceName": "DTS_API_DITBCD_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"ApiKey": "@pipeline().parameters.Apikey",
+									"StartIdx": "1",
+									"EndIdx": "1",
+									"ServiceId": "@pipeline().parameters.ServiceId"
+								}
+							}
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"AdlsDirectory": {
+						"type": "string",
+						"defaultValue": "품질/외부/식품안전나라"
+					},
+					"FileName": {
+						"type": "string",
+						"defaultValue": "유통바코드"
+					},
+					"AdlsDirectoryConf": {
+						"type": "string",
+						"defaultValue": "품질/외부/식품안전나라/conf"
+					},
+					"ConfFile": {
+						"type": "string",
+						"defaultValue": "유통바코드Index"
+					},
+					"AdlsDirectoryOri": {
+						"type": "string",
+						"defaultValue": "품질/외부/식품안전나라/유통바코드"
+					},
+					"Apikey": {
+						"type": "string",
+						"defaultValue": "f93320322b05463499de"
+					},
+					"ServiceId": {
+						"type": "string",
+						"defaultValue": "I2570"
+					}
+				},
+				"variables": {
+					"startIdx": {
+						"type": "String"
+					},
+					"endIdx": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "품질/외부/식품안전나라"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-12-15T12:48:09Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_API_QUALITY_DITBCD_D_V2')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -6473,179 +6995,6 @@
 				},
 				"annotations": [],
 				"lastPublishTime": "2023-01-16T02:10:16Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_DWRS_SC_EVENT_PLAN_COMPLETE_FULL')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "Lookup Date",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('SELECT DISTINCT(SUBSTR(', pipeline().parameters.IncCol, ', 1, 6)) CALMONTH FROM ', pipeline().parameters.SourceSchema, '.', pipeline().parameters.SourceTable)",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": {
-										"value": "@pipeline().parameters.SourceSchema",
-										"type": "Expression"
-									},
-									"SourceTable": {
-										"value": "@pipeline().parameters.SourceTable",
-										"type": "Expression"
-									}
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach Copy data",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup Date",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup Date').output.value",
-								"type": "Expression"
-							},
-							"isSequential": true,
-							"activities": [
-								{
-									"name": "Copy data All Month",
-									"type": "Copy",
-									"dependsOn": [],
-									"policy": {
-										"timeout": "7.00:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "OracleSource",
-											"oracleReaderQuery": {
-												"value": "@concat('SELECT * FROM ', pipeline().parameters.SourceSchema, '.', pipeline().parameters.SourceTable, ' WHERE SUBSTR(',pipeline().parameters.IncCol, ', 1, 6) = ', item().CALMONTH)",
-												"type": "Expression"
-											},
-											"partitionOption": "None",
-											"queryTimeout": "02:00:00"
-										},
-										"sink": {
-											"type": "DelimitedTextSink",
-											"storeSettings": {
-												"type": "AzureBlobFSWriteSettings"
-											},
-											"formatSettings": {
-												"type": "DelimitedTextWriteSettings",
-												"quoteAllText": true,
-												"fileExtension": ".csv"
-											}
-										},
-										"enableStaging": false,
-										"translator": {
-											"type": "TabularTranslator",
-											"typeConversion": true,
-											"typeConversionSettings": {
-												"allowDataTruncation": true,
-												"treatBooleanAsNumber": false
-											}
-										}
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_ORACLE_SRC",
-											"type": "DatasetReference",
-											"parameters": {
-												"SourceSchema": {
-													"value": "@pipeline().parameters.SourceSchema",
-													"type": "Expression"
-												},
-												"SourceTable": {
-													"value": "@pipeline().parameters.SourceTable",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_ADLS_SNK",
-											"type": "DatasetReference",
-											"parameters": {
-												"AdlsDirectory": {
-													"value": "@pipeline().parameters.AdlsDirectory",
-													"type": "Expression"
-												},
-												"FileName": {
-													"value": "@concat('D_', pipeline().parameters.SourceSchema,'.', pipeline().parameters.SourceTable,'_',item().CALMONTH,'.csv')",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								}
-							]
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SourceSchema": {
-						"type": "string",
-						"defaultValue": "CD_DWRS"
-					},
-					"SourceTable": {
-						"type": "string",
-						"defaultValue": "SC_EVENT_PLAN_COMPLETE"
-					},
-					"AdlsDirectory": {
-						"type": "string",
-						"defaultValue": "판촉/내부/판촉관리정보"
-					},
-					"IncCol": {
-						"type": "string",
-						"defaultValue": "EVENT_DATE"
-					}
-				},
-				"folder": {
-					"name": "판촉/내부/판촉관리"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-10-20T05:52:22Z"
 			},
 			"dependsOn": []
 		}
