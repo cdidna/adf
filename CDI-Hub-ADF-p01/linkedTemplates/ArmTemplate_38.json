@@ -13,6 +13,104 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_DART_LIST_M')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "입찰공고목록 정보에 대한 물품조회_멀",
+				"activities": [
+					{
+						"name": "Lookup1",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "SELECT\n  to_char(dt::date , 'YYYYMMDD') AS strdt,\n  to_char((dt + INTERVAL '3 months' - INTERVAL '1 day')::date, 'YYYYMMDD') AS enddt\nFROM generate_series(\n  '2021-01-01'::date,\n  now()::date,  \n  '3 months'::interval\n) AS dt;",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup1').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Execute Pipeline1",
+									"type": "ExecutePipeline",
+									"dependsOn": [],
+									"policy": {
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"pipeline": {
+											"referenceName": "PIP_API_INDUSTRY_DART_LIST",
+											"type": "PipelineReference"
+										},
+										"waitOnCompletion": true,
+										"parameters": {
+											"pipstrdt": {
+												"value": "@item().strdt",
+												"type": "Expression"
+											},
+											"pipenddt": {
+												"value": "@item().enddt",
+												"type": "Expression"
+											}
+										}
+									}
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"folder": {
+					"name": "Industry/외부/전자공시시스템"
+				},
+				"annotations": []
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_FSK_I1250_INC')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -3010,113 +3108,6 @@
 				],
 				"policy": {
 					"elapsedTimeMetric": {}
-				},
-				"folder": {
-					"name": "고객/내부/고도몰"
-				},
-				"annotations": []
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_GODOMALL_INIT')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "Lookup1",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "select min(a.work_date) as str_date\n\t,max(a.work_date) as end_date\nfrom (\n\tselect to_char(base_date,'yyyymmdd') as work_date\n\t\t\t,row_number() over (order by base_date) / (4)::int as rnum\n\t\tfrom cd_ods.aps_sdc_pw_mst a\n\t\t\t,(\n\t\t\t\tselect distinct period\n\t\t\t\tfrom cd_ods.tb_jweshop_table_master                       \n\t\t\t) b\n\t\twhere 1=1\n\t\t--and base_date between date('2022-04-17') and date('2024-08-12')\n\t\tand base_date between date('2024-08-29') and date('2024-09-01')\n\t\tand b.period = @{pipeline().parameters.period}\n\t) a\t \nwhere  1=1  -- \ngroup by a.rnum\norder by a.rnum\n",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup1').output.value",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"activities": [
-								{
-									"name": "Execute Pipeline1",
-									"type": "ExecutePipeline",
-									"dependsOn": [],
-									"policy": {
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"pipeline": {
-											"referenceName": "PIP_D_CD_GODOMALL_INIT_SUB",
-											"type": "PipelineReference"
-										},
-										"waitOnCompletion": true,
-										"parameters": {
-											"pip_strdt": {
-												"value": "@item().str_date",
-												"type": "Expression"
-											},
-											"pip_enddt": {
-												"value": "@item().end_date",
-												"type": "Expression"
-											},
-											"period": {
-												"value": "@pipeline().parameters.period",
-												"type": "Expression"
-											}
-										}
-									}
-								}
-							]
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"period": {
-						"type": "string",
-						"defaultValue": "7"
-					}
 				},
 				"folder": {
 					"name": "고객/내부/고도몰"
