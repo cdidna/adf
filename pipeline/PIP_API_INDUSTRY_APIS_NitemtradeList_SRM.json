@@ -1,0 +1,302 @@
+{
+	"name": "PIP_API_INDUSTRY_APIS_NitemtradeList_SRM",
+	"properties": {
+		"description": "수요기관정보조회",
+		"activities": [
+			{
+				"name": "Lookup1",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": "WITH codes AS (\n    SELECT 'US' AS statcd, '0201' AS hsSgn\n    UNION ALL\n    SELECT 'US', '0202'\n    UNION ALL\n    SELECT 'US', '0203'\n    UNION ALL\n    SELECT 'BR', '0207141010'\n),\nyears AS (\n    select  to_char(now() - interval '1 month' * 12,'yyyymm') as strtYymm      \n        ,to_char(now() - interval '1 month' * 1,'yyyymm') as endYymm\n)\nSELECT \n    c.statcd,\n    c.hsSgn,\n    y.strtYymm,\n    y.endYymm\nFROM codes c\nCROSS JOIN years y\nORDER BY c.statcd, c.hsSgn, y.strtYymm, y.endYymm\n;",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK_P02",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": {
+								"value": "@pipeline().parameters.SinkSchema",
+								"type": "Expression"
+							},
+							"SinkTable": {
+								"value": "@pipeline().parameters.SinkTable",
+								"type": "Expression"
+							}
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Lookup1",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Lookup1').output.value",
+						"type": "Expression"
+					},
+					"isSequential": false,
+					"batchCount": 50,
+					"activities": [
+						{
+							"name": "Copy data1",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "XmlSource",
+									"additionalColumns": [
+										{
+											"name": "hscd_master",
+											"value": {
+												"value": "@item().hsSgn",
+												"type": "Expression"
+											}
+										}
+									],
+									"storeSettings": {
+										"type": "HttpReadSettings",
+										"requestMethod": "GET"
+									},
+									"formatSettings": {
+										"type": "XmlReadSettings",
+										"validationMode": "none",
+										"namespaces": true
+									}
+								},
+								"sink": {
+									"type": "AzurePostgreSQLSink",
+									"writeBatchSize": 1000000,
+									"writeBatchTimeout": "00:30:00",
+									"writeMethod": "CopyCommand"
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"mappings": [
+										{
+											"source": {
+												"path": "['balPayments']"
+											},
+											"sink": {
+												"name": "balpayments",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['expDlr']"
+											},
+											"sink": {
+												"name": "expdlr",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['expWgt']"
+											},
+											"sink": {
+												"name": "expwgt",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['hsCd']"
+											},
+											"sink": {
+												"name": "hscd",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['impDlr']"
+											},
+											"sink": {
+												"name": "impdlr",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['impWgt']"
+											},
+											"sink": {
+												"name": "impwgt",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['statCd']"
+											},
+											"sink": {
+												"name": "statcd",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['statCdCntnKor1']"
+											},
+											"sink": {
+												"name": "statcdcntnkor1",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['statKor']"
+											},
+											"sink": {
+												"name": "statkor",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['year']"
+											},
+											"sink": {
+												"name": "year",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "$['hscd_master']"
+											},
+											"sink": {
+												"name": "hscd_master"
+											}
+										}
+									],
+									"collectionReference": "$['response']['body']['items']['item']",
+									"mapComplexValuesToString": false
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "DTS_API_APIS_XML",
+									"type": "DatasetReference",
+									"parameters": {
+										"url": {
+											"value": "@concat('/1220000/nitemtrade/getNitemtradeList?serviceKey=rj5HeIJYh3E2HRvmEw3P3%2BeVDZoZj074w7IIt%2BpcAaujPSI9CTx0U88XSd6C9eWwkBMUncCaG4w%2FtYRT898jcw%3D%3D&hsSgn=',item().hsSgn,'&strtYymm=',item().strtYymm,'&endYymm=',item().endYymm,'&cntyCd=',item().statcd)",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "DTS_POSTGRESQL_SNK_P02",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": {
+											"value": "@pipeline().parameters.SinkSchema",
+											"type": "Expression"
+										},
+										"SinkTable": {
+											"value": "@pipeline().parameters.SinkTable",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					]
+				}
+			},
+			{
+				"name": "Lookup1_copy1",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "ForEach1",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": "SELECT cd_ods.fn_apis_nitemtrade();",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK_P02",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					},
+					"firstRowOnly": false
+				}
+			}
+		],
+		"parameters": {
+			"SinkSchema": {
+				"type": "string",
+				"defaultValue": "cd_ods"
+			},
+			"SinkTable": {
+				"type": "string",
+				"defaultValue": "tb_srm_apis_nitemtrade_temp"
+			}
+		},
+		"variables": {
+			"date": {
+				"type": "String"
+			},
+			"url": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "Industry/외부/관세청"
+		},
+		"annotations": [],
+		"lastPublishTime": "2023-01-16T07:55:39Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}
