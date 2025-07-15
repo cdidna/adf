@@ -13,6 +13,113 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_GODOMALL_INIT')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Lookup1",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "select min(a.work_date) as str_date\n\t,max(a.work_date) as end_date\nfrom (\n\tselect to_char(base_date,'yyyymmdd') as work_date\n\t\t\t,row_number() over (order by base_date) / (4)::int as rnum\n\t\tfrom cd_ods.aps_sdc_pw_mst a\n\t\t\t,(\n\t\t\t\tselect distinct period\n\t\t\t\tfrom cd_ods.tb_jweshop_table_master                       \n\t\t\t) b\n\t\twhere 1=1\n\t\t--and base_date between date('2022-04-17') and date('2024-08-12')\n\t\tand base_date between date('2024-08-29') and date('2024-09-01')\n\t\tand b.period = @{pipeline().parameters.period}\n\t) a\t \nwhere  1=1  -- \ngroup by a.rnum\norder by a.rnum\n",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup1').output.value",
+								"type": "Expression"
+							},
+							"isSequential": false,
+							"activities": [
+								{
+									"name": "Execute Pipeline1",
+									"type": "ExecutePipeline",
+									"dependsOn": [],
+									"policy": {
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"pipeline": {
+											"referenceName": "PIP_D_CD_GODOMALL_INIT_SUB",
+											"type": "PipelineReference"
+										},
+										"waitOnCompletion": true,
+										"parameters": {
+											"pip_strdt": {
+												"value": "@item().str_date",
+												"type": "Expression"
+											},
+											"pip_enddt": {
+												"value": "@item().end_date",
+												"type": "Expression"
+											},
+											"period": {
+												"value": "@pipeline().parameters.period",
+												"type": "Expression"
+											}
+										}
+									}
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"period": {
+						"type": "string",
+						"defaultValue": "7"
+					}
+				},
+				"folder": {
+					"name": "고객/내부/고도몰"
+				},
+				"annotations": []
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_M_CD_KODATA_ALL_FULL')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -906,321 +1013,6 @@
 						}
 					}
 				}
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_NEIS_MEAL_SERVICE_DIET_INFO_M')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "수요기관정보조회",
-				"activities": [
-					{
-						"name": "Lookup1",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "SELECT atpt_ofcdc_sc_code, sd_schul_code, '20210101' AS start_ymd\nFROM cd_ods.tb_sf_neis_school_info_t s\nWHERE COALESCE(TRIM(s.sd_schul_code), '') != ''\n  AND NOT EXISTS (\n    SELECT 1\n    FROM cd_ods.tb_sf_neis_meal_service_diet_info_t m\n    WHERE m.sd_schul_code = s.sd_schul_code\n  )\nand seq between 1 and  5000;",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup1').output.value",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"batchCount": 20,
-							"activities": [
-								{
-									"name": "PIP_API_INDUSTRY_NEIS_MEAL_SERVICE_DIET_INFO",
-									"type": "ExecutePipeline",
-									"dependsOn": [],
-									"policy": {
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"pipeline": {
-											"referenceName": "PIP_API_INDUSTRY_NEIS_MEAL_SERVICE_DIET_INFO",
-											"type": "PipelineReference"
-										},
-										"waitOnCompletion": true,
-										"parameters": {
-											"pipATPT_OFCDC_SC_CODE": {
-												"value": "@item().atpt_ofcdc_sc_code",
-												"type": "Expression"
-											},
-											"pipSD_SCHUL_CODE": {
-												"value": "@item().sd_schul_code",
-												"type": "Expression"
-											},
-											"pipSTART_YMD": {
-												"value": "@item().start_ymd",
-												"type": "Expression"
-											}
-										}
-									}
-								}
-							]
-						}
-					},
-					{
-						"name": "Lookup1_copy1",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "ForEach1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "SELECT atpt_ofcdc_sc_code, sd_schul_code, '20210101' AS start_ymd\nFROM cd_ods.tb_sf_neis_school_info_t s\nWHERE COALESCE(TRIM(s.sd_schul_code), '') != ''\n  AND NOT EXISTS (\n    SELECT 1\n    FROM cd_ods.tb_sf_neis_meal_service_diet_info_t m\n    WHERE m.sd_schul_code = s.sd_schul_code\n  )\nand seq between 5001 and 10000;",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1_copy1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup1_copy1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup1_copy1').output.value",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"batchCount": 20,
-							"activities": [
-								{
-									"name": "PIP_API_INDUSTRY_NEIS_MEAL_SERVICE_DIET_INFO_copy1",
-									"type": "ExecutePipeline",
-									"dependsOn": [],
-									"policy": {
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"pipeline": {
-											"referenceName": "PIP_API_INDUSTRY_NEIS_MEAL_SERVICE_DIET_INFO",
-											"type": "PipelineReference"
-										},
-										"waitOnCompletion": true,
-										"parameters": {
-											"pipATPT_OFCDC_SC_CODE": {
-												"value": "@item().atpt_ofcdc_sc_code",
-												"type": "Expression"
-											},
-											"pipSD_SCHUL_CODE": {
-												"value": "@item().sd_schul_code",
-												"type": "Expression"
-											},
-											"pipSTART_YMD": {
-												"value": "@item().start_ymd",
-												"type": "Expression"
-											}
-										}
-									}
-								}
-							]
-						}
-					},
-					{
-						"name": "Lookup1_copy2",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "ForEach1_copy1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "SELECT atpt_ofcdc_sc_code, sd_schul_code, '20210101' AS start_ymd\nFROM cd_ods.tb_sf_neis_school_info_t s\nWHERE COALESCE(TRIM(s.sd_schul_code), '') != ''\n  AND NOT EXISTS (\n    SELECT 1\n    FROM cd_ods.tb_sf_neis_meal_service_diet_info_t m\n    WHERE m.sd_schul_code = s.sd_schul_code\n  )\nand seq between 10001 and  12577;",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1_copy2",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup1_copy2",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup1_copy2').output.value",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"batchCount": 20,
-							"activities": [
-								{
-									"name": "PIP_API_INDUSTRY_NEIS_MEAL_SERVICE_DIET_INFO_copy2",
-									"type": "ExecutePipeline",
-									"dependsOn": [],
-									"policy": {
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"pipeline": {
-											"referenceName": "PIP_API_INDUSTRY_NEIS_MEAL_SERVICE_DIET_INFO",
-											"type": "PipelineReference"
-										},
-										"waitOnCompletion": true,
-										"parameters": {
-											"pipATPT_OFCDC_SC_CODE": {
-												"value": "@item().atpt_ofcdc_sc_code",
-												"type": "Expression"
-											},
-											"pipSD_SCHUL_CODE": {
-												"value": "@item().sd_schul_code",
-												"type": "Expression"
-											},
-											"pipSTART_YMD": {
-												"value": "@item().start_ymd",
-												"type": "Expression"
-											}
-										}
-									}
-								}
-							]
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "tb_sf_neis_meal_service_diet_info_t"
-					}
-				},
-				"variables": {
-					"date": {
-						"type": "String"
-					},
-					"url": {
-						"type": "String"
-					},
-					"obsr_Spot_Code": {
-						"type": "String"
-					},
-					"begin_Date": {
-						"type": "String"
-					},
-					"end_Date": {
-						"type": "String"
-					}
-				},
-				"folder": {
-					"name": "Industry/외부/교육정보개방포털"
-				},
-				"annotations": [],
-				"lastPublishTime": "2023-01-16T07:55:39Z"
 			},
 			"dependsOn": []
 		},

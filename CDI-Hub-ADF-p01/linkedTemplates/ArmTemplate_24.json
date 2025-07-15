@@ -1394,6 +1394,451 @@
 			"dependsOn": []
 		},
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_NEIS_MEAL_SERVICE_DIET_INFO')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "수요기관정보조회",
+				"activities": [
+					{
+						"name": "get page",
+						"description": "대표 제품의 생성 기간동안 토탈 건수 ",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "set sd_schul_code",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "set atpt_ofcdc_sc_code",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "set start_ymd",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "XmlSource",
+								"storeSettings": {
+									"type": "HttpReadSettings",
+									"requestMethod": "GET"
+								},
+								"formatSettings": {
+									"type": "XmlReadSettings",
+									"validationMode": "none",
+									"namespaces": true
+								}
+							},
+							"dataset": {
+								"referenceName": "DTS_API_NEIS_XML",
+								"type": "DatasetReference",
+								"parameters": {
+									"url": {
+										"value": "@concat('hub/mealServiceDietInfo?Type=xml&ATPT_OFCDC_SC_CODE=', variables('ATPT_OFCDC_SC_CODE'), '&SD_SCHUL_CODE=',variables('SD_SCHUL_CODE'), '&MLSV_FROM_YMD=', variables('START_YMD'))",
+										"type": "Expression"
+									}
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "set sd_schul_code",
+						"description": "당일자",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "SD_SCHUL_CODE",
+							"value": {
+								"value": "@pipeline().parameters.pipSD_SCHUL_CODE",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "set atpt_ofcdc_sc_code",
+						"description": "당일자",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "ATPT_OFCDC_SC_CODE",
+							"value": {
+								"value": "@pipeline().parameters.pipATPT_OFCDC_SC_CODE",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "If Condition1",
+						"type": "IfCondition",
+						"dependsOn": [
+							{
+								"activity": "get page",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"expression": {
+								"value": "@equals(xpath(xml(activity('get page').output.value[0]), 'string(//MESSAGE)'), '해당하는 데이터가 없습니다.')",
+								"type": "Expression"
+							},
+							"ifFalseActivities": [
+								{
+									"name": "Set variable2",
+									"type": "SetVariable",
+									"dependsOn": [],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "list_count",
+										"value": {
+											"value": "@range(\n    1,\n    add(\n        div(\n            int(xpath(xml(activity('get page').output.value[0]), 'string(//list_total_count)')),\n            1000\n        ),\n        if(\n            greater(\n                mod(\n                    int(xpath(xml(activity('get page').output.value[0]), 'string(//list_total_count)')),\n                    1000\n                ),\n                0\n            ),\n            1,\n            0\n        )\n    )\n)",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"ifTrueActivities": [
+								{
+									"name": "Set variable1",
+									"type": "SetVariable",
+									"dependsOn": [],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "list_count",
+										"value": []
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "If Condition1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@variables('list_count')",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Copy data1_copy1_copy1_copy1",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "JsonSource",
+											"storeSettings": {
+												"type": "HttpReadSettings",
+												"requestMethod": "GET"
+											},
+											"formatSettings": {
+												"type": "JsonReadSettings"
+											}
+										},
+										"sink": {
+											"type": "AzurePostgreSQLSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"preCopyScript": {
+												"value": "delete from cd_ods.tb_sf_neis_meal_service_diet_info_t\nwhere atpt_ofcdc_sc_code = '@{variables('ATPT_OFCDC_SC_CODE')}'\nand sd_schul_code = '@{variables('SD_SCHUL_CODE')}'\nand mlsv_ymd >= '@{variables('START_YMD')}'",
+												"type": "Expression"
+											},
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"path": "[['ATPT_OFCDC_SC_CODE']"
+													},
+													"sink": {
+														"name": "atpt_ofcdc_sc_code",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['ATPT_OFCDC_SC_NM']"
+													},
+													"sink": {
+														"name": "atpt_ofcdc_sc_nm",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['SD_SCHUL_CODE']"
+													},
+													"sink": {
+														"name": "sd_schul_code",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['SCHUL_NM']"
+													},
+													"sink": {
+														"name": "schul_nm",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['MMEAL_SC_CODE']"
+													},
+													"sink": {
+														"name": "mmeal_sc_code",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['MMEAL_SC_NM']"
+													},
+													"sink": {
+														"name": "mmeal_sc_nm",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['MLSV_YMD']"
+													},
+													"sink": {
+														"name": "mlsv_ymd",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['MLSV_FGR']"
+													},
+													"sink": {
+														"name": "mlsv_fgr",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['DDISH_NM']"
+													},
+													"sink": {
+														"name": "ddish_nm",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['ORPLC_INFO']"
+													},
+													"sink": {
+														"name": "orplc_info",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['CAL_INFO']"
+													},
+													"sink": {
+														"name": "cal_info",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['NTR_INFO']"
+													},
+													"sink": {
+														"name": "ntr_info",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['MLSV_FROM_YMD']"
+													},
+													"sink": {
+														"name": "mlsv_from_ymd",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['MLSV_TO_YMD']"
+													},
+													"sink": {
+														"name": "mlsv_to_ymd",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['LOAD_DTM']"
+													},
+													"sink": {
+														"name": "load_dtm",
+														"type": "String"
+													}
+												}
+											],
+											"collectionReference": "$['mealServiceDietInfo'][1]['row']",
+											"mapComplexValuesToString": false
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_API_NEIS",
+											"type": "DatasetReference",
+											"parameters": {
+												"url": {
+													"value": "@concat('hub/mealServiceDietInfo?KEY=803ddef8f0f4423a92bba2b1103d1069&Type=json&pSize=1000&pIndex=',item(), '&ATPT_OFCDC_SC_CODE=', variables('ATPT_OFCDC_SC_CODE'),'&SD_SCHUL_CODE=',variables('SD_SCHUL_CODE'))",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": {
+													"value": "@pipeline().parameters.SinkSchema",
+													"type": "Expression"
+												},
+												"SinkTable": {
+													"value": "@pipeline().parameters.SinkTable",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					},
+					{
+						"name": "set start_ymd",
+						"description": "당일자",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "START_YMD",
+							"value": {
+								"value": "@pipeline().parameters.pipSTART_YMD",
+								"type": "Expression"
+							}
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SinkSchema": {
+						"type": "string",
+						"defaultValue": "cd_ods"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "tb_sf_neis_meal_service_diet_info_t"
+					},
+					"pipATPT_OFCDC_SC_CODE": {
+						"type": "string"
+					},
+					"pipSD_SCHUL_CODE": {
+						"type": "string"
+					},
+					"pipSTART_YMD": {
+						"type": "string"
+					}
+				},
+				"variables": {
+					"ATPT_OFCDC_SC_CODE": {
+						"type": "String"
+					},
+					"SD_SCHUL_CODE": {
+						"type": "String"
+					},
+					"list_count": {
+						"type": "Array"
+					},
+					"START_YMD": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "Industry/외부/교육정보개방포털"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-01-16T07:55:39Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_NEIS_SCHOOL_INFO')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -7871,600 +8316,6 @@
 				},
 				"annotations": [],
 				"lastPublishTime": "2022-12-15T12:48:09Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_API_QUALITY_TIK_D_SAMPLE')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "식품의약품안전처(식품위해정보)\n검사부적합(국내) 정보",
-				"activities": [
-					{
-						"name": "ForEach API data",
-						"description": "cdi-root / 품질/외부/식품위해관리/검사부적합(국내) 위치에 항목별로 복사합니다.",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "ORA GET CNT",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							},
-							{
-								"activity": "API GET CNT",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@range(\n    1\n    ,add(\n        div(\n            sub(\n                activity('API GET CNT').output.firstRow.I2620.total_count\n                ,int(activity('ORA GET CNT').output.firstRow.total_cnt)\n            )\n            , 1000\n        )\n        ,if(\n            greater(\n                mod(\n                    sub(\n                        activity('API GET CNT').output.firstRow.I2620.total_count\n                        ,int(activity('ORA GET CNT').output.firstRow.total_cnt)\n                    )\n                    , 1000\n                )\n                , 0\n            )\n            , 1\n            , 0\n        )\n    )\n)",
-								"type": "Expression"
-							},
-							"isSequential": true,
-							"activities": [
-								{
-									"name": "API REQ_copy",
-									"description": "각 API 호출",
-									"type": "Copy",
-									"dependsOn": [
-										{
-											"activity": "Set endIndex",
-											"dependencyConditions": [
-												"Succeeded"
-											]
-										}
-									],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "XmlSource",
-											"storeSettings": {
-												"type": "HttpReadSettings",
-												"requestMethod": "GET"
-											},
-											"formatSettings": {
-												"type": "XmlReadSettings",
-												"validationMode": "none",
-												"namespaces": true
-											}
-										},
-										"sink": {
-											"type": "DelimitedTextSink",
-											"storeSettings": {
-												"type": "AzureBlobFSWriteSettings"
-											},
-											"formatSettings": {
-												"type": "DelimitedTextWriteSettings",
-												"quoteAllText": true,
-												"fileExtension": ".txt"
-											}
-										},
-										"enableStaging": false,
-										"enableSkipIncompatibleRow": false,
-										"translator": {
-											"type": "TabularTranslator",
-											"mappings": [
-												{
-													"source": {
-														"path": "[['FRMLCUNIT']"
-													},
-													"sink": {
-														"name": "FRMLCUNIT",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['PRDLST_REPORT_NO']"
-													},
-													"sink": {
-														"name": "PRDLST_REPORT_NO",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['CRET_DTM']"
-													},
-													"sink": {
-														"name": "CRET_DTM",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['LCNS_NO']"
-													},
-													"sink": {
-														"name": "LCNS_NO",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['DISTBTMLMT']"
-													},
-													"sink": {
-														"name": "DISTBTMLMT",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['REGSTR_TELNO']"
-													},
-													"sink": {
-														"name": "REGSTR_TELNO",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['STDR_STND']"
-													},
-													"sink": {
-														"name": "STDR_STND",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['ADDR']"
-													},
-													"sink": {
-														"name": "ADDR",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['BRCDNO']"
-													},
-													"sink": {
-														"name": "BRCDNO",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['MNFDT']"
-													},
-													"sink": {
-														"name": "MNFDT",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['TEST_ITMNM']"
-													},
-													"sink": {
-														"name": "TEST_ITMNM",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['INSTT_NM']"
-													},
-													"sink": {
-														"name": "INSTT_NM",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['PRDTNM']"
-													},
-													"sink": {
-														"name": "PRDTNM",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['TESTANALS_RSLT']"
-													},
-													"sink": {
-														"name": "TESTANALS_RSLT",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['BSSHNM']"
-													},
-													"sink": {
-														"name": "BSSHNM",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['RTRVLDSUSE_SEQ']"
-													},
-													"sink": {
-														"name": "RTRVLDSUSE_SEQ",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['@id']"
-													},
-													"sink": {
-														"name": "ROWID",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['I2620']['total_count']"
-													},
-													"sink": {
-														"name": "total_count",
-														"type": "String"
-													}
-												}
-											],
-											"collectionReference": "$['I2620']['row']",
-											"mapComplexValuesToString": false
-										}
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_API_DITBCD_SRC",
-											"type": "DatasetReference",
-											"parameters": {
-												"ApiKey": {
-													"value": "@pipeline().parameters.Apikey",
-													"type": "Expression"
-												},
-												"StartIdx": {
-													"value": "@variables('startIdx')",
-													"type": "Expression"
-												},
-												"EndIdx": {
-													"value": "@variables('endIdx')",
-													"type": "Expression"
-												},
-												"ServiceId": {
-													"value": "@pipeline().parameters.ServiceId",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_ADLS_SNK",
-											"type": "DatasetReference",
-											"parameters": {
-												"AdlsDirectory": {
-													"value": "@concat(pipeline().parameters.AdlsDirectoryOri,'/',formatDateTime(addHours(utcNow(), 9), 'yyyyMMdd'))",
-													"type": "Expression"
-												},
-												"FileName": {
-													"value": "@concat(pipeline().parameters.FileName, '_', replace(variables('endIdx') , '/', '_'),'_',formatDateTime(addHours(utcNow(), 9), 'yyyyMMdd'), '.csv')",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								},
-								{
-									"name": "Insert Sequence",
-									"description": "cd_if.cd_fdsfty_seq 값 Insert",
-									"type": "Script",
-									"dependsOn": [
-										{
-											"activity": "API REQ_copy",
-											"dependencyConditions": [
-												"Succeeded"
-											]
-										}
-									],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"linkedServiceName": {
-										"referenceName": "LKS_ORA_P01",
-										"type": "LinkedServiceReference"
-									},
-									"typeProperties": {
-										"scripts": [
-											{
-												"type": "Query",
-												"text": {
-													"value": "INSERT INTO cd_if.cd_fdsfty_seq (type, row_id, qty, crt_dt, crt_user) \nVALUES (\n  '@{pipeline().parameters.ServiceId}'\n  , (SELECT NVL(MAX(row_id), 0) + 1 FROM cd_if.cd_fdsfty_seq WHERE type = '@{pipeline().parameters.ServiceId}')\n  , '@{variables('endIdx')}'\n  , to_char(sysdate, 'yyyymmddhhmiss')\n, 'system'\n);",
-													"type": "Expression"
-												}
-											}
-										],
-										"scriptBlockExecutionTimeout": "02:00:00"
-									}
-								},
-								{
-									"name": "Set startIdx",
-									"description": "시 인덱스 값을 정의한다.",
-									"type": "SetVariable",
-									"dependsOn": [],
-									"policy": {
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"variableName": "startIdx",
-										"value": {
-											"value": "@string(sub(\n    add(\n        int(activity('ORA GET CNT').output.firstRow.total_cnt)\n        , add(mul(1000, item()), 1)\n    )\n, 1000))",
-											"type": "Expression"
-										}
-									}
-								},
-								{
-									"name": "Set endIndex",
-									"description": "종료 인덱스 값을 정의한다.",
-									"type": "SetVariable",
-									"dependsOn": [
-										{
-											"activity": "Set startIdx",
-											"dependencyConditions": [
-												"Succeeded"
-											]
-										}
-									],
-									"policy": {
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"variableName": "endIdx",
-										"value": {
-											"value": "@string(add(\n    int(variables('startIdx'))\n    , if(\n        greater(\n            sub(\n                activity('API GET CNT').output.firstRow.I2620.total_count\n                , int(variables('startIdx'))\n            )\n            , 1000\n        )\n        , 999\n        , sub(\n            activity('API GET CNT').output.firstRow.I2620.total_count\n            , int(variables('startIdx'))\n        )\n    )\n))",
-											"type": "Expression"
-										}
-									}
-								}
-							]
-						}
-					},
-					{
-						"name": "Merge Data",
-						"description": "cdi-root /품질/외부/식품위해관리/ 위치에 항목별로 복사합니다.",
-						"type": "Copy",
-						"dependsOn": [
-							{
-								"activity": "ForEach API data",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "7.00:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "DelimitedTextSource",
-								"storeSettings": {
-									"type": "AzureBlobFSReadSettings",
-									"maxConcurrentConnections": 1,
-									"recursive": true,
-									"wildcardFolderPath": {
-										"value": "@concat(pipeline().parameters.AdlsDirectoryOri,'/',formatDateTime(addHours(utcNow(), 9), 'yyyyMMdd'))",
-										"type": "Expression"
-									},
-									"wildcardFileName": "*",
-									"enablePartitionDiscovery": false
-								},
-								"formatSettings": {
-									"type": "DelimitedTextReadSettings"
-								}
-							},
-							"sink": {
-								"type": "DelimitedTextSink",
-								"storeSettings": {
-									"type": "AzureBlobFSWriteSettings",
-									"maxConcurrentConnections": 1,
-									"copyBehavior": "MergeFiles"
-								},
-								"formatSettings": {
-									"type": "DelimitedTextWriteSettings",
-									"quoteAllText": true,
-									"fileExtension": ".txt"
-								}
-							},
-							"enableStaging": false,
-							"parallelCopies": 1,
-							"enableSkipIncompatibleRow": true,
-							"validateDataConsistency": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"typeConversion": true,
-								"typeConversionSettings": {
-									"allowDataTruncation": true,
-									"treatBooleanAsNumber": false
-								}
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_ADLS_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"AdlsDirectory": {
-										"value": "@pipeline().parameters.AdlsDirectory",
-										"type": "Expression"
-									},
-									"FileName": {
-										"value": "@pipeline().parameters.FileName",
-										"type": "Expression"
-									}
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_ADLS_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"AdlsDirectory": {
-										"value": "@pipeline().parameters.AdlsDirectory",
-										"type": "Expression"
-									},
-									"FileName": {
-										"value": "@concat(pipeline().parameters.FileName,'_', formatDateTime(addHours(utcNow(), 9), 'yyyyMMdd'),'.csv')\n\n",
-										"type": "Expression"
-									}
-								}
-							}
-						]
-					},
-					{
-						"name": "ORA GET CNT",
-						"description": "저장된 값의 Total 값을 확인하기 위해 DB조",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "7.00:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('SELECT NVL(max(qty), 0) as total_cnt FROM cd_if.cd_fdsfty_seq WHERE type = ''', pipeline().parameters.ServiceId, ''' ORDER BY row_id DESC ')",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							},
-							"firstRowOnly": true
-						}
-					},
-					{
-						"name": "API GET CNT",
-						"description": "API의 총 건 수를 확인하기 위해 API 1회 호출.",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "XmlSource",
-								"storeSettings": {
-									"type": "HttpReadSettings",
-									"requestMethod": "GET"
-								},
-								"formatSettings": {
-									"type": "XmlReadSettings",
-									"validationMode": "none",
-									"detectDataType": true,
-									"namespaces": true
-								}
-							},
-							"dataset": {
-								"referenceName": "DTS_API_DITBCD_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"ApiKey": "@pipeline().parameters.Apikey",
-									"StartIdx": "1",
-									"EndIdx": "1",
-									"ServiceId": "@pipeline().parameters.ServiceId"
-								}
-							}
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"AdlsDirectory": {
-						"type": "string",
-						"defaultValue": "품질/외부/식품위해관리"
-					},
-					"FileName": {
-						"type": "string",
-						"defaultValue": "검사부적합(국내)"
-					},
-					"AdlsDirectoryConf": {
-						"type": "string",
-						"defaultValue": "품질/외부/식품위해관리/conf"
-					},
-					"ConfFile": {
-						"type": "string",
-						"defaultValue": "검사부적합(국내)Index"
-					},
-					"AdlsDirectoryOri": {
-						"type": "string",
-						"defaultValue": "품질/외부/식품위해관리/검사부적합(국내)"
-					},
-					"Apikey": {
-						"type": "string",
-						"defaultValue": "f93320322b05463499de"
-					},
-					"ServiceId": {
-						"type": "string",
-						"defaultValue": "I2620"
-					}
-				},
-				"variables": {
-					"startIdx": {
-						"type": "String"
-					},
-					"endIdx": {
-						"type": "String"
-					}
-				},
-				"folder": {
-					"name": "_Sample/식품의약품안전처_SEQ"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-12-17T13:46:14Z"
 			},
 			"dependsOn": []
 		}
