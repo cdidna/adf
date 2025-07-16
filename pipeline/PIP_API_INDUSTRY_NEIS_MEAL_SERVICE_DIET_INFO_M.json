@@ -19,7 +19,7 @@
 					"source": {
 						"type": "AzurePostgreSqlSource",
 						"query": {
-							"value": "SELECT atpt_ofcdc_sc_code, sd_schul_code, to_char(now(), 'YYYYMMDD')  AS start_ymd\nFROM cd_ods.tb_sf_neis_school_info_t s\nWHERE COALESCE(TRIM(s.sd_schul_code), '') != ''\nand seq < 0 ;",
+							"value": "select  atpt_ofcdc_sc_code, sd_schul_code, to_char(now(), 'YYYYMMDD') AS start_ymd\n     FROM cd_ods.tb_sf_neis_school_info_t a, \n     (select max(seq) * 0 /5 + 1 as min_seq, max(seq) * ( 0 + 1) / 5 as max_seq from cd_ods.tb_sf_neis_school_info_t ) b\n     WHERE COALESCE(TRIM(sd_schul_code), '') != '' AND seq BETWEEN b.min_seq AND b.max_seq;",
 							"type": "Expression"
 						},
 						"partitionOption": "None"
@@ -104,7 +104,7 @@
 					"source": {
 						"type": "AzurePostgreSqlSource",
 						"query": {
-							"value": "SELECT atpt_ofcdc_sc_code, sd_schul_code, to_char(now(), 'YYYYMMDD')  AS start_ymd\nFROM cd_ods.tb_sf_neis_school_info_t s\nWHERE COALESCE(TRIM(s.sd_schul_code), '') != ''\nand seq between 4001 and 8000;",
+							"value": "select  atpt_ofcdc_sc_code, sd_schul_code, to_char(now(), 'YYYYMMDD') AS start_ymd\n     FROM cd_ods.tb_sf_neis_school_info_t a, \n     (select max(seq) * 1 /5 + 1 as min_seq, max(seq) * ( 1 + 1) / 5 as max_seq from cd_ods.tb_sf_neis_school_info_t ) b\n     WHERE COALESCE(TRIM(sd_schul_code), '') != '' AND seq BETWEEN b.min_seq AND b.max_seq;",
 							"type": "Expression"
 						},
 						"partitionOption": "None"
@@ -189,7 +189,7 @@
 					"source": {
 						"type": "AzurePostgreSqlSource",
 						"query": {
-							"value": "SELECT atpt_ofcdc_sc_code, sd_schul_code, to_char(now(), 'YYYYMMDD')  AS start_ymd\nFROM cd_ods.tb_sf_neis_school_info_t s\nWHERE COALESCE(TRIM(s.sd_schul_code), '') != ''\nand seq > 8001;",
+							"value": "select  atpt_ofcdc_sc_code, sd_schul_code, to_char(now(), 'YYYYMMDD') AS start_ymd\n     FROM cd_ods.tb_sf_neis_school_info_t a, \n     (select max(seq) * 2 /5 + 1 as min_seq, max(seq) * ( 2 + 1) / 5 as max_seq from cd_ods.tb_sf_neis_school_info_t ) b\n     WHERE COALESCE(TRIM(sd_schul_code), '') != '' AND seq BETWEEN b.min_seq AND b.max_seq;",
 							"type": "Expression"
 						},
 						"partitionOption": "None"
@@ -279,6 +279,18 @@
 						"dependencyConditions": [
 							"Succeeded"
 						]
+					},
+					{
+						"activity": "ForEach1_copy2_copy1",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					},
+					{
+						"activity": "ForEach1_copy2_copy2",
+						"dependencyConditions": [
+							"Succeeded"
+						]
 					}
 				],
 				"policy": {
@@ -306,6 +318,176 @@
 							"SinkTable": "1"
 						}
 					}
+				}
+			},
+			{
+				"name": "Lookup1_copy3",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "select  atpt_ofcdc_sc_code, sd_schul_code, to_char(now(), 'YYYYMMDD') AS start_ymd\n     FROM cd_ods.tb_sf_neis_school_info_t a, \n     (select max(seq) * 3 /5 + 1 as min_seq, max(seq) * ( 3 + 1) / 5 as max_seq from cd_ods.tb_sf_neis_school_info_t ) b\n     WHERE COALESCE(TRIM(sd_schul_code), '') != '' AND seq BETWEEN b.min_seq AND b.max_seq;",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "ForEach1_copy2_copy1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Lookup1_copy3",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Lookup1_copy3').output.value",
+						"type": "Expression"
+					},
+					"isSequential": false,
+					"batchCount": 50,
+					"activities": [
+						{
+							"name": "PIP_API_INDUSTRY_NEIS_MEAL_SERVICE_DIET_INFO_copy3",
+							"type": "ExecutePipeline",
+							"dependsOn": [],
+							"policy": {
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"pipeline": {
+									"referenceName": "PIP_API_INDUSTRY_NEIS_MEAL_SERVICE_DIET_INFO",
+									"type": "PipelineReference"
+								},
+								"waitOnCompletion": true,
+								"parameters": {
+									"pipATPT_OFCDC_SC_CODE": {
+										"value": "@item().atpt_ofcdc_sc_code",
+										"type": "Expression"
+									},
+									"pipSD_SCHUL_CODE": {
+										"value": "@item().sd_schul_code",
+										"type": "Expression"
+									},
+									"pipSTART_YMD": {
+										"value": "@item().start_ymd",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "Lookup1_copy4",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "select  atpt_ofcdc_sc_code, sd_schul_code, to_char(now(), 'YYYYMMDD') AS start_ymd\n     FROM cd_ods.tb_sf_neis_school_info_t a, \n     (select max(seq) * 4 /5 + 1 as min_seq, max(seq) * ( 4 + 1) / 5 as max_seq from cd_ods.tb_sf_neis_school_info_t ) b\n     WHERE COALESCE(TRIM(sd_schul_code), '') != '' AND seq BETWEEN b.min_seq AND b.max_seq;",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "ForEach1_copy2_copy2",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Lookup1_copy4",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Lookup1_copy4').output.value",
+						"type": "Expression"
+					},
+					"isSequential": false,
+					"batchCount": 50,
+					"activities": [
+						{
+							"name": "PIP_API_INDUSTRY_NEIS_MEAL_SERVICE_DIET_INFO_copy4",
+							"type": "ExecutePipeline",
+							"dependsOn": [],
+							"policy": {
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"pipeline": {
+									"referenceName": "PIP_API_INDUSTRY_NEIS_MEAL_SERVICE_DIET_INFO",
+									"type": "PipelineReference"
+								},
+								"waitOnCompletion": true,
+								"parameters": {
+									"pipATPT_OFCDC_SC_CODE": {
+										"value": "@item().atpt_ofcdc_sc_code",
+										"type": "Expression"
+									},
+									"pipSD_SCHUL_CODE": {
+										"value": "@item().sd_schul_code",
+										"type": "Expression"
+									},
+									"pipSTART_YMD": {
+										"value": "@item().start_ymd",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					]
 				}
 			}
 		],
