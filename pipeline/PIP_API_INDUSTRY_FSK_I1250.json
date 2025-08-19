@@ -4,43 +4,11 @@
 		"description": "수요기관정보조회",
 		"activities": [
 			{
-				"name": "sel_date",
-				"type": "Lookup",
-				"dependsOn": [],
-				"policy": {
-					"timeout": "0.12:00:00",
-					"retry": 5,
-					"retryIntervalInSeconds": 30,
-					"secureOutput": false,
-					"secureInput": false
-				},
-				"userProperties": [],
-				"typeProperties": {
-					"source": {
-						"type": "AzurePostgreSqlSource",
-						"query": {
-							"value": "WITH vw_range AS (\n    SELECT \n        (g * 1000 + 1) AS st,\n        ((g + 1) * 1000) AS ed\n    FROM generate_series(0, 4) AS g\n)\nSELECT r.st, r.ed\nFROM vw_range r\n;",
-							"type": "Expression"
-						},
-						"partitionOption": "None"
-					},
-					"dataset": {
-						"referenceName": "DTS_POSTGRESQL_SNK",
-						"type": "DatasetReference",
-						"parameters": {
-							"SinkSchema": "1",
-							"SinkTable": "1"
-						}
-					},
-					"firstRowOnly": false
-				}
-			},
-			{
 				"name": "ForEach1",
 				"type": "ForEach",
 				"dependsOn": [
 					{
-						"activity": "sel_date",
+						"activity": "get page",
 						"dependencyConditions": [
 							"Succeeded"
 						]
@@ -49,7 +17,7 @@
 				"userProperties": [],
 				"typeProperties": {
 					"items": {
-						"value": "@activity('sel_date').output.value",
+						"value": "@range(1  \n      ,add(\n             div(\n                  int(activity('get page').output.firstRow.total_count) \n                 ,1000                  \n                )\n            ,if(\n                greater(\n                        mod(\n                            int(activity('get page').output.firstRow.total_count) \n                        ,1000  \n                            )\n                       ,0\n                       )\n                ,1,0\n            )           \n       )\n)",
 						"type": "Expression"
 					},
 					"isSequential": true,
@@ -309,6 +277,67 @@
 							]
 						}
 					]
+				}
+			},
+			{
+				"name": "set strdt",
+				"description": "당일자",
+				"type": "SetVariable",
+				"dependsOn": [],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "date",
+					"value": {
+						"value": "@formatDateTime(adddays(addHours(utcNow(), 9), -1), 'yyyyMMdd')",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "get page",
+				"description": "전날 변경 된 건",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "set strdt",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "JsonSource",
+						"storeSettings": {
+							"type": "HttpReadSettings",
+							"requestMethod": "GET"
+						},
+						"formatSettings": {
+							"type": "JsonReadSettings"
+						}
+					},
+					"dataset": {
+						"referenceName": "DTS_API_FSK",
+						"type": "DatasetReference",
+						"parameters": {
+							"url": {
+								"value": "@concat('/api/f93320322b05463499de/I1250/json/1/1000/CHNG_DT=',variables('date'))",
+								"type": "Expression"
+							}
+						}
+					}
 				}
 			}
 		],
