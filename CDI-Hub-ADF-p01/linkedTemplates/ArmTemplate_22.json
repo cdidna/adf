@@ -2914,43 +2914,11 @@
 				"description": "수요기관정보조회",
 				"activities": [
 					{
-						"name": "sel_date",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 5,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "WITH vw_range AS (\n    SELECT \n        (g * 1000 + 1) AS st,\n        ((g + 1) * 1000) AS ed\n    FROM generate_series(1, 1024) AS g\n)\nSELECT r.st, r.ed\nFROM vw_range r\nLEFT JOIN cd_ods.tb_fsk_i1250_temp t\n    ON r.st = CAST(t.st AS NUMERIC) AND r.ed = CAST(t.ed AS NUMERIC)\n    WHERE t.st IS null\n;",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
 						"name": "ForEach1",
 						"type": "ForEach",
 						"dependsOn": [
 							{
-								"activity": "sel_date",
+								"activity": "Lookup1",
 								"dependencyConditions": [
 									"Succeeded"
 								]
@@ -2959,11 +2927,10 @@
 						"userProperties": [],
 						"typeProperties": {
 							"items": {
-								"value": "@activity('sel_date').output.value",
+								"value": "@activity('Lookup1').output.value",
 								"type": "Expression"
 							},
-							"isSequential": false,
-							"batchCount": 5,
+							"isSequential": true,
 							"activities": [
 								{
 									"name": "Copy data1_copy1",
@@ -2980,22 +2947,6 @@
 									"typeProperties": {
 										"source": {
 											"type": "JsonSource",
-											"additionalColumns": [
-												{
-													"name": "st",
-													"value": {
-														"value": "@item().st",
-														"type": "Expression"
-													}
-												},
-												{
-													"name": "ed",
-													"value": {
-														"value": "@item().ed",
-														"type": "Expression"
-													}
-												}
-											],
 											"storeSettings": {
 												"type": "HttpReadSettings",
 												"requestMethod": "GET"
@@ -3166,24 +3117,6 @@
 														"name": "prpos",
 														"type": "String"
 													}
-												},
-												{
-													"source": {
-														"path": "$['st']"
-													},
-													"sink": {
-														"name": "st",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['ed']"
-													},
-													"sink": {
-														"name": "ed",
-														"type": "String"
-													}
 												}
 											],
 											"collectionReference": "$['I1250']['row']",
@@ -3196,7 +3129,7 @@
 											"type": "DatasetReference",
 											"parameters": {
 												"url": {
-													"value": "@concat('/api/f93320322b05463499de/I1250/json/',item().st,'/',item().ed)",
+													"value": "@concat('/api/f93320322b05463499de/I1250/json/',item().st,'/',item().ed, '/CHNG_DT=',variables('date'))",
 													"type": "Expression"
 												}
 											}
@@ -3221,6 +3154,131 @@
 								}
 							]
 						}
+					},
+					{
+						"name": "set strdt",
+						"description": "당일자",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "date",
+							"value": {
+								"value": "@formatDateTime(adddays(addHours(utcNow(), 9), -1), 'yyyyMMdd')",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "get page",
+						"description": "전날 변경 된 건",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "set strdt",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "JsonSource",
+								"storeSettings": {
+									"type": "HttpReadSettings",
+									"requestMethod": "GET"
+								},
+								"formatSettings": {
+									"type": "JsonReadSettings"
+								}
+							},
+							"dataset": {
+								"referenceName": "DTS_API_FSK",
+								"type": "DatasetReference",
+								"parameters": {
+									"url": {
+										"value": "@concat('/api/f93320322b05463499de/I1250/json/1/10/CHNG_DT=',variables('date'))",
+										"type": "Expression"
+									}
+								}
+							}
+						}
+					},
+					{
+						"name": "Lookup1",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "max_g",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "WITH vw_range AS (\n    SELECT \n        (g * 1000 + 1) AS st,\n        ((g + 1) * 1000) AS ed\n    FROM generate_series(0, @{variables('total_count')}) AS g\n)\nSELECT r.st, r.ed\nFROM vw_range r\n;",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "max_g",
+						"description": "당일자",
+						"type": "SetVariable",
+						"dependsOn": [
+							{
+								"activity": "get page",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "total_count",
+							"value": {
+								"value": "@div(int(activity('get page').output.firstRow.I1250.total_count), 1000)",
+								"type": "Expression"
+							}
+						}
 					}
 				],
 				"policy": {
@@ -3242,6 +3300,9 @@
 					},
 					"url": {
 						"type": "String"
+					},
+					"total_count": {
+						"type": "Integer"
 					}
 				},
 				"folder": {
