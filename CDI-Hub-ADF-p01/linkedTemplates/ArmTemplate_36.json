@@ -13,6 +13,121 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_RSN_STORE_DATA_INC')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Copy Yesterday data",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "MySqlSource",
+								"query": {
+									"value": "@concat('SELECT * FROM ', pipeline().parameters.SourceTable, ' WHERE DATE(', pipeline().parameters.IncCol, ') = DATE_ADD(CURDATE(), INTERVAL -1 DAY)')",
+									"type": "Expression"
+								}
+							},
+							"sink": {
+								"type": "DelimitedTextSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								},
+								"formatSettings": {
+									"type": "DelimitedTextWriteSettings",
+									"quoteAllText": true,
+									"fileExtension": ".csv"
+								}
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_RSN_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceTable": {
+										"value": "@pipeline().parameters.SourceTable",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": {
+										"value": "@pipeline().parameters.AdlsDirectory",
+										"type": "Expression"
+									},
+									"FileName": {
+										"value": "@concat('D_RSN_온라인몰_상품정보(중복제거)_', pipeline().parameters.SourceTable,'_', addDays(addHours(utcNow(), 9), -1, 'yyyyMMdd'),'.csv')",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SourceTable": {
+						"type": "string",
+						"defaultValue": "STORE_DATA"
+					},
+					"AdlsDirectory": {
+						"type": "string",
+						"defaultValue": "고객/외부/온라인몰정보/RSN_온라인몰_상품정보(중복제거)"
+					},
+					"IncCol": {
+						"type": "string",
+						"defaultValue": "sd_crawl_time"
+					}
+				},
+				"variables": {
+					"prev_start": {
+						"type": "String",
+						"defaultValue": "@startOfMonth(addToTime(addHours(utcNow(), 9), -1, 'Month'), 'yyyyMMdd')"
+					},
+					"prev_end": {
+						"type": "String",
+						"defaultValue": "@adddays(startOfMonth(addHours(utcNow(), 9)), -1, 'yyyyMMdd')"
+					},
+					"dd": {
+						"type": "Array"
+					}
+				},
+				"folder": {
+					"name": "고객/외부/온라인몰정보"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-12-15T08:49:47Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_RSN_STORE_PRICE_DATA_FULL')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -2618,675 +2733,6 @@
 				},
 				"annotations": [],
 				"lastPublishTime": "2023-01-30T09:48:22Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_SFTP_NIELSEN_FULL_OFFLINE')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "- 닐슨 SFTP ",
-				"activities": [
-					{
-						"name": "Set yyyymm",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "yyyymm",
-							"value": {
-								"value": "@if(equals(pipeline().parameters.pip_month,null), formatDateTime(addDays(startOfMonth(addHours(utcNow(), 9)),-34),'yyyyMM'), pipeline().parameters.pip_month)",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "ForEach1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup1').output.value",
-								"type": "Expression"
-							},
-							"isSequential": true,
-							"activities": [
-								{
-									"name": "period_copy",
-									"type": "Copy",
-									"dependsOn": [
-										{
-											"activity": "fact_copy",
-											"dependencyConditions": [
-												"Completed"
-											]
-										}
-									],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "BinarySource",
-											"storeSettings": {
-												"type": "SftpReadSettings",
-												"recursive": true,
-												"disableChunking": false
-											},
-											"formatSettings": {
-												"type": "BinaryReadSettings"
-											}
-										},
-										"sink": {
-											"type": "BinarySink",
-											"storeSettings": {
-												"type": "AzureBlobFSWriteSettings",
-												"copyBehavior": "PreserveHierarchy"
-											}
-										},
-										"enableStaging": false
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_NIELSEN_SRC_01",
-											"type": "DatasetReference",
-											"parameters": {
-												"zipname": {
-													"value": "@concat('KR_DAESANG_',item().fileName,'_period_dim_',item().fileNumber,'.txt.gz')",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_NIELSEN_SNK",
-											"type": "DatasetReference",
-											"parameters": {
-												"yyyymm": {
-													"value": "@variables('yyyymm')",
-													"type": "Expression"
-												},
-												"dir": {
-													"value": "@pipeline().parameters.AdlsDirectory",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								},
-								{
-									"name": "product_copy",
-									"type": "Copy",
-									"dependsOn": [
-										{
-											"activity": "period_copy",
-											"dependencyConditions": [
-												"Completed"
-											]
-										}
-									],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "BinarySource",
-											"storeSettings": {
-												"type": "SftpReadSettings",
-												"recursive": true,
-												"disableChunking": false
-											},
-											"formatSettings": {
-												"type": "BinaryReadSettings"
-											}
-										},
-										"sink": {
-											"type": "BinarySink",
-											"storeSettings": {
-												"type": "AzureBlobFSWriteSettings",
-												"copyBehavior": "PreserveHierarchy"
-											}
-										},
-										"enableStaging": false
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_NIELSEN_SRC_01",
-											"type": "DatasetReference",
-											"parameters": {
-												"zipname": {
-													"value": "@concat('KR_DAESANG_',item().fileName,'_product_dim_',item().fileNumber,'.txt.gz')",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_NIELSEN_SNK",
-											"type": "DatasetReference",
-											"parameters": {
-												"yyyymm": {
-													"value": "@variables('yyyymm')",
-													"type": "Expression"
-												},
-												"dir": {
-													"value": "@pipeline().parameters.AdlsDirectory",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								},
-								{
-									"name": "market_copy",
-									"type": "Copy",
-									"dependsOn": [
-										{
-											"activity": "product_copy",
-											"dependencyConditions": [
-												"Completed"
-											]
-										}
-									],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "BinarySource",
-											"storeSettings": {
-												"type": "SftpReadSettings",
-												"recursive": true,
-												"disableChunking": false
-											},
-											"formatSettings": {
-												"type": "BinaryReadSettings"
-											}
-										},
-										"sink": {
-											"type": "BinarySink",
-											"storeSettings": {
-												"type": "AzureBlobFSWriteSettings",
-												"copyBehavior": "PreserveHierarchy"
-											}
-										},
-										"enableStaging": false
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_NIELSEN_SRC_01",
-											"type": "DatasetReference",
-											"parameters": {
-												"zipname": {
-													"value": "@concat('KR_DAESANG_',item().fileName,'_market_dim_',item().fileNumber,'.txt.gz')",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_NIELSEN_SNK",
-											"type": "DatasetReference",
-											"parameters": {
-												"yyyymm": {
-													"value": "@variables('yyyymm')",
-													"type": "Expression"
-												},
-												"dir": {
-													"value": "@pipeline().parameters.AdlsDirectory",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								},
-								{
-									"name": "data_copy",
-									"type": "Copy",
-									"dependsOn": [
-										{
-											"activity": "market_copy",
-											"dependencyConditions": [
-												"Completed"
-											]
-										}
-									],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "BinarySource",
-											"storeSettings": {
-												"type": "SftpReadSettings",
-												"recursive": true,
-												"disableChunking": false
-											},
-											"formatSettings": {
-												"type": "BinaryReadSettings"
-											}
-										},
-										"sink": {
-											"type": "BinarySink",
-											"storeSettings": {
-												"type": "AzureBlobFSWriteSettings",
-												"copyBehavior": "PreserveHierarchy"
-											}
-										},
-										"enableStaging": false
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_NIELSEN_SRC_01",
-											"type": "DatasetReference",
-											"parameters": {
-												"zipname": {
-													"value": "@concat('KR_DAESANG_',item().fileName,'_aggregated_data_',item().fileNumber,'.txt.gz')",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_NIELSEN_SNK",
-											"type": "DatasetReference",
-											"parameters": {
-												"yyyymm": {
-													"value": "@variables('yyyymm')",
-													"type": "Expression"
-												},
-												"dir": {
-													"value": "@pipeline().parameters.AdlsDirectory",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								},
-								{
-									"name": "fact_copy",
-									"type": "Copy",
-									"dependsOn": [],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "BinarySource",
-											"storeSettings": {
-												"type": "SftpReadSettings",
-												"recursive": true,
-												"disableChunking": false
-											},
-											"formatSettings": {
-												"type": "BinaryReadSettings"
-											}
-										},
-										"sink": {
-											"type": "BinarySink",
-											"storeSettings": {
-												"type": "AzureBlobFSWriteSettings",
-												"copyBehavior": "PreserveHierarchy"
-											}
-										},
-										"enableStaging": false
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_NIELSEN_SRC_01",
-											"type": "DatasetReference",
-											"parameters": {
-												"zipname": {
-													"value": "@concat('KR_DAESANG_',item().fileName,'_facts_ref_',item().fileNumber,'.txt.gz')",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_NIELSEN_SNK",
-											"type": "DatasetReference",
-											"parameters": {
-												"yyyymm": {
-													"value": "@variables('yyyymm')",
-													"type": "Expression"
-												},
-												"dir": {
-													"value": "@pipeline().parameters.AdlsDirectory",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								},
-								{
-									"name": "hierarchies_copy",
-									"type": "Copy",
-									"dependsOn": [
-										{
-											"activity": "data_copy",
-											"dependencyConditions": [
-												"Completed"
-											]
-										}
-									],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "BinarySource",
-											"storeSettings": {
-												"type": "SftpReadSettings",
-												"recursive": true,
-												"disableChunking": false
-											},
-											"formatSettings": {
-												"type": "BinaryReadSettings"
-											}
-										},
-										"sink": {
-											"type": "BinarySink",
-											"storeSettings": {
-												"type": "AzureBlobFSWriteSettings",
-												"copyBehavior": "PreserveHierarchy"
-											}
-										},
-										"enableStaging": false
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_NIELSEN_SRC_01",
-											"type": "DatasetReference",
-											"parameters": {
-												"zipname": {
-													"value": "@concat('KR_DAESANG_',item().fileName,'_hierarchies_ref_',item().fileNumber,'.txt.gz')",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_NIELSEN_SNK",
-											"type": "DatasetReference",
-											"parameters": {
-												"yyyymm": {
-													"value": "@variables('yyyymm')",
-													"type": "Expression"
-												},
-												"dir": {
-													"value": "@pipeline().parameters.AdlsDirectory",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								},
-								{
-									"name": "characteristics_copy",
-									"type": "Copy",
-									"dependsOn": [
-										{
-											"activity": "hierarchies_copy",
-											"dependencyConditions": [
-												"Completed"
-											]
-										}
-									],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "BinarySource",
-											"storeSettings": {
-												"type": "SftpReadSettings",
-												"recursive": true,
-												"disableChunking": false
-											},
-											"formatSettings": {
-												"type": "BinaryReadSettings"
-											}
-										},
-										"sink": {
-											"type": "BinarySink",
-											"storeSettings": {
-												"type": "AzureBlobFSWriteSettings",
-												"copyBehavior": "PreserveHierarchy"
-											}
-										},
-										"enableStaging": false
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_NIELSEN_SRC_01",
-											"type": "DatasetReference",
-											"parameters": {
-												"zipname": {
-													"value": "@concat('KR_DAESANG_',item().fileName,'_characteristics_ref_',item().fileNumber,'.txt.gz')",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_NIELSEN_SNK",
-											"type": "DatasetReference",
-											"parameters": {
-												"yyyymm": {
-													"value": "@variables('yyyymm')",
-													"type": "Expression"
-												},
-												"dir": {
-													"value": "@pipeline().parameters.AdlsDirectory",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								},
-								{
-									"name": "checksum_copy",
-									"type": "Copy",
-									"dependsOn": [
-										{
-											"activity": "characteristics_copy",
-											"dependencyConditions": [
-												"Completed"
-											]
-										}
-									],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "BinarySource",
-											"storeSettings": {
-												"type": "SftpReadSettings",
-												"recursive": true,
-												"disableChunking": false
-											},
-											"formatSettings": {
-												"type": "BinaryReadSettings"
-											}
-										},
-										"sink": {
-											"type": "BinarySink",
-											"storeSettings": {
-												"type": "AzureBlobFSWriteSettings",
-												"copyBehavior": "PreserveHierarchy"
-											}
-										},
-										"enableStaging": false
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_NIELSEN_SRC_01",
-											"type": "DatasetReference",
-											"parameters": {
-												"zipname": {
-													"value": "@concat('KR_DAESANG_',item().fileName,'_checksum_',item().fileNumber,'.txt.gz')",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_NIELSEN_SNK",
-											"type": "DatasetReference",
-											"parameters": {
-												"yyyymm": {
-													"value": "@variables('yyyymm')",
-													"type": "Expression"
-												},
-												"dir": {
-													"value": "@pipeline().parameters.AdlsDirectory",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								}
-							]
-						}
-					},
-					{
-						"name": "Lookup1",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "Set yyyymm",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "DelimitedTextSource",
-								"storeSettings": {
-									"type": "AzureBlobFSReadSettings",
-									"recursive": true,
-									"enablePartitionDiscovery": false
-								},
-								"formatSettings": {
-									"type": "DelimitedTextReadSettings"
-								}
-							},
-							"dataset": {
-								"referenceName": "DTS_ADLS_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"AdlsDirectory": {
-										"value": "@concat('매출(주문)/외부/유통사MS정보/닐슨_오프라인/conf')",
-										"type": "Expression"
-									},
-									"FileName": {
-										"value": "@concat('닐슨오프라인_conf.csv')",
-										"type": "Expression"
-									}
-								}
-							},
-							"firstRowOnly": false
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"pip_month": {
-						"type": "string",
-						"defaultValue": "202403"
-					},
-					"AdlsDirectory": {
-						"type": "string",
-						"defaultValue": "매출(주문)/외부/유통사MS정보/닐슨_오프라인"
-					}
-				},
-				"variables": {
-					"yyyymm": {
-						"type": "String"
-					},
-					"filename": {
-						"type": "String"
-					}
-				},
-				"folder": {
-					"name": "매출_주문/외부/닐슨"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-12-15T09:05:35Z"
 			},
 			"dependsOn": []
 		}

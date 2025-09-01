@@ -13,6 +13,179 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_DDREAM_POS_DD_SALES_FULL')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Lookup Date",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "OracleSource",
+								"oracleReaderQuery": {
+									"value": "@concat('SELECT DISTINCT(SUBSTR(', pipeline().parameters.IncCol, ', 1, 6)) CALMONTH FROM ', pipeline().parameters.SourceSchema, '.', pipeline().parameters.SourceTable)",
+									"type": "Expression"
+								},
+								"partitionOption": "None",
+								"queryTimeout": "02:00:00"
+							},
+							"dataset": {
+								"referenceName": "DTS_ORACLE_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceSchema": {
+										"value": "@pipeline().parameters.SourceSchema",
+										"type": "Expression"
+									},
+									"SourceTable": {
+										"value": "@pipeline().parameters.SourceTable",
+										"type": "Expression"
+									}
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach Copy data",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup Date",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup Date').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Copy data All Month",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "OracleSource",
+											"oracleReaderQuery": {
+												"value": "@concat('SELECT * FROM ', pipeline().parameters.SourceSchema, '.', pipeline().parameters.SourceTable, ' WHERE SUBSTR(',pipeline().parameters.IncCol, ', 1, 6) = ', item().CALMONTH)",
+												"type": "Expression"
+											},
+											"partitionOption": "None",
+											"queryTimeout": "02:00:00"
+										},
+										"sink": {
+											"type": "DelimitedTextSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "DelimitedTextWriteSettings",
+												"quoteAllText": true,
+												"fileExtension": ".csv"
+											}
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_ORACLE_SRC",
+											"type": "DatasetReference",
+											"parameters": {
+												"SourceSchema": {
+													"value": "@pipeline().parameters.SourceSchema",
+													"type": "Expression"
+												},
+												"SourceTable": {
+													"value": "@pipeline().parameters.SourceTable",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_ADLS_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"AdlsDirectory": {
+													"value": "@pipeline().parameters.AdlsDirectory",
+													"type": "Expression"
+												},
+												"FileName": {
+													"value": "@concat('D_', pipeline().parameters.SourceSchema,'.', pipeline().parameters.SourceTable,'_',item().CALMONTH,'.csv')",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SourceSchema": {
+						"type": "string",
+						"defaultValue": "CD_DDREAM"
+					},
+					"SourceTable": {
+						"type": "string",
+						"defaultValue": "POS_DD_SALES"
+					},
+					"AdlsDirectory": {
+						"type": "string",
+						"defaultValue": "매출(주문)/외부/유통사MS정보/데이터드림"
+					},
+					"IncCol": {
+						"type": "string",
+						"defaultValue": "SALES_DATE"
+					}
+				},
+				"folder": {
+					"name": "매출_주문/외부/데이터드림"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-12-15T05:56:40Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_DDREAM_POS_DD_SALES_INC_ADLS')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -5679,400 +5852,6 @@
 					"SinkTable": {
 						"type": "string",
 						"defaultValue": "tb_eat_order_detail_date"
-					}
-				},
-				"folder": {
-					"name": "판촉/내부/급식입개찰"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-10-18T08:30:36Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_NEIS_ORDER_DETAIL_FULL_PG')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "Copy data",
-						"type": "Copy",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "7.00:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "SELECT *\n  FROM @{pipeline().parameters.SourceSchema}.@{pipeline().parameters.SourceTable}\nWHERE TRUNC(IF_DATE) = TRUNC(SYSDATE)",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"sink": {
-								"type": "AzurePostgreSQLSink",
-								"writeBatchSize": 1000000,
-								"writeBatchTimeout": "00:30:00",
-								"preCopyScript": {
-									"value": "DELETE FROM @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}_temp",
-									"type": "Expression"
-								},
-								"writeMethod": "CopyCommand"
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"mappings": [
-									{
-										"source": {
-											"name": "ORDER_DETAIL_ID",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "order_detail_id",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "BID_DETAIL_ID",
-											"type": "String"
-										},
-										"sink": {
-											"name": "bid_detail_id",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "BIDID",
-											"type": "String"
-										},
-										"sink": {
-											"name": "bidid",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "DOCID",
-											"type": "String"
-										},
-										"sink": {
-											"name": "docid",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "ORGNAME",
-											"type": "String"
-										},
-										"sink": {
-											"name": "orgname",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "SHEET",
-											"type": "String"
-										},
-										"sink": {
-											"name": "sheet",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "NAME",
-											"type": "String"
-										},
-										"sink": {
-											"name": "name",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "SPEC",
-											"type": "String"
-										},
-										"sink": {
-											"name": "spec",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "UNIT",
-											"type": "String"
-										},
-										"sink": {
-											"name": "unit",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "TEMP_CNT",
-											"type": "String"
-										},
-										"sink": {
-											"name": "temp_cnt",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "COMP_DIV",
-											"type": "String"
-										},
-										"sink": {
-											"name": "comp_div",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "PROD_CD",
-											"type": "String"
-										},
-										"sink": {
-											"name": "prod_cd",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "STANDARD",
-											"type": "String"
-										},
-										"sink": {
-											"name": "standard",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "WORK_DT",
-											"type": "DateTime"
-										},
-										"sink": {
-											"name": "work_dt",
-											"type": "DateTime",
-											"physicalType": "timestamp without time zone"
-										}
-									},
-									{
-										"source": {
-											"name": "MAPPING_CD",
-											"type": "String"
-										},
-										"sink": {
-											"name": "mapping_cd",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "PRODUCTLEVEL_CD",
-											"type": "String"
-										},
-										"sink": {
-											"name": "productlevel_cd",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "PRICE_CD",
-											"type": "String"
-										},
-										"sink": {
-											"name": "price_cd",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CNT",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "cnt",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "CHK_PROD_ID",
-											"type": "String"
-										},
-										"sink": {
-											"name": "chk_prod_id",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CHK_PROD_DT",
-											"type": "DateTime"
-										},
-										"sink": {
-											"name": "chk_prod_dt",
-											"type": "DateTime",
-											"physicalType": "timestamp without time zone"
-										}
-									},
-									{
-										"source": {
-											"name": "CHK_PROD_FLAG",
-											"type": "String"
-										},
-										"sink": {
-											"name": "chk_prod_flag",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "SYSTEM_PROD_CH_YN",
-											"type": "String"
-										},
-										"sink": {
-											"name": "system_prod_ch_yn",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									}
-								],
-								"typeConversion": true,
-								"typeConversionSettings": {
-									"allowDataTruncation": true,
-									"treatBooleanAsNumber": false
-								}
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": {
-										"value": "@pipeline().parameters.SourceSchema",
-										"type": "Expression"
-									},
-									"SourceTable": {
-										"value": "@pipeline().parameters.SourceTable",
-										"type": "Expression"
-									}
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_POSTGRESQL_SNK_P02",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": {
-										"value": "@pipeline().parameters.SinkSchema",
-										"type": "Expression"
-									},
-									"SinkTable": {
-										"value": "@concat(pipeline().parameters.SinkTable,'_temp')",
-										"type": "Expression"
-									}
-								}
-							}
-						]
-					},
-					{
-						"name": "Lookup1",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "Copy data",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "INSERT INTO @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}\n(\n order_detail_id          \n  ,bid_detail_id            \n\t,bidid                    \n\t,docid                    \n\t,orgname                  \n\t,sheet                    \n\t,name                     \n\t,spec                     \n\t,unit                     \n\t,temp_cnt                 \n\t,comp_div                 \n\t,prod_cd                  \n\t,standard                 \n\t,work_dt                  \n\t,mapping_cd               \n\t,productlevel_cd          \n\t,price_cd                 \n\t,cnt               \n\t,chk_prod_id              \n\t,chk_prod_dt              \n\t,chk_prod_flag            \n\t,system_prod_ch_yn      \n)\nSELECT order_detail_id          \n    ,bid_detail_id            \n\t,bidid                    \n\t,docid                    \n\t,orgname                  \n\t,sheet                    \n\t,name                     \n\t,spec                     \n\t,unit                     \n\t,temp_cnt                 \n\t,comp_div                 \n\t,prod_cd                  \n\t,standard                 \n\t,work_dt                  \n\t,mapping_cd               \n\t,productlevel_cd          \n\t,price_cd                 \n\t,cnt               \n\t,chk_prod_id              \n\t,chk_prod_dt              \n\t,chk_prod_flag            \n\t,system_prod_ch_yn      \nFROM @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}_TEMP\nWHERE bidid NOT IN ( SELECT distinct bidid from @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable} );\n\nselect 1 as ss;\n",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							}
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SourceSchema": {
-						"type": "string",
-						"defaultValue": "CD_NEIS"
-					},
-					"SourceTable": {
-						"type": "string",
-						"defaultValue": "ORDER_DETAIL"
-					},
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "tb_eat_order_detail"
 					}
 				},
 				"folder": {
