@@ -4,61 +4,80 @@
 		"description": "수요기관정보조회",
 		"activities": [
 			{
-				"name": "sel_date",
-				"type": "Lookup",
+				"name": "Until1",
+				"type": "Until",
 				"dependsOn": [],
-				"policy": {
-					"timeout": "0.12:00:00",
-					"retry": 5,
-					"retryIntervalInSeconds": 30,
-					"secureOutput": false,
-					"secureInput": false
-				},
 				"userProperties": [],
 				"typeProperties": {
-					"source": {
-						"type": "AzurePostgreSqlSource",
-						"query": {
-							"value": "WITH vw_range AS (\n    SELECT \n        (g * 1000 + 1) AS st,\n        ((g + 1) * 1000) AS ed\n    FROM generate_series(0, 999) AS g\n)\nSELECT r.st, r.ed\nFROM vw_range r\nLEFT JOIN cd_ods.tb_fsk_I0300_temp t\n    ON r.st = CAST(t.st AS NUMERIC) AND r.ed = CAST(t.ed AS NUMERIC)\nand t.evl_yr  = '2024'\n    WHERE t.st IS null",
-							"type": "Expression"
-						},
-						"partitionOption": "None"
-					},
-					"dataset": {
-						"referenceName": "DTS_POSTGRESQL_SNK",
-						"type": "DatasetReference",
-						"parameters": {
-							"SinkSchema": "1",
-							"SinkTable": "1"
-						}
-					},
-					"firstRowOnly": false
-				}
-			},
-			{
-				"name": "ForEach1",
-				"type": "ForEach",
-				"dependsOn": [
-					{
-						"activity": "sel_date",
-						"dependencyConditions": [
-							"Succeeded"
-						]
-					}
-				],
-				"userProperties": [],
-				"typeProperties": {
-					"items": {
-						"value": "@activity('sel_date').output.value",
+					"expression": {
+						"value": "@lessOrEquals(variables('copyCount'),99 )\n",
 						"type": "Expression"
 					},
-					"isSequential": false,
-					"batchCount": 2,
 					"activities": [
 						{
-							"name": "Copy data1_copy1",
-							"type": "Copy",
+							"name": "Set variable1",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "Copy data1_copy1_copy1",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "copyCount",
+								"value": {
+									"value": "@activity('Copy data1_copy1_copy1').output.rowsCopied",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "Lookup1",
+							"type": "Lookup",
 							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzurePostgreSqlSource",
+									"query": "select case when coalesce (max(cast(st as numeric)), 0) = 0 then 1\n            else coalesce (max(cast(st as numeric)), 0) + 1000\n            end as st\n            ,\n        case when coalesce (max(cast(ed as numeric)), 0) = 0 then 1000\n            else coalesce (max(cast(ed as numeric)), 0) + 1000\n            end as ed\nfrom cd_ods.tb_fsk_i0300_temp \nwhere evl_yr  = '2024';",
+									"partitionOption": "None",
+									"queryTimeout": "02:00:00"
+								},
+								"dataset": {
+									"referenceName": "DTS_POSTGRESQL_SNK",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": "1",
+										"SinkTable": "1"
+									}
+								}
+							}
+						},
+						{
+							"name": "Copy data1_copy1_copy1",
+							"type": "Copy",
+							"dependsOn": [
+								{
+									"activity": "Lookup1",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
 							"policy": {
 								"timeout": "0.12:00:00",
 								"retry": 3,
@@ -74,14 +93,14 @@
 										{
 											"name": "st",
 											"value": {
-												"value": "@item().st",
+												"value": "@activity('Lookup1').output.firstRow.st",
 												"type": "Expression"
 											}
 										},
 										{
 											"name": "ed",
 											"value": {
-												"value": "@item().ed",
+												"value": "@activity('Lookup1').output.firstRow.ed",
 												"type": "Expression"
 											}
 										}
@@ -214,7 +233,7 @@
 									"type": "DatasetReference",
 									"parameters": {
 										"url": {
-											"value": "@concat('/api/f93320322b05463499de/I0300/json/',item().st,'/',item().ed,'/EVL_YR=2024')",
+											"value": "/api/f93320322b05463499de/I0300/json/@{activity('Lookup1').output.firstRow.st}/@{activity('Lookup1').output.firstRow.ed}/EVL_YR=2024'",
 											"type": "Expression"
 										}
 									}
@@ -222,7 +241,7 @@
 							],
 							"outputs": [
 								{
-									"referenceName": "DTS_POSTGRESQL_SNK_P02",
+									"referenceName": "DTS_POSTGRESQL_SNK",
 									"type": "DatasetReference",
 									"parameters": {
 										"SinkSchema": {
@@ -237,7 +256,8 @@
 								}
 							]
 						}
-					]
+					],
+					"timeout": "0.12:00:00"
 				}
 			}
 		],
@@ -257,6 +277,9 @@
 			},
 			"url": {
 				"type": "String"
+			},
+			"copyCount": {
+				"type": "Integer"
 			}
 		},
 		"folder": {
