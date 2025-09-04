@@ -13,6 +13,261 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_FSK_I2832')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "수요기관정보조회",
+				"activities": [
+					{
+						"name": "sel_date",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 5,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "with vw_range as\n(\nselect generate_series(2,999) * 1000 + 1 as st, (generate_series(2,999)+1) * 1000 as ed\n)\nselect st, ed from vw_range\nwhere (st, ed) not in \n(\nselect cast(st as numeric), cast(ed as numeric) from cd_ods.tb_fsk_i2832_temp\n)\n;",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "sel_date",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('sel_date').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Copy data1_copy1",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 3,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "JsonSource",
+											"additionalColumns": [
+												{
+													"name": "st",
+													"value": {
+														"value": "@item().st",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "ed",
+													"value": {
+														"value": "@item().ed",
+														"type": "Expression"
+													}
+												}
+											],
+											"storeSettings": {
+												"type": "HttpReadSettings",
+												"requestMethod": "GET"
+											},
+											"formatSettings": {
+												"type": "JsonReadSettings"
+											}
+										},
+										"sink": {
+											"type": "AzurePostgreSQLSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"path": "[['PRSDNT_NM']"
+													},
+													"sink": {
+														"name": "prsdnt_nm",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['PRMS_DT']"
+													},
+													"sink": {
+														"name": "prms_dt",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['LCNS_NO']"
+													},
+													"sink": {
+														"name": "lcns_no",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['INSTT_NM']"
+													},
+													"sink": {
+														"name": "instt_nm",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['BSSH_NM']"
+													},
+													"sink": {
+														"name": "bssh_nm",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['LOCP_ADDR']"
+													},
+													"sink": {
+														"name": "locp_addr",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['INDUTY_NM']"
+													},
+													"sink": {
+														"name": "induty_nm",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['st']"
+													},
+													"sink": {
+														"name": "st",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['ed']"
+													},
+													"sink": {
+														"name": "ed",
+														"type": "String"
+													}
+												}
+											],
+											"collectionReference": "$['I2832']['row']",
+											"mapComplexValuesToString": false
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_API_FSK",
+											"type": "DatasetReference",
+											"parameters": {
+												"url": {
+													"value": "@concat('/api/f93320322b05463499de/I2832/json/',item().st,'/',item().ed)",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK_P02",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": {
+													"value": "@pipeline().parameters.SinkSchema",
+													"type": "Expression"
+												},
+												"SinkTable": {
+													"value": "@pipeline().parameters.SinkTable",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SinkSchema": {
+						"type": "string",
+						"defaultValue": "cd_ods"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "tb_fsk_I2832_temp"
+					}
+				},
+				"variables": {
+					"date": {
+						"type": "String"
+					},
+					"url": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "품질/외부/식품안전나라"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-01-16T07:55:39Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_INTG')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -10771,239 +11026,6 @@
 						"type": "String"
 					},
 					"enddt": {
-						"type": "String"
-					}
-				},
-				"folder": {
-					"name": "Industry/외부/조달청"
-				},
-				"annotations": [],
-				"lastPublishTime": "2023-01-16T07:55:39Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_MAS_PROCUREMENT_CORPORATION_INDUSTRY_INFO')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "조달업체업종정보조회",
-				"activities": [
-					{
-						"name": "Set bizno",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "bizno",
-							"value": {
-								"value": "@pipeline().parameters.pipbizno",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "Copy data1",
-						"type": "Copy",
-						"dependsOn": [
-							{
-								"activity": "Set bizno",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 5,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "JsonSource",
-								"storeSettings": {
-									"type": "HttpReadSettings",
-									"requestMethod": "GET"
-								},
-								"formatSettings": {
-									"type": "JsonReadSettings"
-								}
-							},
-							"sink": {
-								"type": "AzurePostgreSQLSink",
-								"writeBatchSize": 1000000,
-								"writeBatchTimeout": "00:30:00",
-								"preCopyScript": {
-									"value": "delete from  @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}       \n WHERE  bizno = '@{variables('bizno')}';",
-									"type": "Expression"
-								},
-								"writeMethod": "CopyCommand"
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"mappings": [
-									{
-										"source": {
-											"path": "[['bizno']"
-										},
-										"sink": {
-											"name": "bizno",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['indstrytyNm']"
-										},
-										"sink": {
-											"name": "indstryty_nm",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['indstrytyCd']"
-										},
-										"sink": {
-											"name": "indstryty_cd",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['rgstDt']"
-										},
-										"sink": {
-											"name": "rgst_dt",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['vldPrdExprtDt']"
-										},
-										"sink": {
-											"name": "vld_prd_exprt_dt",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['systmRgstDt']"
-										},
-										"sink": {
-											"name": "systm_rgst_dt",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['chgDt']"
-										},
-										"sink": {
-											"name": "chg_dt",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['indstrytyStatsNm']"
-										},
-										"sink": {
-											"name": "indstryty_stats_nm",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['rprsntIndstrytyYn']"
-										},
-										"sink": {
-											"name": "rprsnt_indstryty_yn",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['systmChgDt']"
-										},
-										"sink": {
-											"name": "systm_chg_dt",
-											"type": "String"
-										}
-									}
-								],
-								"collectionReference": "$['response']['body']['items']"
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_PPS_API_JSON",
-								"type": "DatasetReference",
-								"parameters": {
-									"params": {
-										"value": "@concat('/1230000/ao/UsrInfoService/',pipeline().parameters.service,'?type=json&pageNo=1&numOfRows=999&bizno=',variables('bizno'),'&ServiceKey=',pipeline().parameters.Apikey)",
-										"type": "Expression"
-									}
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": {
-										"value": "@pipeline().parameters.SinkSchema",
-										"type": "Expression"
-									},
-									"SinkTable": {
-										"value": "@pipeline().parameters.SinkTable",
-										"type": "Expression"
-									}
-								}
-							}
-						]
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"Apikey": {
-						"type": "string",
-						"defaultValue": "rj5HeIJYh3E2HRvmEw3P3%2BeVDZoZj074w7IIt%2BpcAaujPSI9CTx0U88XSd6C9eWwkBMUncCaG4w%2FtYRT898jcw%3D%3D"
-					},
-					"service": {
-						"type": "string",
-						"defaultValue": "getPrcrmntCorpIndstrytyInfo"
-					},
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "tb_mas_procurement_corporation_industry_info"
-					},
-					"one_page_row": {
-						"type": "string",
-						"defaultValue": "999"
-					},
-					"pipbizno": {
-						"type": "string"
-					}
-				},
-				"variables": {
-					"bizno": {
 						"type": "String"
 					}
 				},

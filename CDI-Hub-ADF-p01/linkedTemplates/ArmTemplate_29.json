@@ -13,6 +13,285 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_POSMGR_SA_ORDMST_INC')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Copy data Previous Month",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Delete Previous Month",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "OracleSource",
+								"oracleReaderQuery": {
+									"value": "SELECT *\n  FROM CD_POSMGR.SA_ORDMST\n WHERE ORDYMD >= TO_CHAR(TRUNC(ADD_MONTHS(SYSDATE,-1), 'MM'),'YYYYMMDD')\n   AND ORDYMD <= TO_CHAR(LAST_DAY(TRUNC(ADD_MONTHS(SYSDATE,-1), 'MM')),'YYYYMMDD');",
+									"type": "Expression"
+								},
+								"partitionOption": "None",
+								"queryTimeout": "02:00:00"
+							},
+							"sink": {
+								"type": "DelimitedTextSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								},
+								"formatSettings": {
+									"type": "DelimitedTextWriteSettings",
+									"quoteAllText": true,
+									"fileExtension": ".csv"
+								}
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_ORACLE_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceSchema": {
+										"value": "@pipeline().parameters.SourceSchema",
+										"type": "Expression"
+									},
+									"SourceTable": {
+										"value": "@pipeline().parameters.SourceTable",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": {
+										"value": "@pipeline().parameters.AdlsDirectory",
+										"type": "Expression"
+									},
+									"FileName": {
+										"value": "@concat('D_', pipeline().parameters.SourceSchema,'.', pipeline().parameters.SourceTable,'_', addToTime(addHours(utcNow(), 9), -1, 'Month','yyyyMM'),'.csv')",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					},
+					{
+						"name": "Copy data Current Month",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "Delete Current Month",
+								"dependencyConditions": [
+									"Succeeded",
+									"Failed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "OracleSource",
+								"oracleReaderQuery": {
+									"value": "SELECT *\n  FROM CD_POSMGR.SA_ORDMST\n WHERE ORDYMD >= TO_CHAR(TRUNC(SYSDATE, 'MM'),'YYYYMMDD')\n   AND ORDYMD <= TO_CHAR(TRUNC(SYSDATE-1),'YYYYMMDD');",
+									"type": "Expression"
+								},
+								"partitionOption": "None",
+								"queryTimeout": "02:00:00"
+							},
+							"sink": {
+								"type": "DelimitedTextSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings"
+								},
+								"formatSettings": {
+									"type": "DelimitedTextWriteSettings",
+									"quoteAllText": true,
+									"fileExtension": ".csv"
+								}
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_ORACLE_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceSchema": {
+										"value": "@pipeline().parameters.SourceSchema",
+										"type": "Expression"
+									},
+									"SourceTable": {
+										"value": "@pipeline().parameters.SourceTable",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": {
+										"value": "@pipeline().parameters.AdlsDirectory",
+										"type": "Expression"
+									},
+									"FileName": {
+										"value": "@concat('D_', pipeline().parameters.SourceSchema,'.', pipeline().parameters.SourceTable,'_',formatDateTime(addHours(utcNow(), 9), 'yyyyMM'),'.csv')",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					},
+					{
+						"name": "Delete Current Month",
+						"type": "Delete",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": "@pipeline().parameters.AdlsDirectory",
+									"FileName": {
+										"value": "@concat('D_', pipeline().parameters.SourceSchema,'.', pipeline().parameters.SourceTable,'_', formatDateTime(addHours(utcNow(), 9),'yyyyMM'), '.csv')",
+										"type": "Expression"
+									}
+								}
+							},
+							"enableLogging": false,
+							"storeSettings": {
+								"type": "AzureBlobFSReadSettings",
+								"fileListPath": {
+									"value": "@pipeline().parameters.AdlsDirectory",
+									"type": "Expression"
+								},
+								"enablePartitionDiscovery": false
+							}
+						}
+					},
+					{
+						"name": "Delete Previous Month",
+						"type": "Delete",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"dataset": {
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": "@pipeline().parameters.AdlsDirectory",
+									"FileName": {
+										"value": "@concat('D_', pipeline().parameters.SourceSchema,'.', pipeline().parameters.SourceTable,'_', addToTime(addHours(utcNow(), 9),-1,'Month', 'yyyyMM'), '.csv')",
+										"type": "Expression"
+									}
+								}
+							},
+							"enableLogging": false,
+							"storeSettings": {
+								"type": "AzureBlobFSReadSettings",
+								"fileListPath": {
+									"value": "@pipeline().parameters.AdlsDirectory",
+									"type": "Expression"
+								},
+								"enablePartitionDiscovery": false
+							}
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SourceSchema": {
+						"type": "string",
+						"defaultValue": "CD_POSMGR"
+					},
+					"SourceTable": {
+						"type": "string",
+						"defaultValue": "SA_ORDMST"
+					},
+					"AdlsDirectory": {
+						"type": "string",
+						"defaultValue": "매출(주문)/내부/POS데이터주문"
+					}
+				},
+				"variables": {
+					"prev_start": {
+						"type": "String",
+						"defaultValue": "@startOfMonth(addToTime(addHours(utcNow(), 9), -1, 'Month'), 'yyyyMMdd')"
+					},
+					"prev_end": {
+						"type": "String",
+						"defaultValue": "@adddays(startOfMonth(addHours(utcNow(), 9)), -1, 'yyyyMMdd')"
+					}
+				},
+				"folder": {
+					"name": "매출_주문/내부/매장관리"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-12-15T11:46:34Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_VOC_T_VOC_FULL_SAMPLE')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -5015,202 +5294,6 @@
 				},
 				"annotations": [],
 				"lastPublishTime": "2022-09-15T04:45:07Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_M_CD_BESTON_ES_PLUSREVIEWARTICLE')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "Copy data",
-						"type": "Copy",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "7.00:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "select\n       a.sno\n      ,a.channel \n      ,replace(replace(replace(regexp_replace(contents, '<[^>]*>|\\&([^;])*;', ''), chr(10), '//LF//'), chr(13), '//LF//'), '\"','＂') contents \n      ,a.goodsno\n      ,a.ordergoodsno\n      ,a.regdt\n      ,a.moddt\n      ,b.goodscd\nfrom cd_beston.es_plusReviewArticle a\n    ,cd_beston.es_goods b\nwhere  a.goodsno = b.GOODSNO(+) ",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"sink": {
-								"type": "DelimitedTextSink",
-								"storeSettings": {
-									"type": "AzureBlobFSWriteSettings"
-								},
-								"formatSettings": {
-									"type": "DelimitedTextWriteSettings",
-									"quoteAllText": true,
-									"fileExtension": ".csv"
-								}
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"mappings": [
-									{
-										"source": {
-											"name": "SNO",
-											"type": "String"
-										},
-										"sink": {
-											"name": "SNO",
-											"type": "String",
-											"physicalType": "String"
-										}
-									},
-									{
-										"source": {
-											"name": "CHANNEL",
-											"type": "String"
-										},
-										"sink": {
-											"name": "CHANNEL",
-											"type": "String",
-											"physicalType": "String"
-										}
-									},
-									{
-										"source": {
-											"name": "CONTENTS",
-											"type": "String"
-										},
-										"sink": {
-											"name": "CONTENTS",
-											"type": "String",
-											"physicalType": "String"
-										}
-									},
-									{
-										"source": {
-											"name": "GOODSNO",
-											"type": "String"
-										},
-										"sink": {
-											"name": "GOODSNO",
-											"type": "String",
-											"physicalType": "String"
-										}
-									},
-									{
-										"source": {
-											"name": "ORDERGOODSNO",
-											"type": "String"
-										},
-										"sink": {
-											"name": "ORDERGOODSNO",
-											"type": "String",
-											"physicalType": "String"
-										}
-									},
-									{
-										"source": {
-											"name": "REGDT",
-											"type": "String"
-										},
-										"sink": {
-											"name": "REGDT",
-											"type": "String",
-											"physicalType": "String"
-										}
-									},
-									{
-										"source": {
-											"name": "MODDT",
-											"type": "String"
-										},
-										"sink": {
-											"name": "MODDT",
-											"type": "String",
-											"physicalType": "String"
-										}
-									},
-									{
-										"source": {
-											"name": "GOODSCD"
-										},
-										"sink": {
-											"name": "GOODSCD"
-										}
-									}
-								],
-								"typeConversion": true,
-								"typeConversionSettings": {
-									"allowDataTruncation": true,
-									"treatBooleanAsNumber": false
-								}
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": {
-										"value": "1",
-										"type": "Expression"
-									},
-									"SourceTable": {
-										"value": "1",
-										"type": "Expression"
-									}
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_ADLS_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"AdlsDirectory": {
-										"value": "@pipeline().parameters.AdlsDirectory",
-										"type": "Expression"
-									},
-									"FileName": {
-										"value": "@concat('M_', pipeline().parameters.SourceSchema,'.', pipeline().parameters.SourceTable, '.csv')",
-										"type": "Expression"
-									}
-								}
-							}
-						]
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SourceSchema": {
-						"type": "string",
-						"defaultValue": "CD_BESTON"
-					},
-					"SourceTable": {
-						"type": "string",
-						"defaultValue": "ES_PLUSREVIEWARTICLE"
-					},
-					"AdlsDirectory": {
-						"type": "string",
-						"defaultValue": "고객/내부/베스트온상품후기"
-					}
-				},
-				"folder": {
-					"name": "고객/내부/베스트온"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-11-16T09:50:41Z"
 			},
 			"dependsOn": []
 		}
