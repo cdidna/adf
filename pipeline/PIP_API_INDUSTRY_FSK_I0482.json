@@ -53,7 +53,7 @@
 							"typeProperties": {
 								"source": {
 									"type": "AzurePostgreSqlSource",
-									"query": "select case when coalesce (max(cast(st as numeric)), 0) = 0 then 1\n            else coalesce (max(cast(st as numeric)), 0) + 1000\n            end as st\n            ,\n        case when coalesce (max(cast(ed as numeric)), 0) = 0 then 1000\n            else coalesce (max(cast(ed as numeric)), 0) + 1000\n            end as ed\nfrom cd_ods.tb_fsk_i0482 \n;",
+									"query": "WITH vw_range AS (\n    SELECT \n        (g * 1000 + 1) AS st,\n        ((g + 1) * 1000) AS ed\n    FROM generate_series(0, 999) AS g\n)\nSELECT r.st, r.ed\nFROM vw_range r\n;",
 									"partitionOption": "None",
 									"queryTimeout": "02:00:00"
 								},
@@ -331,6 +331,45 @@
 					],
 					"timeout": "0.12:00:00"
 				}
+			},
+			{
+				"name": "Lookup1_copy1",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Until1",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 3,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "delete from cd_ods.tb_fsk_i0482\nwhere dspsdtls_seq in (\nselect dspsdtls_seq from cd_ods.tb_fsk_i0482_temp\n);\n\ninsert into cd_ods.tb_fsk_i0482\nselect * from cd_ods.tb_fsk_i0482_temp;\n\ndelete from cd_ods.tb_fsk_i0482_temp;\n\nselect 1 as success;",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					},
+					"firstRowOnly": false
+				}
 			}
 		],
 		"parameters": {
@@ -340,7 +379,7 @@
 			},
 			"SinkTable": {
 				"type": "string",
-				"defaultValue": "tb_fsk_I0482"
+				"defaultValue": "tb_fsk_i0482_temp"
 			}
 		},
 		"variables": {
