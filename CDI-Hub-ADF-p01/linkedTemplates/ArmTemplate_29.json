@@ -13,6 +13,179 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_POSMGR_SA_ORDMST_FULL')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Lookup Date",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "OracleSource",
+								"oracleReaderQuery": {
+									"value": "@concat('SELECT DISTINCT(SUBSTR(', pipeline().parameters.IncCol, ', 1, 6)) CALMONTH FROM ', pipeline().parameters.SourceSchema, '.', pipeline().parameters.SourceTable)",
+									"type": "Expression"
+								},
+								"partitionOption": "None",
+								"queryTimeout": "02:00:00"
+							},
+							"dataset": {
+								"referenceName": "DTS_ORACLE_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceSchema": {
+										"value": "@pipeline().parameters.SourceSchema",
+										"type": "Expression"
+									},
+									"SourceTable": {
+										"value": "@pipeline().parameters.SourceTable",
+										"type": "Expression"
+									}
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach Copy data",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup Date",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup Date').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Copy data All Month",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "7.00:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "OracleSource",
+											"oracleReaderQuery": {
+												"value": "@concat('SELECT * FROM ', pipeline().parameters.SourceSchema, '.', pipeline().parameters.SourceTable, ' WHERE SUBSTR(',pipeline().parameters.IncCol, ', 1, 6) = ', item().CALMONTH)",
+												"type": "Expression"
+											},
+											"partitionOption": "None",
+											"queryTimeout": "02:00:00"
+										},
+										"sink": {
+											"type": "DelimitedTextSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "DelimitedTextWriteSettings",
+												"quoteAllText": true,
+												"fileExtension": ".csv"
+											}
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_ORACLE_SRC",
+											"type": "DatasetReference",
+											"parameters": {
+												"SourceSchema": {
+													"value": "@pipeline().parameters.SourceSchema",
+													"type": "Expression"
+												},
+												"SourceTable": {
+													"value": "@pipeline().parameters.SourceTable",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_ADLS_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"AdlsDirectory": {
+													"value": "@pipeline().parameters.AdlsDirectory",
+													"type": "Expression"
+												},
+												"FileName": {
+													"value": "@concat('D_', pipeline().parameters.SourceSchema,'.', pipeline().parameters.SourceTable,'_',item().CALMONTH,'.csv')",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SourceSchema": {
+						"type": "string",
+						"defaultValue": "CD_POSMGR"
+					},
+					"SourceTable": {
+						"type": "string",
+						"defaultValue": "SA_ORDMST"
+					},
+					"AdlsDirectory": {
+						"type": "string",
+						"defaultValue": "매출(주문)/내부/POS데이터주문"
+					},
+					"IncCol": {
+						"type": "string",
+						"defaultValue": "ORDYMD"
+					}
+				},
+				"folder": {
+					"name": "매출_주문/내부/매장관리"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-09-01T05:50:40Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_POSMGR_SA_ORDMST_INC')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -5215,85 +5388,6 @@
 				},
 				"annotations": [],
 				"lastPublishTime": "2023-01-18T04:57:50Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_FTP_WISELOG_FULL_Sample')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "- 디렉터리 하위 구조 그대로 적재",
-				"activities": [
-					{
-						"name": "Copy data1",
-						"type": "Copy",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "BinarySource",
-								"storeSettings": {
-									"type": "FtpReadSettings",
-									"recursive": true,
-									"useBinaryTransfer": true,
-									"deleteFilesAfterCompletion": false,
-									"disableChunking": false
-								},
-								"formatSettings": {
-									"type": "BinaryReadSettings"
-								}
-							},
-							"sink": {
-								"type": "BinarySink",
-								"storeSettings": {
-									"type": "AzureBlobFSWriteSettings"
-								}
-							},
-							"enableStaging": false
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_FTP_SRC",
-								"type": "DatasetReference",
-								"parameters": {}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_ADLS_BIN_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"AdlsDirectory": {
-										"value": "@pipeline().parameters.AdlsDirectory",
-										"type": "Expression"
-									}
-								}
-							}
-						]
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"AdlsDirectory": {
-						"type": "string",
-						"defaultValue": "고객/내부/정원e샵행동로그"
-					}
-				},
-				"folder": {
-					"name": "_Sample/File"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-09-15T04:45:07Z"
 			},
 			"dependsOn": []
 		}
