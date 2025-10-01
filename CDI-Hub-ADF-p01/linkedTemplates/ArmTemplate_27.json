@@ -13,6 +13,1209 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_GODOMALL_SUB_copy1')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Lookup1",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "set strdt",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "set enddt",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "set condition",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "select b.pg_table_name, a.es_table_name, a.period::int as period\n  from cd_ods.tb_jweshop_table_master a\n      inner join ( select distinct pg_table_name, es_table_name \n                     from cd_ods.tb_jweshop_table_mapping_master\n                 ) b                \n                on \n                 ( a.es_table_name = b.es_table_name)\nwhere @{variables('condition')}                 ",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup1').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Copy data1",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "mapping",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "JsonSource",
+											"storeSettings": {
+												"type": "HttpReadSettings",
+												"requestMethod": "POST",
+												"additionalHeaders": {
+													"value": "tableNm : @{item().es_table_name}\nstartDt : @{variables('strdt')}\nendDt : @{variables('enddt')}\ndtType : all",
+													"type": "Expression"
+												},
+												"requestTimeout": ""
+											},
+											"formatSettings": {
+												"type": "JsonReadSettings"
+											}
+										},
+										"sink": {
+											"type": "AzurePostgreSQLSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"translator": {
+											"value": "@json(concat('{\n\"type\": \"TabularTranslator\",\n\"mappings\": ['\n     ,activity('mapping').output.firstRow.json,'\n],\"collectionReference\": \"$[''data'']\",\"mapComplexValuesToString\": true}\n'))",
+											"type": "Expression"
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_GODOMALL",
+											"type": "DatasetReference",
+											"parameters": {}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": "cd_ods",
+												"SinkTable": {
+													"value": "@concat(item().pg_table_name,'_temp')",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "mapping",
+									"type": "Lookup",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzurePostgreSqlSource",
+											"query": {
+												"value": "select string_agg('{  \"source\": { \"path\": \"['''||a.es_column_name||''']\" }, \"sink\": {  \"name\": \"'||a.pg_column_name||'\", \"type\": \"'||a.objtype||'\" } }' ,',') as json\n   from (\n\t\t  select a.es_column_name , a.pg_column_name , case when b.udt_name = 'numeric' then 'Decimal'\n\t\t                                                   else  'String'\n\t\t                                                end as objtype                                                                         \n\t\t    from cd_ods.tb_jweshop_table_mapping_master as a inner join information_schema.columns b\n\t\t                                              on (\n\t\t                                                     a.pg_table_name||'_temp' = b.table_name\n\t\t                                                 and a.pg_column_name = b.column_name \n\t\t                                                 and b.table_schema ='cd_ods'\n\t\t                                                 )       \n\t\t   where a.pg_table_name ='@{item().pg_table_name}'\n\t\t) a\n",
+												"type": "Expression"
+											},
+											"partitionOption": "None"
+										},
+										"dataset": {
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": "1",
+												"SinkTable": "1"
+											}
+										}
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "set strdt",
+						"description": "당일자",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "strdt",
+							"value": {
+								"value": "@if(equals(pipeline().parameters.pip_strdt,null),formatDateTime(addDays(addHours(utcNow(), 9),-10),'yyyyMMdd'),pipeline().parameters.pip_strdt)",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "set enddt",
+						"description": "당일자",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"variableName": "enddt",
+							"value": {
+								"value": "@if(equals(pipeline().parameters.pip_enddt,null),formatDateTime(addDays(addHours(utcNow(), 9),-1),'yyyyMMdd'),pipeline().parameters.pip_enddt)",
+								"type": "Expression"
+							}
+						}
+					},
+					{
+						"name": "set condition",
+						"description": "초기 적재 파이프라인 PIP_D_CD_GODOMALL_INIT 호출시 \n증분주기값 넘어옴",
+						"type": "SetVariable",
+						"dependsOn": [],
+						"policy": {
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [
+							{
+								"name": "condition"
+							}
+						],
+						"typeProperties": {
+							"variableName": "enddt",
+							"value": {
+								"value": "@if(equals(pipeline().parameters.period,null),'1=1',concat('a.period = ',pipeline().parameters.period))",
+								"type": "Expression"
+							}
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"pip_strdt": {
+						"type": "string"
+					},
+					"pip_enddt": {
+						"type": "string"
+					},
+					"period": {
+						"type": "string"
+					}
+				},
+				"variables": {
+					"strdt": {
+						"type": "String"
+					},
+					"enddt": {
+						"type": "String"
+					},
+					"condition": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "고객/내부/고도몰"
+				},
+				"annotations": []
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_NEIS_BID_DETAIL_FULL_PG')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Copy data",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "OracleSource",
+								"oracleReaderQuery": "SELECT b.* FROM CD_NEIS.BID_DETAIL b\n,CD_NEIS.BID_MASTER a\nWHERE a.BIDID = b.bidid\nAND a.orgtype = 'A'",
+								"partitionOption": "None",
+								"queryTimeout": "02:00:00"
+							},
+							"sink": {
+								"type": "AzurePostgreSQLSink",
+								"writeBatchSize": 1000000,
+								"writeBatchTimeout": "00:30:00",
+								"preCopyScript": {
+									"value": "DELETE FROM @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}",
+									"type": "Expression"
+								},
+								"writeMethod": "CopyCommand"
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"mappings": [
+									{
+										"source": {
+											"name": "DOCID",
+											"type": "String"
+										},
+										"sink": {
+											"name": "docid",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "BIDID",
+											"type": "String"
+										},
+										"sink": {
+											"name": "bidid",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "ORGNAME",
+											"type": "String"
+										},
+										"sink": {
+											"name": "orgname",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "ORG_BIZ_ID",
+											"type": "String"
+										},
+										"sink": {
+											"name": "org_biz_id",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "ORG_FILENAME",
+											"type": "String"
+										},
+										"sink": {
+											"name": "org_filename",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "SYS_FILENAME",
+											"type": "String"
+										},
+										"sink": {
+											"name": "sys_filename",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "BID_DETAIL_ID",
+											"type": "String"
+										},
+										"sink": {
+											"name": "bid_detail_id",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "WORK_DT",
+											"type": "DateTime"
+										},
+										"sink": {
+											"name": "work_dt",
+											"type": "DateTime",
+											"physicalType": "timestamp without time zone"
+										}
+									},
+									{
+										"source": {
+											"name": "ORDER_FROM_DT",
+											"type": "DateTime"
+										},
+										"sink": {
+											"name": "order_from_dt",
+											"type": "DateTime",
+											"physicalType": "timestamp without time zone"
+										}
+									},
+									{
+										"source": {
+											"name": "ORDER_TO_DT",
+											"type": "DateTime"
+										},
+										"sink": {
+											"name": "order_to_dt",
+											"type": "DateTime",
+											"physicalType": "timestamp without time zone"
+										}
+									},
+									{
+										"source": {
+											"name": "DOWN_UPDATE_ID",
+											"type": "String"
+										},
+										"sink": {
+											"name": "down_update_id",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "DOWN_UPDATE_DT",
+											"type": "DateTime"
+										},
+										"sink": {
+											"name": "down_update_dt",
+											"type": "DateTime",
+											"physicalType": "timestamp without time zone"
+										}
+									},
+									{
+										"source": {
+											"name": "UPLOAD_UPDATE_ID",
+											"type": "String"
+										},
+										"sink": {
+											"name": "upload_update_id",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "UPLOAD_UPDATE_DT",
+											"type": "DateTime"
+										},
+										"sink": {
+											"name": "upload_update_dt",
+											"type": "DateTime",
+											"physicalType": "timestamp without time zone"
+										}
+									}
+								],
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_ORACLE_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceSchema": {
+										"value": "@pipeline().parameters.SourceSchema",
+										"type": "Expression"
+									},
+									"SourceTable": {
+										"value": "@pipeline().parameters.SourceTable",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_POSTGRESQL_SNK_P02",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": {
+										"value": "@pipeline().parameters.SinkSchema",
+										"type": "Expression"
+									},
+									"SinkTable": {
+										"value": "@pipeline().parameters.SinkTable",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SourceSchema": {
+						"type": "string",
+						"defaultValue": "CD_NEIS"
+					},
+					"SourceTable": {
+						"type": "string",
+						"defaultValue": "BID_DETAIL"
+					},
+					"SinkSchema": {
+						"type": "string",
+						"defaultValue": "cd_ods"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "tb_eat_bid_detail"
+					}
+				},
+				"folder": {
+					"name": "판촉/내부/급식입개찰"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-10-18T08:30:36Z"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_NEIS_BID_DETAIL_FULL_PG_SCHOOL')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Copy data",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "OracleSource",
+								"oracleReaderQuery": "SELECT b.* FROM CD_NEIS.BID_DETAIL b\n,CD_NEIS.BID_MASTER a\nWHERE a.BIDID = b.bidid\nAND a.orgtype = 'S'",
+								"partitionOption": "None",
+								"queryTimeout": "02:00:00"
+							},
+							"sink": {
+								"type": "AzurePostgreSQLSink",
+								"writeBatchSize": 1000000,
+								"writeBatchTimeout": "00:30:00",
+								"preCopyScript": {
+									"value": "DELETE FROM @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}",
+									"type": "Expression"
+								},
+								"writeMethod": "CopyCommand"
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"mappings": [
+									{
+										"source": {
+											"name": "DOCID",
+											"type": "String"
+										},
+										"sink": {
+											"name": "docid",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "BIDID",
+											"type": "String"
+										},
+										"sink": {
+											"name": "bidid",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "ORGNAME",
+											"type": "String"
+										},
+										"sink": {
+											"name": "orgname",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "ORG_BIZ_ID",
+											"type": "String"
+										},
+										"sink": {
+											"name": "org_biz_id",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "ORG_FILENAME",
+											"type": "String"
+										},
+										"sink": {
+											"name": "org_filename",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "SYS_FILENAME",
+											"type": "String"
+										},
+										"sink": {
+											"name": "sys_filename",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "BID_DETAIL_ID",
+											"type": "String"
+										},
+										"sink": {
+											"name": "bid_detail_id",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "WORK_DT",
+											"type": "DateTime"
+										},
+										"sink": {
+											"name": "work_dt",
+											"type": "DateTime",
+											"physicalType": "timestamp without time zone"
+										}
+									},
+									{
+										"source": {
+											"name": "ORDER_FROM_DT",
+											"type": "DateTime"
+										},
+										"sink": {
+											"name": "order_from_dt",
+											"type": "DateTime",
+											"physicalType": "timestamp without time zone"
+										}
+									},
+									{
+										"source": {
+											"name": "ORDER_TO_DT",
+											"type": "DateTime"
+										},
+										"sink": {
+											"name": "order_to_dt",
+											"type": "DateTime",
+											"physicalType": "timestamp without time zone"
+										}
+									},
+									{
+										"source": {
+											"name": "DOWN_UPDATE_ID",
+											"type": "String"
+										},
+										"sink": {
+											"name": "down_update_id",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "DOWN_UPDATE_DT",
+											"type": "DateTime"
+										},
+										"sink": {
+											"name": "down_update_dt",
+											"type": "DateTime",
+											"physicalType": "timestamp without time zone"
+										}
+									},
+									{
+										"source": {
+											"name": "UPLOAD_UPDATE_ID",
+											"type": "String"
+										},
+										"sink": {
+											"name": "upload_update_id",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "UPLOAD_UPDATE_DT",
+											"type": "DateTime"
+										},
+										"sink": {
+											"name": "upload_update_dt",
+											"type": "DateTime",
+											"physicalType": "timestamp without time zone"
+										}
+									}
+								],
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_ORACLE_SRC_2",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceSchema": "1",
+									"SourceTable": "1"
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_POSTGRESQL_SNK_P02",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": {
+										"value": "@pipeline().parameters.SinkSchema",
+										"type": "Expression"
+									},
+									"SinkTable": {
+										"value": "@pipeline().parameters.SinkTable",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SourceSchema": {
+						"type": "string",
+						"defaultValue": "CD_NEIS"
+					},
+					"SourceTable": {
+						"type": "string",
+						"defaultValue": "BID_DETAIL"
+					},
+					"SinkSchema": {
+						"type": "string",
+						"defaultValue": "cd_ods"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "tb_sf_eat_bid_detail"
+					}
+				},
+				"folder": {
+					"name": "판촉/내부/급식입개찰"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-10-18T08:30:36Z"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_NEIS_BID_DETAIL_SHEET_FULL_PG')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Copy data",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "OracleSource",
+								"oracleReaderQuery": "SELECT DISTINCT c.* \nFROM CD_NEIS.BID_DETAIL b\n,CD_NEIS.BID_MASTER a\n, CD_NEIS.BID_DETAIL_SHEET c\nWHERE a.BIDID = b.bidid\nAND b.BID_DETAIL_ID = c.BID_DETAIL_ID\nAND a.orgtype = 'A'",
+								"partitionOption": "None",
+								"queryTimeout": "02:00:00"
+							},
+							"sink": {
+								"type": "AzurePostgreSQLSink",
+								"writeBatchSize": 1000000,
+								"writeBatchTimeout": "00:30:00",
+								"preCopyScript": {
+									"value": "DELETE FROM @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}",
+									"type": "Expression"
+								},
+								"writeMethod": "CopyCommand"
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"mappings": [
+									{
+										"source": {
+											"name": "BID_DETAIL_ID",
+											"type": "String"
+										},
+										"sink": {
+											"name": "bid_detail_id",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "SHEET",
+											"type": "String"
+										},
+										"sink": {
+											"name": "sheet",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "USE_YN",
+											"type": "String"
+										},
+										"sink": {
+											"name": "use_yn",
+											"type": "String",
+											"physicalType": "character"
+										}
+									},
+									{
+										"source": {
+											"name": "CREATE_ID",
+											"type": "String"
+										},
+										"sink": {
+											"name": "create_id",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "CREATE_DT",
+											"type": "DateTime"
+										},
+										"sink": {
+											"name": "create_dt",
+											"type": "DateTime",
+											"physicalType": "timestamp without time zone"
+										}
+									},
+									{
+										"source": {
+											"name": "UPDATE_ID",
+											"type": "String"
+										},
+										"sink": {
+											"name": "update_id",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "UPDATE_DT",
+											"type": "DateTime"
+										},
+										"sink": {
+											"name": "update_dt",
+											"type": "DateTime",
+											"physicalType": "timestamp without time zone"
+										}
+									},
+									{
+										"source": {
+											"name": "ERROR_CD",
+											"type": "String"
+										},
+										"sink": {
+											"name": "error_cd",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "ERROR_MSG",
+											"type": "String"
+										},
+										"sink": {
+											"name": "error_msg",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									}
+								],
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_ORACLE_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceSchema": {
+										"value": "@pipeline().parameters.SourceSchema",
+										"type": "Expression"
+									},
+									"SourceTable": {
+										"value": "@pipeline().parameters.SourceTable",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_POSTGRESQL_SNK_P02",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": {
+										"value": "@pipeline().parameters.SinkSchema",
+										"type": "Expression"
+									},
+									"SinkTable": {
+										"value": "@pipeline().parameters.SinkTable",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SourceSchema": {
+						"type": "string",
+						"defaultValue": "CD_NEIS"
+					},
+					"SourceTable": {
+						"type": "string",
+						"defaultValue": "BID_DETAIL_SHEET"
+					},
+					"SinkSchema": {
+						"type": "string",
+						"defaultValue": "cd_ods"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "tb_eat_bid_detail_sheet"
+					}
+				},
+				"folder": {
+					"name": "판촉/내부/급식입개찰"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-10-18T08:30:36Z"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_NEIS_BID_DETAIL_SHEET_FULL_PG_SCHOOL')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Copy data",
+						"type": "Copy",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "OracleSource",
+								"oracleReaderQuery": "SELECT c.* FROM CD_NEIS.BID_DETAIL b\n,CD_NEIS.BID_MASTER a\n, CD_NEIS.BID_DETAIL_SHEET c\nWHERE a.BIDID = b.bidid\nAND b.BID_DETAIL_ID = c.BID_DETAIL_ID\nAND a.orgtype = 'S'",
+								"partitionOption": "None",
+								"queryTimeout": "02:00:00"
+							},
+							"sink": {
+								"type": "AzurePostgreSQLSink",
+								"writeBatchSize": 1000000,
+								"writeBatchTimeout": "00:30:00",
+								"preCopyScript": {
+									"value": "DELETE FROM @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}",
+									"type": "Expression"
+								},
+								"writeMethod": "CopyCommand"
+							},
+							"enableStaging": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"mappings": [
+									{
+										"source": {
+											"name": "BID_DETAIL_ID",
+											"type": "String"
+										},
+										"sink": {
+											"name": "bid_detail_id",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "SHEET",
+											"type": "String"
+										},
+										"sink": {
+											"name": "sheet",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "USE_YN",
+											"type": "String"
+										},
+										"sink": {
+											"name": "use_yn",
+											"type": "String",
+											"physicalType": "character"
+										}
+									},
+									{
+										"source": {
+											"name": "CREATE_ID",
+											"type": "String"
+										},
+										"sink": {
+											"name": "create_id",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "CREATE_DT",
+											"type": "DateTime"
+										},
+										"sink": {
+											"name": "create_dt",
+											"type": "DateTime",
+											"physicalType": "timestamp without time zone"
+										}
+									},
+									{
+										"source": {
+											"name": "UPDATE_ID",
+											"type": "String"
+										},
+										"sink": {
+											"name": "update_id",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "UPDATE_DT",
+											"type": "DateTime"
+										},
+										"sink": {
+											"name": "update_dt",
+											"type": "DateTime",
+											"physicalType": "timestamp without time zone"
+										}
+									},
+									{
+										"source": {
+											"name": "ERROR_CD",
+											"type": "String"
+										},
+										"sink": {
+											"name": "error_cd",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									},
+									{
+										"source": {
+											"name": "ERROR_MSG",
+											"type": "String"
+										},
+										"sink": {
+											"name": "error_msg",
+											"type": "String",
+											"physicalType": "character varying"
+										}
+									}
+								],
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_ORACLE_SRC_2",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceSchema": "1",
+									"SourceTable": "1"
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_POSTGRESQL_SNK_P02",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": {
+										"value": "@pipeline().parameters.SinkSchema",
+										"type": "Expression"
+									},
+									"SinkTable": {
+										"value": "@pipeline().parameters.SinkTable",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SourceSchema": {
+						"type": "string",
+						"defaultValue": "CD_NEIS"
+					},
+					"SourceTable": {
+						"type": "string",
+						"defaultValue": "BID_DETAIL_SHEET"
+					},
+					"SinkSchema": {
+						"type": "string",
+						"defaultValue": "cd_ods"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "tb_sf_eat_bid_detail_sheet"
+					}
+				},
+				"folder": {
+					"name": "판촉/내부/급식입개찰"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-10-18T08:30:36Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_NEIS_BID_MASTER_FULL_PG')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -7044,2954 +8247,6 @@
 				},
 				"annotations": [],
 				"lastPublishTime": "2022-11-11T01:40:51Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_ODS_BW_AZEP_O00000_FULL_INC_SAMPLE')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "- 증분 적재시, 전달+현재 달 파일 Delete후 새로 생성(Copy Activity Sink에서 precopy script로 적용)\n\n- Copy data Current Month > Source > Query 변경 필요\n- Copy data Current Month > Sink > Precopy script 변경 필요\n- Copy data Previous Month > Source > Query 변경 필요\n- Copy data Previous Month > Sink > Precopy script 변경 필요",
-				"activities": [
-					{
-						"name": "Copy data Previous Month",
-						"type": "Copy",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "7.00:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "SELECT *\n  FROM CD_ODS.BW_AZEP_O00000_FULL\n WHERE CALMONTH = TO_CHAR(TRUNC(ADD_MONTHS(SYSDATE,-1), 'MM'),'YYYYMM');",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"sink": {
-								"type": "AzurePostgreSQLSink",
-								"writeBatchSize": 1000000,
-								"writeBatchTimeout": "00:30:00",
-								"preCopyScript": {
-									"value": "delete \nfrom cd_ods.bw_azep_o00000_full \nwhere calmonth = to_char(date_trunc('month', current_date - interval '1 months'), 'YYYYMM');",
-									"type": "Expression"
-								},
-								"writeMethod": "CopyCommand"
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"mappings": [
-									{
-										"source": {
-											"name": "COMP_CODE",
-											"type": "String"
-										},
-										"sink": {
-											"name": "comp_code",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CALMONTH",
-											"type": "String"
-										},
-										"sink": {
-											"name": "calmonth",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CALWEEK",
-											"type": "String"
-										},
-										"sink": {
-											"name": "calweek",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CALDAY",
-											"type": "String"
-										},
-										"sink": {
-											"name": "calday",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "SALESORG",
-											"type": "String"
-										},
-										"sink": {
-											"name": "salesorg",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "DISTR_CHAN",
-											"type": "String"
-										},
-										"sink": {
-											"name": "distr_chan",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "MATERIAL",
-											"type": "String"
-										},
-										"sink": {
-											"name": "material",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CUSTOMER",
-											"type": "String"
-										},
-										"sink": {
-											"name": "customer",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "ZBOX",
-											"type": "Decimal"
-										},
-										"sink": {
-											"name": "zbox",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZEA",
-											"type": "Decimal"
-										},
-										"sink": {
-											"name": "zea",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZKG",
-											"type": "Decimal"
-										},
-										"sink": {
-											"name": "zkg",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "SALES_DIST",
-											"type": "String"
-										},
-										"sink": {
-											"name": "sales_dist",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CUST_GROUP",
-											"type": "String"
-										},
-										"sink": {
-											"name": "cust_group",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "SALES_OFF",
-											"type": "String"
-										},
-										"sink": {
-											"name": "sales_off",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "SALES_GRP",
-											"type": "String"
-										},
-										"sink": {
-											"name": "sales_grp",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "ZAMT",
-											"type": "String"
-										},
-										"sink": {
-											"name": "zamt",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZVAL_RET",
-											"type": "Decimal"
-										},
-										"sink": {
-											"name": "zval_ret",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZINVCDAMT",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zinvcdamt",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZGUWAVWR",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zguwavwr",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZHRVTT",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zhrvtt",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "COMP_CODE_KTL",
-											"type": "String"
-										},
-										"sink": {
-											"name": "comp_code_ktl",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "ZGUKZWI2",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zgukzwi2",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZGUKZWI3",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zgukzwi3",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZGUKZWI4",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zgukzwi4",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMKZWI4",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmkzwi4",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZUMKZWI2",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zumkzwi2",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZUMKZWI3",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zumkzwi3",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "REG_DATE",
-											"type": "DateTime"
-										},
-										"sink": {
-											"name": "reg_date",
-											"type": "DateTime",
-											"physicalType": "timestamp without time zone"
-										}
-									},
-									{
-										"source": {
-											"name": "ZBAEBU",
-											"type": "String"
-										},
-										"sink": {
-											"name": "zbaebu",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "ZSTPRS",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zstprs",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZHR_QTY",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zhr_qty",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZQTY_RET",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zqty_ret",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "BASE_UOM",
-											"type": "String"
-										},
-										"sink": {
-											"name": "base_uom",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "NT_WT_KG",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "nt_wt_kg",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "INVCD_QTY",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "invcd_qty",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "PRICE_STD",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "price_std",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "INVCD_VAL",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "invcd_val",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZRET_EA",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zret_ea",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZRET_KG",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zret_kg",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZRET_BOX",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zret_box",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZHR_EA",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zhr_ea",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZHR_KG",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zhr_kg",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZHR_BOX",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zhr_box",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZRETID_EA",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zretid_ea",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZRETID_KG",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zretid_kg",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZRETID_BOX",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zretid_box",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZHRLAT",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zhrlat",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									}
-								],
-								"typeConversion": true,
-								"typeConversionSettings": {
-									"allowDataTruncation": true,
-									"treatBooleanAsNumber": false
-								}
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": {
-										"value": "@pipeline().parameters.SourceSchema",
-										"type": "Expression"
-									},
-									"SourceTable": {
-										"value": "@pipeline().parameters.SourceTable",
-										"type": "Expression"
-									}
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": {
-										"value": "@pipeline().parameters.SinkSchema",
-										"type": "Expression"
-									},
-									"SinkTable": {
-										"value": "@pipeline().parameters.SinkTable",
-										"type": "Expression"
-									}
-								}
-							}
-						]
-					},
-					{
-						"name": "Copy data Current Month",
-						"type": "Copy",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "7.00:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "SELECT *\n  FROM CD_ODS.BW_AZEP_O00000_FULL\n WHERE CALMONTH = TO_CHAR(TRUNC(SYSDATE, 'MM'),'YYYYMM');",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"sink": {
-								"type": "AzurePostgreSQLSink",
-								"writeBatchSize": 1000000,
-								"writeBatchTimeout": "00:30:00",
-								"preCopyScript": {
-									"value": "delete \nfrom cd_ods.bw_azep_o00000_full \nwhere calmonth = to_char(date_trunc('month', current_date), 'YYYYMM');",
-									"type": "Expression"
-								},
-								"writeMethod": "CopyCommand"
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"mappings": [
-									{
-										"source": {
-											"name": "COMP_CODE",
-											"type": "String"
-										},
-										"sink": {
-											"name": "comp_code",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CALMONTH",
-											"type": "String"
-										},
-										"sink": {
-											"name": "calmonth",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CALWEEK",
-											"type": "String"
-										},
-										"sink": {
-											"name": "calweek",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CALDAY",
-											"type": "String"
-										},
-										"sink": {
-											"name": "calday",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "SALESORG",
-											"type": "String"
-										},
-										"sink": {
-											"name": "salesorg",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "DISTR_CHAN",
-											"type": "String"
-										},
-										"sink": {
-											"name": "distr_chan",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "MATERIAL",
-											"type": "String"
-										},
-										"sink": {
-											"name": "material",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CUSTOMER",
-											"type": "String"
-										},
-										"sink": {
-											"name": "customer",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "ZBOX",
-											"type": "Decimal"
-										},
-										"sink": {
-											"name": "zbox",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZEA",
-											"type": "Decimal"
-										},
-										"sink": {
-											"name": "zea",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZKG",
-											"type": "Decimal"
-										},
-										"sink": {
-											"name": "zkg",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "SALES_DIST",
-											"type": "String"
-										},
-										"sink": {
-											"name": "sales_dist",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CUST_GROUP",
-											"type": "String"
-										},
-										"sink": {
-											"name": "cust_group",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "SALES_OFF",
-											"type": "String"
-										},
-										"sink": {
-											"name": "sales_off",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "SALES_GRP",
-											"type": "String"
-										},
-										"sink": {
-											"name": "sales_grp",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "ZAMT",
-											"type": "String"
-										},
-										"sink": {
-											"name": "zamt",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZVAL_RET",
-											"type": "Decimal"
-										},
-										"sink": {
-											"name": "zval_ret",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZINVCDAMT",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zinvcdamt",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZGUWAVWR",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zguwavwr",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZHRVTT",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zhrvtt",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "COMP_CODE_KTL",
-											"type": "String"
-										},
-										"sink": {
-											"name": "comp_code_ktl",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "ZGUKZWI2",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zgukzwi2",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZGUKZWI3",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zgukzwi3",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZGUKZWI4",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zgukzwi4",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMKZWI4",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmkzwi4",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZUMKZWI2",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zumkzwi2",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZUMKZWI3",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zumkzwi3",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "REG_DATE",
-											"type": "DateTime"
-										},
-										"sink": {
-											"name": "reg_date",
-											"type": "DateTime",
-											"physicalType": "timestamp without time zone"
-										}
-									},
-									{
-										"source": {
-											"name": "ZBAEBU",
-											"type": "String"
-										},
-										"sink": {
-											"name": "zbaebu",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "ZSTPRS",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zstprs",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZHR_QTY",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zhr_qty",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZQTY_RET",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zqty_ret",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "BASE_UOM",
-											"type": "String"
-										},
-										"sink": {
-											"name": "base_uom",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "NT_WT_KG",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "nt_wt_kg",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "INVCD_QTY",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "invcd_qty",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "PRICE_STD",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "price_std",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "INVCD_VAL",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "invcd_val",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZRET_EA",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zret_ea",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZRET_KG",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zret_kg",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZRET_BOX",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zret_box",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZHR_EA",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zhr_ea",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZHR_KG",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zhr_kg",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZHR_BOX",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zhr_box",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZRETID_EA",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zretid_ea",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZRETID_KG",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zretid_kg",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZRETID_BOX",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zretid_box",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZHRLAT",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zhrlat",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									}
-								],
-								"typeConversion": true,
-								"typeConversionSettings": {
-									"allowDataTruncation": true,
-									"treatBooleanAsNumber": false
-								}
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": {
-										"value": "@pipeline().parameters.SourceSchema",
-										"type": "Expression"
-									},
-									"SourceTable": {
-										"value": "@pipeline().parameters.SourceTable",
-										"type": "Expression"
-									}
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": {
-										"value": "@pipeline().parameters.SinkSchema",
-										"type": "Expression"
-									},
-									"SinkTable": {
-										"value": "@pipeline().parameters.SinkTable",
-										"type": "Expression"
-									}
-								}
-							}
-						]
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SourceSchema": {
-						"type": "string",
-						"defaultValue": "CD_ODS"
-					},
-					"SourceTable": {
-						"type": "string",
-						"defaultValue": "BW_AZEP_O00000_FULL"
-					},
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "bw_azep_o00000_full"
-					}
-				},
-				"folder": {
-					"name": "_Sample/DB/증분/ODS/증분컬럼: CHAR(YYYYMM)"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-10-25T08:15:19Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_ODS_BW_AZEP_O00000_FULL_INC_copy1')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "Copy data Current Month",
-						"type": "Copy",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "7.00:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "SELECT *\n  FROM CD_ODS.BW_AZEP_O00000_FULL\n WHERE CALMONTH BETWEEN '201907' AND '201912'",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"sink": {
-								"type": "AzurePostgreSQLSink",
-								"writeBatchSize": 1000000,
-								"writeBatchTimeout": "00:30:00",
-								"writeMethod": "CopyCommand"
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"mappings": [
-									{
-										"source": {
-											"name": "COMP_CODE",
-											"type": "String"
-										},
-										"sink": {
-											"name": "comp_code",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CALMONTH",
-											"type": "String"
-										},
-										"sink": {
-											"name": "calmonth",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CALWEEK",
-											"type": "String"
-										},
-										"sink": {
-											"name": "calweek",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CALDAY",
-											"type": "String"
-										},
-										"sink": {
-											"name": "calday",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "SALESORG",
-											"type": "String"
-										},
-										"sink": {
-											"name": "salesorg",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "DISTR_CHAN",
-											"type": "String"
-										},
-										"sink": {
-											"name": "distr_chan",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "MATERIAL",
-											"type": "String"
-										},
-										"sink": {
-											"name": "material",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CUSTOMER",
-											"type": "String"
-										},
-										"sink": {
-											"name": "customer",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "ZBOX",
-											"type": "Decimal"
-										},
-										"sink": {
-											"name": "zbox",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZEA",
-											"type": "Decimal"
-										},
-										"sink": {
-											"name": "zea",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZKG",
-											"type": "Decimal"
-										},
-										"sink": {
-											"name": "zkg",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "SALES_DIST",
-											"type": "String"
-										},
-										"sink": {
-											"name": "sales_dist",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CUST_GROUP",
-											"type": "String"
-										},
-										"sink": {
-											"name": "cust_group",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "SALES_OFF",
-											"type": "String"
-										},
-										"sink": {
-											"name": "sales_off",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "SALES_GRP",
-											"type": "String"
-										},
-										"sink": {
-											"name": "sales_grp",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "ZAMT",
-											"type": "String"
-										},
-										"sink": {
-											"name": "zamt",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZVAL_RET",
-											"type": "Decimal"
-										},
-										"sink": {
-											"name": "zval_ret",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZINVCDAMT",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zinvcdamt",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZGUWAVWR",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zguwavwr",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZHRVTT",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zhrvtt",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "COMP_CODE_KTL",
-											"type": "String"
-										},
-										"sink": {
-											"name": "comp_code_ktl",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "ZGUKZWI2",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zgukzwi2",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZGUKZWI3",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zgukzwi3",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZGUKZWI4",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zgukzwi4",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMKZWI4",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmkzwi4",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZUMKZWI2",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zumkzwi2",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZUMKZWI3",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zumkzwi3",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "REG_DATE",
-											"type": "DateTime"
-										},
-										"sink": {
-											"name": "reg_date",
-											"type": "DateTime",
-											"physicalType": "timestamp without time zone"
-										}
-									},
-									{
-										"source": {
-											"name": "ZBAEBU",
-											"type": "String"
-										},
-										"sink": {
-											"name": "zbaebu",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "ZSTPRS",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zstprs",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZHR_QTY",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zhr_qty",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZQTY_RET",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zqty_ret",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "BASE_UOM",
-											"type": "String"
-										},
-										"sink": {
-											"name": "base_uom",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "NT_WT_KG",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "nt_wt_kg",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "INVCD_QTY",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "invcd_qty",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "PRICE_STD",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "price_std",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "INVCD_VAL",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "invcd_val",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZRET_EA",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zret_ea",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZRET_KG",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zret_kg",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZRET_BOX",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zret_box",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZHR_EA",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zhr_ea",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZHR_KG",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zhr_kg",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZHR_BOX",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zhr_box",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZRETID_EA",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zretid_ea",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZRETID_KG",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zretid_kg",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZRETID_BOX",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zretid_box",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZHRLAT",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zhrlat",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									}
-								],
-								"typeConversion": true,
-								"typeConversionSettings": {
-									"allowDataTruncation": true,
-									"treatBooleanAsNumber": false
-								}
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": {
-										"value": "@pipeline().parameters.SourceSchema",
-										"type": "Expression"
-									},
-									"SourceTable": {
-										"value": "@pipeline().parameters.SourceTable",
-										"type": "Expression"
-									}
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": {
-										"value": "@pipeline().parameters.SinkSchema",
-										"type": "Expression"
-									},
-									"SinkTable": {
-										"value": "@pipeline().parameters.SinkTable",
-										"type": "Expression"
-									}
-								}
-							}
-						]
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SourceSchema": {
-						"type": "string",
-						"defaultValue": "CD_ODS"
-					},
-					"SourceTable": {
-						"type": "string",
-						"defaultValue": "BW_AZEP_O00000_FULL"
-					},
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "bw_azep_o00000_full"
-					}
-				},
-				"folder": {
-					"name": "매출_주문/내부/ODS"
-				},
-				"annotations": [],
-				"lastPublishTime": "2023-01-12T01:44:23Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_ODS_BW_AZEP_O00000_ITEM_CALDAY')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "Lookup API Info",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('SELECT TO_CHAR(TRUNC(ADD_MONTHS(SYSDATE,-1),''MM''),''YYYYMMDD'') AS SDATE, TO_CHAR(LAST_DAY(SYSDATE),''YYYYMMDD'')   AS EDATE FROM DUAL ')\n",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"convertDecimalToInteger": false,
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "@pipeline().parameters.SourceSchema",
-									"SourceTable": {
-										"value": "@pipeline().parameters.SourceTable",
-										"type": "Expression"
-									}
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup API Info",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup API Info').output.value",
-								"type": "Expression"
-							},
-							"isSequential": true,
-							"activities": [
-								{
-									"name": "Copy data1",
-									"type": "Copy",
-									"dependsOn": [],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "OracleSource",
-											"oracleReaderQuery": {
-												"value": "@concat('SELECT CALDAY, MATERIAL, ZAMT, ZBOX FROM ',pipeline().parameters.SinkSchema,'.',pipeline().parameters.SinkTable,' WHERE CALDAY BETWEEN ''',item().SDATE,''' AND ''', item().EDATE,'''')",
-												"type": "Expression"
-											},
-											"partitionOption": "None",
-											"convertDecimalToInteger": false,
-											"queryTimeout": "02:00:00"
-										},
-										"sink": {
-											"type": "AzurePostgreSQLSink",
-											"writeBatchSize": 1000000,
-											"writeBatchTimeout": "00:30:00",
-											"preCopyScript": {
-												"value": "@{concat('DELETE FROM ',pipeline().parameters.SinkSchema,'.',pipeline().parameters.SinkTable,' WHERE CALDAY BETWEEN ''', item().SDATE, ''' AND ''',item().EDATE,'''')}",
-												"type": "Expression"
-											},
-											"writeMethod": "CopyCommand"
-										},
-										"enableStaging": false,
-										"translator": {
-											"type": "TabularTranslator",
-											"mappings": [
-												{
-													"source": {
-														"name": "CALDAY",
-														"type": "String"
-													},
-													"sink": {
-														"name": "calday",
-														"type": "String",
-														"physicalType": "character varying"
-													}
-												},
-												{
-													"source": {
-														"name": "MATERIAL",
-														"type": "String"
-													},
-													"sink": {
-														"name": "material",
-														"type": "String",
-														"physicalType": "character varying"
-													}
-												},
-												{
-													"source": {
-														"name": "ZBOX",
-														"type": "Decimal"
-													},
-													"sink": {
-														"name": "zbox",
-														"type": "Decimal",
-														"physicalType": "numeric"
-													}
-												},
-												{
-													"source": {
-														"name": "ZAMT",
-														"type": "String"
-													},
-													"sink": {
-														"name": "zamt",
-														"type": "Decimal",
-														"physicalType": "numeric"
-													}
-												}
-											],
-											"typeConversion": true,
-											"typeConversionSettings": {
-												"allowDataTruncation": true,
-												"treatBooleanAsNumber": false
-											}
-										}
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_ORACLE_SRC",
-											"type": "DatasetReference",
-											"parameters": {
-												"SourceSchema": {
-													"value": "@pipeline().parameters.SourceSchema",
-													"type": "Expression"
-												},
-												"SourceTable": {
-													"value": "@pipeline().parameters.SourceTable",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_POSTGRESQL_SNK",
-											"type": "DatasetReference",
-											"parameters": {
-												"SinkSchema": {
-													"value": "@pipeline().parameters.SinkSchema",
-													"type": "Expression"
-												},
-												"SinkTable": {
-													"value": "@pipeline().parameters.SinkTable",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								}
-							]
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SourceSchema": {
-						"type": "string",
-						"defaultValue": "CD_ODS"
-					},
-					"SourceTable": {
-						"type": "string",
-						"defaultValue": "BW_AZEP_o00000_ITEM_CALDAY"
-					},
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "bw_azep_o00000_item_calday"
-					}
-				},
-				"folder": {
-					"name": "매출_주문/내부/ODS"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-10-20T07:08:24Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_ODS_BW_AZEP_O01400_FULL_FULL')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "Copy data",
-						"type": "Copy",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "7.00:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"partitionOption": "None",
-								"queryTimeout": "02:00:00"
-							},
-							"sink": {
-								"type": "AzurePostgreSQLSink",
-								"writeBatchSize": 1000000,
-								"writeBatchTimeout": "00:30:00",
-								"preCopyScript": {
-									"value": "@{concat('truncate table ',pipeline().parameters.SinkSchema,'.',pipeline().parameters.SinkTable,';')}",
-									"type": "Expression"
-								},
-								"writeMethod": "CopyCommand"
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"mappings": [
-									{
-										"source": {
-											"name": "COMP_CODE",
-											"type": "String"
-										},
-										"sink": {
-											"name": "comp_code",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CALDAY",
-											"type": "String"
-										},
-										"sink": {
-											"name": "calday",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CALMONTH",
-											"type": "String"
-										},
-										"sink": {
-											"name": "calmonth",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CALWEEK",
-											"type": "String"
-										},
-										"sink": {
-											"name": "calweek",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CUSTOMER",
-											"type": "String"
-										},
-										"sink": {
-											"name": "customer",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "MATERIAL",
-											"type": "String"
-										},
-										"sink": {
-											"name": "material",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "RECORDMODE",
-											"type": "String"
-										},
-										"sink": {
-											"name": "recordmode",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "NET_VALUE",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "net_value",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZO_EA",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zo_ea",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZO_KG",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zo_kg",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZO_BOX",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zo_box",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "DLV_VAL",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "dlv_val",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZD_EA",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zd_ea",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZD_KG",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zd_kg",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZD_BOX",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zd_box",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZORDI_AMT",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zordi_amt",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZN_EA",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zn_ea",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZN_KG",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zn_kg",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZN_BOX",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zn_box",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZSSHOTAMT",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zsshotamt",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZSSHOT_BB",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zsshot_bb",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZSTSHTAMT",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zstshtamt",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZSSHOTQTY",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zsshotqty",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMQTY_K5",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmqty_k5",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMQTY_B5",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmqty_b5",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMAMT_1",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmamt_1",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMAMT_2",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmamt_2",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMQTY_E1",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmqty_e1",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMQTY_E2",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmqty_e2",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMQTY_K2",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmqty_k2",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMQTY_B2",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmqty_b2",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMAMT_3",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmamt_3",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMQTY_E3",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmqty_e3",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMQTY_K3",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmqty_k3",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMQTY_B3",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmqty_b3",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMAMT_4",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmamt_4",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMQTY_E4",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmqty_e4",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMQTY_K4",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmqty_k4",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMQTY_B4",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmqty_b4",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMAMT_7",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmamt_7",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMQTY_E7",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmqty_e7",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMQTY_K7",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmqty_k7",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMQTY_B7",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmqty_b7",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMAMT_6",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmamt_6",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMQTY_E6",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmqty_e6",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMQTY_K6",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmqty_k6",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMQTY_B6",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmqty_b6",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMAMT_61",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmamt_61",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMQTY_E61",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmqty_e61",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMQTY_K61",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmqty_k61",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "ZMQTY_B61",
-											"type": "Double"
-										},
-										"sink": {
-											"name": "zmqty_b61",
-											"type": "Decimal",
-											"physicalType": "numeric"
-										}
-									},
-									{
-										"source": {
-											"name": "DOC_CURRCY",
-											"type": "String"
-										},
-										"sink": {
-											"name": "doc_currcy",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "BASE_UOM",
-											"type": "String"
-										},
-										"sink": {
-											"name": "base_uom",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "DISTR_CHAN",
-											"type": "String"
-										},
-										"sink": {
-											"name": "distr_chan",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									}
-								],
-								"typeConversion": true,
-								"typeConversionSettings": {
-									"allowDataTruncation": true,
-									"treatBooleanAsNumber": false
-								}
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": {
-										"value": "@pipeline().parameters.SourceSchema",
-										"type": "Expression"
-									},
-									"SourceTable": {
-										"value": "@pipeline().parameters.SourceTable",
-										"type": "Expression"
-									}
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": {
-										"value": "@pipeline().parameters.SinkSchema",
-										"type": "Expression"
-									},
-									"SinkTable": {
-										"value": "@pipeline().parameters.SinkTable",
-										"type": "Expression"
-									}
-								}
-							}
-						]
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SourceSchema": {
-						"type": "string",
-						"defaultValue": "CD_ODS"
-					},
-					"SourceTable": {
-						"type": "string",
-						"defaultValue": "BW_AZEP_O01400_FULL"
-					},
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "bw_azep_o01400_full"
-					}
-				},
-				"folder": {
-					"name": "매출_주문/내부/ODS"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-10-20T07:08:24Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_ODS_BW_AZEP_O01400_FULL_FULL_SAMPLE')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "- 초기 적재시, 월별로 모든 파일 Sink\n- 증분컬럼이 YYYYMM 형태",
-				"activities": [
-					{
-						"name": "Lookup Date",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": {
-									"value": "@concat('SELECT DISTINCT(', pipeline().parameters.IncCol, ') AS CALMONTH FROM ', pipeline().parameters.SourceSchema, '.', pipeline().parameters.SourceTable)",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": {
-										"value": "@pipeline().parameters.SourceSchema",
-										"type": "Expression"
-									},
-									"SourceTable": {
-										"value": "@pipeline().parameters.SourceTable",
-										"type": "Expression"
-									}
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach Copy data",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup Date",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup Date').output.value",
-								"type": "Expression"
-							},
-							"isSequential": true,
-							"activities": [
-								{
-									"name": "Copy data All Month",
-									"type": "Copy",
-									"dependsOn": [],
-									"policy": {
-										"timeout": "7.00:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "OracleSource",
-											"oracleReaderQuery": {
-												"value": "@concat('SELECT * FROM ', pipeline().parameters.SourceSchema, '.', pipeline().parameters.SourceTable, ' WHERE ', pipeline().parameters.IncCol, ' = ', item().CALMONTH)",
-												"type": "Expression"
-											},
-											"partitionOption": "None",
-											"queryTimeout": "02:00:00"
-										},
-										"sink": {
-											"type": "DelimitedTextSink",
-											"storeSettings": {
-												"type": "AzureBlobFSWriteSettings"
-											},
-											"formatSettings": {
-												"type": "DelimitedTextWriteSettings",
-												"quoteAllText": true,
-												"fileExtension": ".csv"
-											}
-										},
-										"enableStaging": false,
-										"translator": {
-											"type": "TabularTranslator",
-											"typeConversion": true,
-											"typeConversionSettings": {
-												"allowDataTruncation": true,
-												"treatBooleanAsNumber": false
-											}
-										}
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_ORACLE_SRC",
-											"type": "DatasetReference",
-											"parameters": {
-												"SourceSchema": {
-													"value": "@pipeline().parameters.SourceSchema",
-													"type": "Expression"
-												},
-												"SourceTable": {
-													"value": "@pipeline().parameters.SourceTable",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_ADLS_SNK",
-											"type": "DatasetReference",
-											"parameters": {
-												"AdlsDirectory": {
-													"value": "@pipeline().parameters.AdlsDirectory",
-													"type": "Expression"
-												},
-												"FileName": {
-													"value": "@concat('D_', pipeline().parameters.SourceSchema,'.', pipeline().parameters.SourceTable,'_',item().CALMONTH,'.csv')",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								}
-							]
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SourceSchema": {
-						"type": "string",
-						"defaultValue": "CD_ODS"
-					},
-					"SourceTable": {
-						"type": "string",
-						"defaultValue": "BW_AZEP_O01400_FULL"
-					},
-					"AdlsDirectory": {
-						"type": "string",
-						"defaultValue": "매출(주문)/내부/채널별주문"
-					},
-					"IncCol": {
-						"type": "string",
-						"defaultValue": "CALMONTH"
-					}
-				},
-				"folder": {
-					"name": "_Sample/DB/증분/증분컬럼: CHAR(YYYYMM)"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-08-26T05:56:12Z"
 			},
 			"dependsOn": []
 		}
