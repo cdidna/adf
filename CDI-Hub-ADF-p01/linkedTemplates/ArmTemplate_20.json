@@ -13,6 +13,138 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_APIS_AGRI_WEATHER_M')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "수요기관정보조회",
+				"activities": [
+					{
+						"name": "select list",
+						"description": "관측지점",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 5,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "SELECT obsr_Spot_Code, to_char(now()- INTERVAL '1 day','YYYY-MM-DD') AS begin_Date\n,to_char(now(),'YYYY-MM-DD') AS end_Date \nFROM cd_ods.tb_apis_agri_weather_spot_code_t\n;\n",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK_P02",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "select list",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('select list').output.value",
+								"type": "Expression"
+							},
+							"isSequential": false,
+							"batchCount": 20,
+							"activities": [
+								{
+									"name": "Execute Pipeline1",
+									"type": "ExecutePipeline",
+									"dependsOn": [],
+									"policy": {
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"pipeline": {
+											"referenceName": "PIP_API_INDUSTRY_APIS_AGRI_WEATHER",
+											"type": "PipelineReference"
+										},
+										"waitOnCompletion": true,
+										"parameters": {
+											"obsr_Sopt_Code": {
+												"value": "@item().obsr_Spot_Code",
+												"type": "Expression"
+											},
+											"end_Date": {
+												"value": "@item().end_Date",
+												"type": "Expression"
+											},
+											"begin_Date": {
+												"value": "@item().begin_Date",
+												"type": "Expression"
+											}
+										}
+									}
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SinkSchema": {
+						"type": "string",
+						"defaultValue": "cd_ods"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "tb_apis_agri_weather_t"
+					}
+				},
+				"variables": {
+					"date": {
+						"type": "String"
+					},
+					"url": {
+						"type": "String"
+					},
+					"obsr_Spot_Code": {
+						"type": "String"
+					},
+					"begin_Date": {
+						"type": "String"
+					},
+					"end_Date": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "Industry/외부/국립농업과학원"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-01-16T07:55:39Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_APIS_AGRI_WEATHER_SUB')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -5818,451 +5950,6 @@
 					"SinkTable": {
 						"type": "string",
 						"defaultValue": "tb_at_price_real"
-					},
-					"WhsalCd": {
-						"type": "string",
-						"defaultValue": "110001"
-					},
-					"one_page_row": {
-						"type": "string",
-						"defaultValue": "1000"
-					}
-				},
-				"folder": {
-					"name": "Industry/외부/도매시장"
-				},
-				"annotations": [],
-				"lastPublishTime": "2023-01-16T07:55:39Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_AT_PRICE_SALE_SUB')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "수요기관정보조회",
-				"activities": [
-					{
-						"name": "pageNum",
-						"description": "페이지 갯수",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 5,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "JsonSource",
-								"storeSettings": {
-									"type": "HttpReadSettings",
-									"requestMethod": "GET"
-								},
-								"formatSettings": {
-									"type": "JsonReadSettings"
-								}
-							},
-							"dataset": {
-								"referenceName": "DTS_API_AT",
-								"type": "DatasetReference",
-								"parameters": {
-									"params": {
-										"value": "@concat('/openApi/price/sale.do?serviceKey=',pipeline().parameters.ApiKey,'&apiType=json&pageNo=1&saleDate=',pipeline().parameters.SaleDate,'&whsalCd=',pipeline().parameters.WhsalCd)",
-										"type": "Expression"
-									}
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "delete data",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@range(1  \n      ,add(\n             div(\n                  int(activity('pageNum').output.value[0].totCnt)\n                 ,int(pipeline().parameters.one_page_row)\n                )\n            ,if(\n                greater(\n                        mod(\n                               int(activity('pageNum').output.value[0].totCnt)\n                              ,int(pipeline().parameters.one_page_row)\n                         )\n                       ,0\n                       )\n                ,1,0\n            )   \n       )\n)",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"batchCount": 20,
-							"activities": [
-								{
-									"name": "Copy data1",
-									"type": "Copy",
-									"dependsOn": [],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 5,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "JsonSource",
-											"storeSettings": {
-												"type": "HttpReadSettings",
-												"requestMethod": "GET"
-											},
-											"formatSettings": {
-												"type": "JsonReadSettings"
-											}
-										},
-										"sink": {
-											"type": "AzurePostgreSQLSink",
-											"writeBatchSize": 1000000,
-											"writeBatchTimeout": "00:30:00",
-											"writeMethod": "CopyCommand"
-										},
-										"enableStaging": false,
-										"translator": {
-											"type": "TabularTranslator",
-											"mappings": [
-												{
-													"source": {
-														"path": "[['saleDate']"
-													},
-													"sink": {
-														"name": "saledate",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['whsalCd']"
-													},
-													"sink": {
-														"name": "whsalcd",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['whsalName']"
-													},
-													"sink": {
-														"name": "whsalname",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['cmpCd']"
-													},
-													"sink": {
-														"name": "cmpcd",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['cmpName']"
-													},
-													"sink": {
-														"name": "cmpname",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['large']"
-													},
-													"sink": {
-														"name": "large",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['largeName']"
-													},
-													"sink": {
-														"name": "largename",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['mid']"
-													},
-													"sink": {
-														"name": "mid",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['midName']"
-													},
-													"sink": {
-														"name": "midname",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['small']"
-													},
-													"sink": {
-														"name": "small",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['smallName']"
-													},
-													"sink": {
-														"name": "smallname",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['danq']"
-													},
-													"sink": {
-														"name": "danq",
-														"type": "Decimal"
-													}
-												},
-												{
-													"source": {
-														"path": "[['danCd']"
-													},
-													"sink": {
-														"name": "dancd",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['pojCd']"
-													},
-													"sink": {
-														"name": "pojcd",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['std']"
-													},
-													"sink": {
-														"name": "std",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['sizeCd']"
-													},
-													"sink": {
-														"name": "sizecd",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['sizeName']"
-													},
-													"sink": {
-														"name": "sizename",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['lvCd']"
-													},
-													"sink": {
-														"name": "lvcd",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['lvName']"
-													},
-													"sink": {
-														"name": "lvname",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['sanCd']"
-													},
-													"sink": {
-														"name": "sancd",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['sanName']"
-													},
-													"sink": {
-														"name": "sanname",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "[['totQty']"
-													},
-													"sink": {
-														"name": "totqty",
-														"type": "Decimal"
-													}
-												},
-												{
-													"source": {
-														"path": "[['totAmt']"
-													},
-													"sink": {
-														"name": "totamt",
-														"type": "Decimal"
-													}
-												},
-												{
-													"source": {
-														"path": "[['minAmt']"
-													},
-													"sink": {
-														"name": "minamt",
-														"type": "Decimal"
-													}
-												},
-												{
-													"source": {
-														"path": "[['maxAmt']"
-													},
-													"sink": {
-														"name": "maxamt",
-														"type": "Decimal"
-													}
-												},
-												{
-													"source": {
-														"path": "[['avgAmt']"
-													},
-													"sink": {
-														"name": "avgamt",
-														"type": "Decimal"
-													}
-												}
-											],
-											"collectionReference": "$['data']"
-										}
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_API_AT",
-											"type": "DatasetReference",
-											"parameters": {
-												"params": {
-													"value": "@concat('/openApi/price/sale.do?serviceKey=',pipeline().parameters.ApiKey,'&apiType=json&pageNo=',item(),'&saleDate=',pipeline().parameters.SaleDate,'&whsalCd=',pipeline().parameters.WhsalCd)",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_POSTGRESQL_SNK_P02",
-											"type": "DatasetReference",
-											"parameters": {
-												"SinkSchema": {
-													"value": "@pipeline().parameters.SinkSchema",
-													"type": "Expression"
-												},
-												"SinkTable": {
-													"value": "@pipeline().parameters.SinkTable",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								}
-							]
-						}
-					},
-					{
-						"name": "delete data",
-						"description": "데이터 삭제",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "pageNum",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "delete from @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}\nwhere saledate = '@{pipeline().parameters.SaleDate}'\n  and whsalcd  = '@{pipeline().parameters.WhsalCd}';\n\nselect 1 as success",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK_P02",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"ApiKey": {
-						"type": "string",
-						"defaultValue": "EDCC40BADEB8467BB2CD68B11A369A83"
-					},
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "tb_at_price_sale"
-					},
-					"SaleDate": {
-						"type": "string",
-						"defaultValue": "20231012"
 					},
 					"WhsalCd": {
 						"type": "string",
