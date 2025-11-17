@@ -1,0 +1,300 @@
+{
+	"name": "PIP_API_TOPIC_ASSOCIATION_TRAN",
+	"properties": {
+		"activities": [
+			{
+				"name": "select_keyword",
+				"type": "Lookup",
+				"state": "Inactive",
+				"onInactiveMarkAs": "Succeeded",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "select distinct channel, keyword, start_date, end_date from \n(\nWITH weekly_dates AS (\n    SELECT \n        to_char(date_trunc('week', generate_series('2022-10-22'::date, CURRENT_DATE, '1 week')), 'YYYYMMDD') as start_date,\n        to_char(date_trunc('week', generate_series('2022-10-22'::date, CURRENT_DATE, '1 week')) + interval '6 days', 'YYYYMMDD') as end_date\n    FROM generate_series('2021-01-04'::date, CURRENT_DATE, '1 week') as week_series\n)\nSELECT \n    unnest(array['blog','twitter','news','insta','community','youtube']) as channel,\n    '파파이스||popeyes' as keyword,\n    start_date,\n    end_date\nFROM weekly_dates\n)\norder by  start_date,\n    end_date\n",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "token",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "select_keyword",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "JsonSource",
+						"storeSettings": {
+							"type": "HttpReadSettings",
+							"requestMethod": "POST",
+							"requestTimeout": ""
+						},
+						"formatSettings": {
+							"type": "JsonReadSettings"
+						}
+					},
+					"dataset": {
+						"referenceName": "DTS_VIVE_API_TOKEN",
+						"type": "DatasetReference"
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "token",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('select_keyword').output.value",
+						"type": "Expression"
+					},
+					"isSequential": false,
+					"batchCount": 20,
+					"activities": [
+						{
+							"name": "Copy data",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 2,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "JsonSource",
+									"additionalColumns": [
+										{
+											"name": "keyword",
+											"value": {
+												"value": "@item().keyword",
+												"type": "Expression"
+											}
+										},
+										{
+											"name": "channel",
+											"value": {
+												"value": "@item().channel",
+												"type": "Expression"
+											}
+										}
+									],
+									"storeSettings": {
+										"type": "HttpReadSettings",
+										"requestMethod": "GET",
+										"additionalHeaders": {
+											"value": "@{concat('Authorization : Bearer ','eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzY29wZSI6WyJTT0NJQUwiXSwiZXhwIjoxNzYzMzk4NDc2LCJhdXRob3JpdGllcyI6WyJST0xFX1VTRVIiXSwianRpIjoiOTJjMTkzMTctYThkMS00MjEwLThhYWItYWVhMDA2MzEyYjAxIiwiY2xpZW50X2lkIjoiM0FCQUIxNzhFRjQzMjg1NzA4RUJCNTJCMTZCMjhFQ0MifQ.c2miPaEqxCqi9YHvSFSi3AnxxravDicesbHEpK2G6Tc')}",
+											"type": "Expression"
+										},
+										"requestTimeout": ""
+									},
+									"formatSettings": {
+										"type": "JsonReadSettings"
+									}
+								},
+								"sink": {
+									"type": "AzurePostgreSQLSink",
+									"writeBatchSize": 1000000,
+									"writeBatchTimeout": "00:30:00",
+									"writeMethod": "CopyCommand"
+								},
+								"enableStaging": false,
+								"enableSkipIncompatibleRow": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"mappings": [
+										{
+											"source": {
+												"path": "['date']"
+											},
+											"sink": {
+												"name": "date",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['title']"
+											},
+											"sink": {
+												"name": "title",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['content']"
+											},
+											"sink": {
+												"name": "content",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['url']"
+											},
+											"sink": {
+												"name": "url",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['writerName']"
+											},
+											"sink": {
+												"name": "writername",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['documentDate']"
+											},
+											"sink": {
+												"name": "documentdate",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['writerRealName']"
+											},
+											"sink": {
+												"name": "writerrealname",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "$['keyword']"
+											},
+											"sink": {
+												"name": "keyword",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "$['channel']"
+											},
+											"sink": {
+												"name": "channel",
+												"type": "String"
+											}
+										}
+									],
+									"collectionReference": "$['data']['documentList']",
+									"mapComplexValuesToString": false
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "DTS_VIVE_API",
+									"type": "DatasetReference",
+									"parameters": {
+										"param": {
+											"value": "@concat('/dataplus/social/GetAssociationTransitionBySentiment?source=',item().channel,'&startDate=',item().start_date,'&endDate=',item().end_date,'&period=0&rowPerPage=3000&&categorySetName=TSN3&keyword=',item().keyword)",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "DTS_POSTGRESQL_SNK",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": {
+											"value": "@pipeline().parameters.SinkSckema",
+											"type": "Expression"
+										},
+										"SinkTable": {
+											"value": "@pipeline().parameters.SinkTable",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"SinkSckema": {
+				"type": "string",
+				"defaultValue": "cd_ods"
+			},
+			"SinkTable": {
+				"type": "string",
+				"defaultValue": "temp_20251117"
+			},
+			"pip_date": {
+				"type": "string"
+			},
+			"pip_date2": {
+				"type": "string"
+			}
+		},
+		"variables": {
+			"date": {
+				"type": "String"
+			},
+			"date2": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "고객/외부/키워드소셜원문"
+		},
+		"annotations": []
+	}
+}
