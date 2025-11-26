@@ -24,20 +24,7 @@
 						{
 							"name": "Copy data1_copy1",
 							"type": "Copy",
-							"dependsOn": [
-								{
-									"activity": "Set variable1",
-									"dependencyConditions": [
-										"Succeeded"
-									]
-								},
-								{
-									"activity": "Set variable1_copy1",
-									"dependencyConditions": [
-										"Succeeded"
-									]
-								}
-							],
+							"dependsOn": [],
 							"policy": {
 								"timeout": "0.12:00:00",
 								"retry": 0,
@@ -69,7 +56,7 @@
 										"type": "HttpReadSettings",
 										"requestMethod": "POST",
 										"additionalHeaders": {
-											"value": "Content-Type: application/json; UTF-8\nX-Naver-Client-Id : @{variables('id')}\nX-Naver-Client-Secret : @{variables('pw')}",
+											"value": "Content-Type: application/json; UTF-8\nX-Naver-Client-Id : @{item().id}\nX-Naver-Client-Secret : @{item().pw}",
 											"type": "Expression"
 										},
 										"requestBody": {
@@ -154,86 +141,6 @@
 									}
 								}
 							]
-						},
-						{
-							"name": "select_user",
-							"type": "Lookup",
-							"dependsOn": [],
-							"policy": {
-								"timeout": "0.12:00:00",
-								"retry": 5,
-								"retryIntervalInSeconds": 30,
-								"secureOutput": false,
-								"secureInput": false
-							},
-							"userProperties": [],
-							"typeProperties": {
-								"source": {
-									"type": "AzurePostgreSqlSource",
-									"query": {
-										"value": "with vw_users\nas\n(\nselect unnest (array['p7kCTjIvjnAYEJGAvsl0','YGhFoYAuLjwOeggaogEg','JKMVVBdEU58bv9gVHyeh']) as id\n,\nunnest (array['fabaTiAHhF','2fBbQxicmX','spp0sh3TAq']) as pw\n)\n, vw_user_random\nas\n(\nselect * from vw_users\nORDER BY RANDOM() \nLIMIT 1\n)\nselect * from vw_user_random",
-										"type": "Expression"
-									},
-									"partitionOption": "None"
-								},
-								"dataset": {
-									"referenceName": "DTS_POSTGRESQL_SNK",
-									"type": "DatasetReference",
-									"parameters": {
-										"SinkSchema": "1",
-										"SinkTable": "1"
-									}
-								},
-								"firstRowOnly": false
-							}
-						},
-						{
-							"name": "Set variable1",
-							"type": "SetVariable",
-							"dependsOn": [
-								{
-									"activity": "select_user",
-									"dependencyConditions": [
-										"Succeeded"
-									]
-								}
-							],
-							"policy": {
-								"secureOutput": false,
-								"secureInput": false
-							},
-							"userProperties": [],
-							"typeProperties": {
-								"variableName": "id",
-								"value": {
-									"value": "@activity('select_user').output.id",
-									"type": "Expression"
-								}
-							}
-						},
-						{
-							"name": "Set variable1_copy1",
-							"type": "SetVariable",
-							"dependsOn": [
-								{
-									"activity": "select_user",
-									"dependencyConditions": [
-										"Succeeded"
-									]
-								}
-							],
-							"policy": {
-								"secureOutput": false,
-								"secureInput": false
-							},
-							"userProperties": [],
-							"typeProperties": {
-								"variableName": "pw",
-								"value": {
-									"value": "@activity('select_user').output.pw",
-									"type": "Expression"
-								}
-							}
 						}
 					]
 				}
@@ -254,7 +161,7 @@
 					"source": {
 						"type": "AzurePostgreSqlSource",
 						"query": {
-							"value": "select topic, key_id ,\nto_char(DATE_TRUNC('month', current_date - interval '6 month'), 'YYYY-MM-DD') as start_date,\n     to_char(now() - interval '1 day', 'YYYY-MM-DD') as end_date\nfrom cd_portal.tb_topic_master\nwhere use_yn = 'Y'\nand new_traker  = 'N'\nand topic = '김치'",
+							"value": "WITH id_pw_combinations AS (\n  SELECT \n    ROW_NUMBER() OVER () as combo_id,\n    id, \n    pw\n  FROM (\n    VALUES \n      ('p7kCTjIvjnAYEJGAvsl0', 'fabaTiAHhF'),\n      ('YGhFoYAuLjwOeggaogEg', '2fBbQxicmX'),\n      ('JKMVVBdEU58bv9gVHyeh', 'spp0sh3TAq')\n  ) AS combinations(id, pw)\n),\nbase_data AS (\n  SELECT \n    topic,\n    key_id,\n    to_char(DATE_TRUNC('month', current_date - interval '6 month'), 'YYYY-MM-DD') as start_date,\n     to_char(now() - interval '1 day', 'YYYY-MM-DD') as end_date,\n    ROW_NUMBER() OVER () as row_num\n  FROM cd_portal.tb_topic_master\n  where use_yn = 'Y'\nand new_traker  = 'N'\n)\nSELECT \n  bd.topic,\n  bd.key_id,\n  bd.start_date,\n  bd.end_date,\n  ipc.id,\n  ipc.pw\nFROM base_data bd\nJOIN id_pw_combinations ipc ON ipc.combo_id = ((bd.row_num - 1) % 3) + 1",
 							"type": "Expression"
 						},
 						"partitionOption": "None"
