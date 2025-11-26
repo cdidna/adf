@@ -24,7 +24,14 @@
 						{
 							"name": "Copy data1_copy1",
 							"type": "Copy",
-							"dependsOn": [],
+							"dependsOn": [
+								{
+									"activity": "Set variable1",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
 							"policy": {
 								"timeout": "0.12:00:00",
 								"retry": 0,
@@ -35,7 +42,7 @@
 							"userProperties": [],
 							"typeProperties": {
 								"source": {
-									"type": "JsonSource",
+									"type": "AzurePostgreSqlSource",
 									"additionalColumns": [
 										{
 											"name": "key_id",
@@ -50,24 +57,18 @@
 												"value": "@item().topic",
 												"type": "Expression"
 											}
+										},
+										{
+											"name": "jsonData",
+											"value": {
+												"value": "@variables('jsonData')",
+												"type": "Expression"
+											}
 										}
 									],
-									"storeSettings": {
-										"type": "HttpReadSettings",
-										"requestMethod": "POST",
-										"additionalHeaders": {
-											"value": "Content-Type: application/json; UTF-8\nX-Naver-Client-Id : @{item().id}\nX-Naver-Client-Secret : @{item().pw}",
-											"type": "Expression"
-										},
-										"requestBody": {
-											"value": "{\n  \"startDate\": \"@{item().start_date}\",\n  \"endDate\": \"@{item().end_date}\",\n  \"timeUnit\": \"month\",\n  \"keywordGroups\": [\n    {\n      \"groupName\": \"@{item().topic}\",\n      \"keywords\": [\"@{item().topic}\"]\n    }\n  ]\n}",
-											"type": "Expression"
-										},
-										"requestTimeout": ""
-									},
-									"formatSettings": {
-										"type": "JsonReadSettings"
-									}
+									"query": "select 1 as success",
+									"partitionOption": "None",
+									"queryTimeout": "02:00:00"
 								},
 								"sink": {
 									"type": "AzurePostgreSqlSink",
@@ -81,48 +82,53 @@
 									"mappings": [
 										{
 											"source": {
-												"path": "$['results'][0]['data'][*]['period']"
-											},
-											"sink": {
-												"name": "period",
+												"name": "key_id",
 												"type": "String"
-											}
-										},
-										{
-											"source": {
-												"path": "$['results'][0]['data'][*]['ratio']"
-											},
-											"sink": {
-												"name": "ratio",
-												"type": "String"
-											}
-										},
-										{
-											"source": {
-												"path": "$['key_id']"
 											},
 											"sink": {
 												"name": "key_id",
-												"type": "String"
+												"type": "String",
+												"physicalType": "character varying"
 											}
 										},
 										{
 											"source": {
-												"path": "$['topic']"
+												"name": "topic",
+												"type": "String"
 											},
 											"sink": {
 												"name": "topic",
+												"type": "String",
+												"physicalType": "character varying"
+											}
+										},
+										{
+											"source": {
+												"name": "jsonData",
 												"type": "String"
+											},
+											"sink": {
+												"name": "jsonData",
+												"type": "String",
+												"physicalType": "jsonb"
 											}
 										}
 									],
-									"collectionReference": "$['results']"
+									"typeConversion": true,
+									"typeConversionSettings": {
+										"allowDataTruncation": true,
+										"treatBooleanAsNumber": false
+									}
 								}
 							},
 							"inputs": [
 								{
-									"referenceName": "DTS_NAVER_DATALAB_API",
-									"type": "DatasetReference"
+									"referenceName": "DTS_POSTGRESQL_SNK",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": "1",
+										"SinkTable": "1"
+									}
 								}
 							],
 							"outputs": [
@@ -141,6 +147,68 @@
 									}
 								}
 							]
+						},
+						{
+							"name": "Web1",
+							"type": "WebActivity",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 5,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"method": "POST",
+								"headers": {
+									"Content-Type": {
+										"value": "application/json; UTF-8",
+										"type": "Expression"
+									},
+									"X-Naver-Client-Id": {
+										"value": "@item().id",
+										"type": "Expression"
+									},
+									"X-Naver-Client-Secret": {
+										"value": "@item().pw",
+										"type": "Expression"
+									}
+								},
+								"url": {
+									"value": "https://openapi.naver.com/v1/datalab/search",
+									"type": "Expression"
+								},
+								"body": {
+									"value": "{\n  \"startDate\": \"@{item().start_date}\",\n  \"endDate\": \"@{item().end_date}\",\n  \"timeUnit\": \"month\",\n  \"keywordGroups\": [\n    {\n      \"groupName\": \"@{item().topic}\",\n      \"keywords\": [\"@{item().topic}\"]\n    }\n  ]\n}",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "Set variable1",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "Web1",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "jsonData",
+								"value": {
+									"value": "@string(activity('Web1').output)",
+									"type": "Expression"
+								}
+							}
 						}
 					]
 				}
@@ -193,6 +261,9 @@
 				"type": "Integer"
 			},
 			"pw": {
+				"type": "String"
+			},
+			"jsonData": {
 				"type": "String"
 			}
 		},
