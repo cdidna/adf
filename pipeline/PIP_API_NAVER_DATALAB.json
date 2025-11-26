@@ -1,0 +1,240 @@
+{
+	"name": "PIP_API_NAVER_DATALAB",
+	"properties": {
+		"activities": [
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "select_keyword",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('select_keyword').output.value",
+						"type": "Expression"
+					},
+					"isSequential": true,
+					"activities": [
+						{
+							"name": "Copy data1_copy1",
+							"type": "Copy",
+							"dependsOn": [
+								{
+									"activity": "select_user",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "JsonSource",
+									"additionalColumns": [
+										{
+											"name": "key_id",
+											"value": {
+												"value": "@item().key_id",
+												"type": "Expression"
+											}
+										},
+										{
+											"name": "topic",
+											"value": {
+												"value": "@item().topic",
+												"type": "Expression"
+											}
+										}
+									],
+									"storeSettings": {
+										"type": "HttpReadSettings",
+										"requestMethod": "POST",
+										"additionalHeaders": {
+											"value": "Content-Type: application/json; UTF-8\nX-Naver-Client-Id : @{activity('select_user').output.firstRow.id}\nX-Naver-Client-Secret : @{activity('select_user').output.firstRow.pw}",
+											"type": "Expression"
+										},
+										"requestBody": {
+											"value": "{\n  \"startDate\": \"@{item().start_date}\",\n  \"endDate\": \"@{item().end_date}\",\n  \"timeUnit\": \"month\",\n  \"keywordGroups\": [\n    {\n      \"groupName\": \"@{item().topic}\",\n      \"keywords\": [\"@{item().topic}\"]\n    }\n  ]\n}",
+											"type": "Expression"
+										},
+										"requestTimeout": ""
+									},
+									"formatSettings": {
+										"type": "JsonReadSettings"
+									}
+								},
+								"sink": {
+									"type": "AzurePostgreSqlSink",
+									"writeBatchSize": 1000000,
+									"writeBatchTimeout": "00:30:00",
+									"writeMethod": "CopyCommand"
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"mappings": [
+										{
+											"source": {
+												"path": "['data'][0]['period']"
+											},
+											"sink": {
+												"name": "period",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['data'][0]['ratio']"
+											},
+											"sink": {
+												"name": "ratio",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "$['key_id']"
+											},
+											"sink": {
+												"name": "key_id",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "$['topic']"
+											},
+											"sink": {
+												"name": "topic",
+												"type": "String"
+											}
+										}
+									],
+									"collectionReference": "$['results']"
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "DTS_NAVER_DATALAB_API",
+									"type": "DatasetReference"
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "DTS_POSTGRESQL_SNK",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": {
+											"value": "@pipeline().parameters.SinkSckema",
+											"type": "Expression"
+										},
+										"SinkTable": {
+											"value": "@pipeline().parameters.SinkTable",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						},
+						{
+							"name": "select_user",
+							"type": "Lookup",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 5,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzurePostgreSqlSource",
+									"query": {
+										"value": "with vw_users\nas\n(\nselect unnest (array['p7kCTjIvjnAYEJGAvsl0','YGhFoYAuLjwOeggaogEg','JKMVVBdEU58bv9gVHyeh']) as id\n,\nunnest (array['fabaTiAHhF','2fBbQxicmX','spp0sh3TAq']) as pw\n)\n, vw_user_random\nas\n(\nselect * from vw_users\nORDER BY RANDOM() \nLIMIT 1\n)\nselect * from vw_user_random",
+										"type": "Expression"
+									},
+									"partitionOption": "None"
+								},
+								"dataset": {
+									"referenceName": "DTS_POSTGRESQL_SNK",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": "1",
+										"SinkTable": "1"
+									}
+								},
+								"firstRowOnly": false
+							}
+						}
+					]
+				}
+			},
+			{
+				"name": "select_keyword",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 5,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "select topic, key_id ,\nto_char(DATE_TRUNC('month', current_date - interval '6 month'), 'YYYY-MM-DD') as start_date,\n     to_char(now() - interval '1 day', 'YYYY-MM-DD') as end_date\nfrom cd_portal.tb_topic_master\nwhere use_yn = 'Y'\nand new_traker  = 'N'",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					},
+					"firstRowOnly": false
+				}
+			}
+		],
+		"parameters": {
+			"SinkTable": {
+				"type": "string",
+				"defaultValue": "tb_naver_datalab_keyword_t"
+			},
+			"SinkSckema": {
+				"type": "string",
+				"defaultValue": "ㅊ"
+			}
+		},
+		"variables": {
+			"copyCount": {
+				"type": "Integer"
+			}
+		},
+		"folder": {
+			"name": "고객/외부/홈대시보드"
+		},
+		"annotations": []
+	}
+}
