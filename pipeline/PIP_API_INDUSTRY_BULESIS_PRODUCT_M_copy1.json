@@ -1,0 +1,214 @@
+{
+	"name": "PIP_API_INDUSTRY_BULESIS_PRODUCT_M_copy1",
+	"properties": {
+		"activities": [
+			{
+				"name": "Lookup_parameter",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "select registration_num,  store_id, brand_store_address_full\nfrom cd_ods.tb_fc_brandstores_navermap_t \n;",
+							"type": "Expression"
+						},
+						"partitionOption": "None",
+						"queryTimeout": "02:00:00"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK_P02",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "ForEach_product_info",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Lookup_parameter",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Lookup_parameter').output.value",
+						"type": "Expression"
+					},
+					"isSequential": false,
+					"batchCount": 5,
+					"activities": [
+						{
+							"name": "Copy data_product_info",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 5,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "JsonSource",
+									"additionalColumns": [
+										{
+											"name": "registration_num",
+											"value": {
+												"value": "@item().registration_num",
+												"type": "Expression"
+											}
+										},
+										{
+											"name": "store_id",
+											"value": {
+												"value": "@item().store_id",
+												"type": "Expression"
+											}
+										}
+									],
+									"storeSettings": {
+										"type": "HttpReadSettings",
+										"requestMethod": "GET"
+									},
+									"formatSettings": {
+										"type": "JsonReadSettings"
+									}
+								},
+								"sink": {
+									"type": "AzurePostgreSqlSink",
+									"writeBatchSize": 1000000,
+									"writeBatchTimeout": "00:30:00",
+									"writeMethod": "CopyCommand"
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"mappings": [
+										{
+											"source": {
+												"path": "['emdNm']"
+											},
+											"sink": {
+												"name": "dong",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['sggNm']"
+											},
+											"sink": {
+												"name": "sigungu",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['siNm']"
+											},
+											"sink": {
+												"name": "sido",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "$['registration_num']"
+											},
+											"sink": {
+												"name": "registration_num",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "$['store_id']"
+											},
+											"sink": {
+												"name": "store_id",
+												"type": "String"
+											}
+										}
+									],
+									"collectionReference": "$['results']['juso']",
+									"mapComplexValuesToString": false
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "DTS_API_ADDR",
+									"type": "DatasetReference",
+									"parameters": {
+										"url": {
+											"value": "@concat('?confmKey=U01TX0FVVEgyMDI1MTIxODEzMDgwNjExNjU4MDM=&currentPage=1&countPerPage=1&resultType=json&keyword=',item().brand_store_address_full)",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "DTS_POSTGRESQL_SNK_P02",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": {
+											"value": "@pipeline().parameters.SinkSchema",
+											"type": "Expression"
+										},
+										"SinkTable": {
+											"value": "@pipeline().parameters.SinkTable",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					]
+				}
+			}
+		],
+		"concurrency": 3,
+		"parameters": {
+			"SinkSchema": {
+				"type": "string",
+				"defaultValue": "cd_ods"
+			},
+			"SinkTable": {
+				"type": "string",
+				"defaultValue": "tb_fc_brandstores_real_address_t"
+			},
+			"p_yymm": {
+				"type": "string"
+			}
+		},
+		"variables": {
+			"yymm": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "Industry/외부/주소검색"
+		},
+		"annotations": []
+	}
+}
