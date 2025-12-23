@@ -13,6 +13,3316 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_TOPIC_ASSOCIATION_TRAN')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "select_keyword",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "select_keyword_copy1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 5,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "WITH vw_last_date AS (\n\tSELECT \n    to_char(now() - interval '2 day', 'YYYYMMDD') as start_date,\n     to_char(now() - interval '2 day', 'YYYYMMDD') as end_date\n)\nselect b.key_id, b.topic, unnest(array['blog','twitter&excludeKeyword=rt','news','insta','community']) as channel\n, a.start_date, a.end_date\nfrom vw_last_date a\n, (\nselect topic, key_id from cd_portal.tb_topic_master\nwhere use_yn = 'Y'\nand new_traker  = 'N'\nand key_id between '001' and '040'\n) b",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "token",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 5,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "JsonSource",
+								"storeSettings": {
+									"type": "HttpReadSettings",
+									"requestMethod": "POST",
+									"requestTimeout": ""
+								},
+								"formatSettings": {
+									"type": "JsonReadSettings"
+								}
+							},
+							"dataset": {
+								"referenceName": "DTS_VIVE_API_TOKEN",
+								"type": "DatasetReference",
+								"parameters": {}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "select_keyword",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('select_keyword').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Web1",
+									"type": "WebActivity",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"method": "GET",
+										"headers": {
+											"Authorization": {
+												"value": "Bearer @{activity('token').output.value[0].access_token}",
+												"type": "Expression"
+											}
+										},
+										"url": {
+											"value": "https://dsdata-api.some.co.kr/dataplus/social/GetAssociationTransitionBySentiment?source=@{item().channel}&startDate=@{item().start_date}&endDate=@{item().end_date}&period=0&rowPerPage=3000&&categorySetName=TSN3&keyword=@{item().topic}",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "Copy data1",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Set variable1",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzurePostgreSqlSource",
+											"additionalColumns": [
+												{
+													"name": "jsonDataCol",
+													"value": {
+														"value": "@variables('jsonData1')",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "topic",
+													"value": {
+														"value": "@item().topic",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "channel",
+													"value": {
+														"value": "@item().channel",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "key_id",
+													"value": {
+														"value": "@item().key_id",
+														"type": "Expression"
+													}
+												}
+											],
+											"query": "select 1 as success",
+											"partitionOption": "None",
+											"queryTimeout": "02:00:00"
+										},
+										"sink": {
+											"type": "AzurePostgreSqlSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"name": "key_id",
+														"type": "String"
+													},
+													"sink": {
+														"name": "key_id",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "topic",
+														"type": "String"
+													},
+													"sink": {
+														"name": "topic",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "channel",
+														"type": "String"
+													},
+													"sink": {
+														"name": "channel",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "jsonDataCol",
+														"type": "String"
+													},
+													"sink": {
+														"name": "jsondata",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												}
+											],
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": "1",
+												"SinkTable": "1"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": {
+													"value": "@pipeline().parameters.SinkSckema",
+													"type": "Expression"
+												},
+												"SinkTable": {
+													"value": "@pipeline().parameters.SinkTable",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "Set variable1",
+									"type": "SetVariable",
+									"dependsOn": [
+										{
+											"activity": "Web1",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "jsonData1",
+										"value": {
+											"value": "@string(activity('Web1').output)",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "select_keyword_copy1",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "token",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 5,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "delete from  cd_ods.tb_vive_topic_association_tran_t;\n\nselect 1 as success;",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "select_keyword_copy1_copy1",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "ForEach1",
+								"dependencyConditions": [
+									"Completed"
+								]
+							},
+							{
+								"activity": "ForEach1_copy1",
+								"dependencyConditions": [
+									"Completed"
+								]
+							},
+							{
+								"activity": "ForEach1_copy2",
+								"dependencyConditions": [
+									"Completed"
+								]
+							},
+							{
+								"activity": "ForEach1_copy3",
+								"dependencyConditions": [
+									"Completed"
+								]
+							},
+							{
+								"activity": "ForEach1_copy3_copy1",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 5,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "select cd_ods.fn_vive_topic_association_tran_update();",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "select_keyword2",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "select_keyword_copy1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 5,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "WITH vw_last_date AS (\n\tSELECT \n    to_char(now() - interval '2 day', 'YYYYMMDD') as start_date,\n     to_char(now() - interval '2 day', 'YYYYMMDD') as end_date\n)\nselect b.key_id, b.topic, unnest(array['blog','twitter&excludeKeyword=rt','news','insta','community']) as channel\n, a.start_date, a.end_date\nfrom vw_last_date a\n, (\nselect topic, key_id from cd_portal.tb_topic_master\nwhere use_yn = 'Y'\nand new_traker  = 'N'\nand key_id between '041' and '080'\n) b",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1_copy1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "select_keyword2",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('select_keyword2').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Web2",
+									"type": "WebActivity",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"method": "GET",
+										"headers": {
+											"Authorization": {
+												"value": "Bearer @{activity('token').output.value[0].access_token}",
+												"type": "Expression"
+											}
+										},
+										"url": {
+											"value": "https://dsdata-api.some.co.kr/dataplus/social/GetAssociationTransitionBySentiment?source=@{item().channel}&startDate=@{item().start_date}&endDate=@{item().end_date}&period=0&rowPerPage=3000&&categorySetName=TSN3&keyword=@{item().topic}",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "Copy data1_copy1",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Set variable1_copy1",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzurePostgreSqlSource",
+											"additionalColumns": [
+												{
+													"name": "jsonDataCol",
+													"value": {
+														"value": "@variables('jsonData2')",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "topic",
+													"value": {
+														"value": "@item().topic",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "channel",
+													"value": {
+														"value": "@item().channel",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "key_id",
+													"value": {
+														"value": "@item().key_id",
+														"type": "Expression"
+													}
+												}
+											],
+											"query": "select 1 as success",
+											"partitionOption": "None",
+											"queryTimeout": "02:00:00"
+										},
+										"sink": {
+											"type": "AzurePostgreSqlSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"name": "key_id",
+														"type": "String"
+													},
+													"sink": {
+														"name": "key_id",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "topic",
+														"type": "String"
+													},
+													"sink": {
+														"name": "topic",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "channel",
+														"type": "String"
+													},
+													"sink": {
+														"name": "channel",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "jsonDataCol",
+														"type": "String"
+													},
+													"sink": {
+														"name": "jsondata",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												}
+											],
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": "1",
+												"SinkTable": "1"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": {
+													"value": "@pipeline().parameters.SinkSckema",
+													"type": "Expression"
+												},
+												"SinkTable": {
+													"value": "@pipeline().parameters.SinkTable",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "Set variable1_copy1",
+									"type": "SetVariable",
+									"dependsOn": [
+										{
+											"activity": "Web2",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "jsonData2",
+										"value": {
+											"value": "@string(activity('Web2').output)",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "select_keyword3",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "select_keyword_copy1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 5,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "WITH vw_last_date AS (\n\tSELECT \n    to_char(now() - interval '2 day', 'YYYYMMDD') as start_date,\n     to_char(now() - interval '2 day', 'YYYYMMDD') as end_date\n)\nselect b.key_id, b.topic, unnest(array['blog','twitter&excludeKeyword=rt','news','insta','community']) as channel\n, a.start_date, a.end_date\nfrom vw_last_date a\n, (\nselect topic, key_id from cd_portal.tb_topic_master\nwhere use_yn = 'Y'\nand new_traker  = 'N'\nand key_id between '081' and '120'\n) b",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1_copy2",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "select_keyword3",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('select_keyword3').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Web3",
+									"type": "WebActivity",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"method": "GET",
+										"headers": {
+											"Authorization": {
+												"value": "Bearer @{activity('token').output.value[0].access_token}",
+												"type": "Expression"
+											}
+										},
+										"url": {
+											"value": "https://dsdata-api.some.co.kr/dataplus/social/GetAssociationTransitionBySentiment?source=@{item().channel}&startDate=@{item().start_date}&endDate=@{item().end_date}&period=0&rowPerPage=3000&&categorySetName=TSN3&keyword=@{item().topic}",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "Copy data1_copy2",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Set variable1_copy2",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzurePostgreSqlSource",
+											"additionalColumns": [
+												{
+													"name": "jsonDataCol",
+													"value": {
+														"value": "@variables('jsonData3')",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "topic",
+													"value": {
+														"value": "@item().topic",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "channel",
+													"value": {
+														"value": "@item().channel",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "key_id",
+													"value": {
+														"value": "@item().key_id",
+														"type": "Expression"
+													}
+												}
+											],
+											"query": "select 1 as success",
+											"partitionOption": "None",
+											"queryTimeout": "02:00:00"
+										},
+										"sink": {
+											"type": "AzurePostgreSqlSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"name": "key_id",
+														"type": "String"
+													},
+													"sink": {
+														"name": "key_id",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "topic",
+														"type": "String"
+													},
+													"sink": {
+														"name": "topic",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "channel",
+														"type": "String"
+													},
+													"sink": {
+														"name": "channel",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "jsonDataCol",
+														"type": "String"
+													},
+													"sink": {
+														"name": "jsondata",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												}
+											],
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": "1",
+												"SinkTable": "1"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": {
+													"value": "@pipeline().parameters.SinkSckema",
+													"type": "Expression"
+												},
+												"SinkTable": {
+													"value": "@pipeline().parameters.SinkTable",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "Set variable1_copy2",
+									"type": "SetVariable",
+									"dependsOn": [
+										{
+											"activity": "Web3",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "jsonData3",
+										"value": {
+											"value": "@string(activity('Web3').output)",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "select_keyword4",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "select_keyword_copy1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 5,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "WITH vw_last_date AS (\n\tSELECT \n    to_char(now() - interval '2 day', 'YYYYMMDD') as start_date,\n     to_char(now() - interval '2 day', 'YYYYMMDD') as end_date\n)\nselect b.key_id, b.topic, unnest(array['blog','twitter&excludeKeyword=rt','news','insta','community']) as channel\n, a.start_date, a.end_date\nfrom vw_last_date a\n, (\nselect topic, key_id from cd_portal.tb_topic_master\nwhere use_yn = 'Y'\nand new_traker  = 'N'\nand key_id between '121' and '160' \n) b",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1_copy3",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "select_keyword4",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('select_keyword4').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Web4",
+									"type": "WebActivity",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"method": "GET",
+										"headers": {
+											"Authorization": {
+												"value": "Bearer @{activity('token').output.value[0].access_token}",
+												"type": "Expression"
+											}
+										},
+										"url": {
+											"value": "https://dsdata-api.some.co.kr/dataplus/social/GetAssociationTransitionBySentiment?source=@{item().channel}&startDate=@{item().start_date}&endDate=@{item().end_date}&period=0&rowPerPage=3000&&categorySetName=TSN3&keyword=@{item().topic}",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "Copy data1_copy3",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Set variable1_copy3",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzurePostgreSqlSource",
+											"additionalColumns": [
+												{
+													"name": "jsonDataCol",
+													"value": {
+														"value": "@variables('jsonData4')",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "topic",
+													"value": {
+														"value": "@item().topic",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "channel",
+													"value": {
+														"value": "@item().channel",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "key_id",
+													"value": {
+														"value": "@item().key_id",
+														"type": "Expression"
+													}
+												}
+											],
+											"query": "select 1 as success",
+											"partitionOption": "None",
+											"queryTimeout": "02:00:00"
+										},
+										"sink": {
+											"type": "AzurePostgreSqlSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"name": "key_id",
+														"type": "String"
+													},
+													"sink": {
+														"name": "key_id",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "topic",
+														"type": "String"
+													},
+													"sink": {
+														"name": "topic",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "channel",
+														"type": "String"
+													},
+													"sink": {
+														"name": "channel",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "jsonDataCol",
+														"type": "String"
+													},
+													"sink": {
+														"name": "jsondata",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												}
+											],
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": "1",
+												"SinkTable": "1"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": {
+													"value": "@pipeline().parameters.SinkSckema",
+													"type": "Expression"
+												},
+												"SinkTable": {
+													"value": "@pipeline().parameters.SinkTable",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "Set variable1_copy3",
+									"type": "SetVariable",
+									"dependsOn": [
+										{
+											"activity": "Web4",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "jsonData4",
+										"value": {
+											"value": "@string(activity('Web4').output)",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "select_keyword5",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "select_keyword_copy1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 5,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "WITH vw_last_date AS (\n\tSELECT \n    to_char(now() - interval '2 day', 'YYYYMMDD') as start_date,\n     to_char(now() - interval '2 day', 'YYYYMMDD') as end_date\n)\nselect b.key_id, b.topic, unnest(array['blog','twitter&excludeKeyword=rt','news','insta','community']) as channel\n, a.start_date, a.end_date\nfrom vw_last_date a\n, (\nselect topic, key_id from cd_portal.tb_topic_master\nwhere use_yn = 'Y'\nand new_traker  = 'N'\nand key_id > '160' \n) b",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1_copy3_copy1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "select_keyword5",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('select_keyword5').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Web5",
+									"type": "WebActivity",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"method": "GET",
+										"headers": {
+											"Authorization": {
+												"value": "Bearer @{activity('token').output.value[0].access_token}",
+												"type": "Expression"
+											}
+										},
+										"url": {
+											"value": "https://dsdata-api.some.co.kr/dataplus/social/GetAssociationTransitionBySentiment?source=@{item().channel}&startDate=@{item().start_date}&endDate=@{item().end_date}&period=0&rowPerPage=3000&&categorySetName=TSN3&keyword=@{item().topic}",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "Copy data1_copy3_copy1",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Set variable1_copy3_copy1",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzurePostgreSqlSource",
+											"additionalColumns": [
+												{
+													"name": "jsonDataCol",
+													"value": {
+														"value": "@variables('jsonData5')",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "topic",
+													"value": {
+														"value": "@item().topic",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "channel",
+													"value": {
+														"value": "@item().channel",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "key_id",
+													"value": {
+														"value": "@item().key_id",
+														"type": "Expression"
+													}
+												}
+											],
+											"query": "select 1 as success",
+											"partitionOption": "None",
+											"queryTimeout": "02:00:00"
+										},
+										"sink": {
+											"type": "AzurePostgreSqlSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"name": "key_id",
+														"type": "String"
+													},
+													"sink": {
+														"name": "key_id",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "topic",
+														"type": "String"
+													},
+													"sink": {
+														"name": "topic",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "channel",
+														"type": "String"
+													},
+													"sink": {
+														"name": "channel",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "jsonDataCol",
+														"type": "String"
+													},
+													"sink": {
+														"name": "jsondata",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												}
+											],
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": "1",
+												"SinkTable": "1"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": {
+													"value": "@pipeline().parameters.SinkSckema",
+													"type": "Expression"
+												},
+												"SinkTable": {
+													"value": "@pipeline().parameters.SinkTable",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "Set variable1_copy3_copy1",
+									"type": "SetVariable",
+									"dependsOn": [
+										{
+											"activity": "Web5",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "jsonData5",
+										"value": {
+											"value": "@string(activity('Web5').output)",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SinkSckema": {
+						"type": "string",
+						"defaultValue": "cd_ods"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "tb_vive_topic_association_tran_t"
+					},
+					"pip_date": {
+						"type": "string"
+					},
+					"pip_date2": {
+						"type": "string"
+					}
+				},
+				"variables": {
+					"date": {
+						"type": "String"
+					},
+					"date2": {
+						"type": "String"
+					},
+					"jsonData1": {
+						"type": "String"
+					},
+					"jsonData2": {
+						"type": "String"
+					},
+					"jsonData3": {
+						"type": "String"
+					},
+					"jsonData4": {
+						"type": "String"
+					},
+					"jsonData5": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "고객/외부/홈대시보드"
+				},
+				"annotations": []
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_TOPIC_KEYWORD_TRAN')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "select_keyword",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "select_keyword_copy1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 5,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "WITH vw_last_date AS (\n\tSELECT \n    to_char(DATE_TRUNC('month', current_date - interval '6 month'), 'YYYYMMDD') as start_date,\n     to_char(now() - interval '2 day', 'YYYYMMDD') as end_date\n)\nselect b.key_id, b.topic, unnest(array['blog','twitter&excludeKeyword=rt','news','insta','community']) as channel\n, a.start_date, a.end_date\nfrom vw_last_date a\n, (\nselect topic, key_id from cd_portal.tb_topic_master\nwhere use_yn = 'Y'\nand new_traker  = 'N'\nand key_id between '001' and '040'\n) b",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "token",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 5,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "JsonSource",
+								"storeSettings": {
+									"type": "HttpReadSettings",
+									"requestMethod": "POST",
+									"requestTimeout": ""
+								},
+								"formatSettings": {
+									"type": "JsonReadSettings"
+								}
+							},
+							"dataset": {
+								"referenceName": "DTS_VIVE_API_TOKEN",
+								"type": "DatasetReference",
+								"parameters": {}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "select_keyword",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('select_keyword').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Web1",
+									"type": "WebActivity",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"method": "GET",
+										"headers": {
+											"Authorization": {
+												"value": "Bearer @{activity('token').output.value[0].access_token}",
+												"type": "Expression"
+											}
+										},
+										"url": {
+											"value": "https://dsdata-api.some.co.kr/dataplus/social/GetkeywordTransitions?source=@{item().channel}&startDate=@{item().start_date}&endDate=@{item().end_date}&period=2&rowPerPage=3000&&keyword=@{item().topic}",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "Copy data1",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Set variable1",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzurePostgreSqlSource",
+											"additionalColumns": [
+												{
+													"name": "jsonDataCol",
+													"value": {
+														"value": "@variables('jsonData1')",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "topic",
+													"value": {
+														"value": "@item().topic",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "channel",
+													"value": {
+														"value": "@item().channel",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "key_id",
+													"value": {
+														"value": "@item().key_id",
+														"type": "Expression"
+													}
+												}
+											],
+											"query": "select 1 as success",
+											"partitionOption": "None",
+											"queryTimeout": "02:00:00"
+										},
+										"sink": {
+											"type": "AzurePostgreSqlSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"name": "key_id",
+														"type": "String"
+													},
+													"sink": {
+														"name": "key_id",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "topic",
+														"type": "String"
+													},
+													"sink": {
+														"name": "topic",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "channel",
+														"type": "String"
+													},
+													"sink": {
+														"name": "channel",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "jsonDataCol",
+														"type": "String"
+													},
+													"sink": {
+														"name": "jsondata",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												}
+											],
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": "1",
+												"SinkTable": "1"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": {
+													"value": "@pipeline().parameters.SinkSckema",
+													"type": "Expression"
+												},
+												"SinkTable": {
+													"value": "@pipeline().parameters.SinkTable",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "Set variable1",
+									"type": "SetVariable",
+									"dependsOn": [
+										{
+											"activity": "Web1",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "jsonData1",
+										"value": {
+											"value": "@string(activity('Web1').output)",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "select_keyword_copy1",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "token",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 5,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "delete from  cd_ods.tb_vive_topic_keyword_tran_t;\n\nselect 1 as success;",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "select_keyword_copy1_copy1",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "ForEach1",
+								"dependencyConditions": [
+									"Completed"
+								]
+							},
+							{
+								"activity": "ForEach1_copy1",
+								"dependencyConditions": [
+									"Completed"
+								]
+							},
+							{
+								"activity": "ForEach1_copy2",
+								"dependencyConditions": [
+									"Completed"
+								]
+							},
+							{
+								"activity": "ForEach1_copy3",
+								"dependencyConditions": [
+									"Completed"
+								]
+							},
+							{
+								"activity": "ForEach1_copy4",
+								"dependencyConditions": [
+									"Completed"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 5,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "select cd_ods.fn_vive_topic_keyword_tran_update();",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "select_keyword2",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "select_keyword_copy1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 5,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "WITH vw_last_date AS (\n\tSELECT \n    to_char(DATE_TRUNC('month', current_date - interval '6 month'), 'YYYYMMDD') as start_date,\n     to_char(now() - interval '2 day', 'YYYYMMDD') as end_date\n)\nselect b.key_id, b.topic, unnest(array['blog','twitter&excludeKeyword=rt','news','insta','community']) as channel\n, a.start_date, a.end_date\nfrom vw_last_date a\n, (\nselect topic, key_id from cd_portal.tb_topic_master\nwhere use_yn = 'Y'\nand new_traker  = 'N'\nand key_id between '041' and '080'\n) b",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1_copy1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "select_keyword2",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('select_keyword2').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Web2",
+									"type": "WebActivity",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"method": "GET",
+										"headers": {
+											"Authorization": {
+												"value": "Bearer @{activity('token').output.value[0].access_token}",
+												"type": "Expression"
+											}
+										},
+										"url": {
+											"value": "https://dsdata-api.some.co.kr/dataplus/social/GetkeywordTransitions?source=@{item().channel}&startDate=@{item().start_date}&endDate=@{item().end_date}&period=2&rowPerPage=3000&&keyword=@{item().topic}",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "Copy data1_copy1",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Set variable1_copy1",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzurePostgreSqlSource",
+											"additionalColumns": [
+												{
+													"name": "jsonDataCol",
+													"value": {
+														"value": "@variables('jsonData2')",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "topic",
+													"value": {
+														"value": "@item().topic",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "channel",
+													"value": {
+														"value": "@item().channel",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "key_id",
+													"value": {
+														"value": "@item().key_id",
+														"type": "Expression"
+													}
+												}
+											],
+											"query": "select 1 as success",
+											"partitionOption": "None",
+											"queryTimeout": "02:00:00"
+										},
+										"sink": {
+											"type": "AzurePostgreSqlSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"name": "key_id",
+														"type": "String"
+													},
+													"sink": {
+														"name": "key_id",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "topic",
+														"type": "String"
+													},
+													"sink": {
+														"name": "topic",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "channel",
+														"type": "String"
+													},
+													"sink": {
+														"name": "channel",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "jsonDataCol",
+														"type": "String"
+													},
+													"sink": {
+														"name": "jsondata",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												}
+											],
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": "1",
+												"SinkTable": "1"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": {
+													"value": "@pipeline().parameters.SinkSckema",
+													"type": "Expression"
+												},
+												"SinkTable": {
+													"value": "@pipeline().parameters.SinkTable",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "Set variable1_copy1",
+									"type": "SetVariable",
+									"dependsOn": [
+										{
+											"activity": "Web2",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "jsonData2",
+										"value": {
+											"value": "@string(activity('Web2').output)",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "select_keyword3",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "select_keyword_copy1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 5,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "WITH vw_last_date AS (\n\tSELECT \n    to_char(DATE_TRUNC('month', current_date - interval '6 month'), 'YYYYMMDD') as start_date,\n     to_char(now() - interval '2 day', 'YYYYMMDD') as end_date\n)\nselect b.key_id, b.topic, unnest(array['blog','twitter&excludeKeyword=rt','news','insta','community']) as channel\n, a.start_date, a.end_date\nfrom vw_last_date a\n, (\nselect topic, key_id from cd_portal.tb_topic_master\nwhere use_yn = 'Y'\nand new_traker  = 'N'\nand key_id between '081' and '120'\n) b",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1_copy2",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "select_keyword3",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('select_keyword3').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Web3",
+									"type": "WebActivity",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"method": "GET",
+										"headers": {
+											"Authorization": {
+												"value": "Bearer @{activity('token').output.value[0].access_token}",
+												"type": "Expression"
+											}
+										},
+										"url": {
+											"value": "https://dsdata-api.some.co.kr/dataplus/social/GetkeywordTransitions?source=@{item().channel}&startDate=@{item().start_date}&endDate=@{item().end_date}&period=2&rowPerPage=3000&&keyword=@{item().topic}",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "Copy data1_copy2",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Set variable1_copy2",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzurePostgreSqlSource",
+											"additionalColumns": [
+												{
+													"name": "jsonDataCol",
+													"value": {
+														"value": "@variables('jsonData3')",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "topic",
+													"value": {
+														"value": "@item().topic",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "channel",
+													"value": {
+														"value": "@item().channel",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "key_id",
+													"value": {
+														"value": "@item().key_id",
+														"type": "Expression"
+													}
+												}
+											],
+											"query": "select 1 as success",
+											"partitionOption": "None",
+											"queryTimeout": "02:00:00"
+										},
+										"sink": {
+											"type": "AzurePostgreSqlSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"name": "key_id",
+														"type": "String"
+													},
+													"sink": {
+														"name": "key_id",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "topic",
+														"type": "String"
+													},
+													"sink": {
+														"name": "topic",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "channel",
+														"type": "String"
+													},
+													"sink": {
+														"name": "channel",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "jsonDataCol",
+														"type": "String"
+													},
+													"sink": {
+														"name": "jsondata",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												}
+											],
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": "1",
+												"SinkTable": "1"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": {
+													"value": "@pipeline().parameters.SinkSckema",
+													"type": "Expression"
+												},
+												"SinkTable": {
+													"value": "@pipeline().parameters.SinkTable",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "Set variable1_copy2",
+									"type": "SetVariable",
+									"dependsOn": [
+										{
+											"activity": "Web3",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "jsonData3",
+										"value": {
+											"value": "@string(activity('Web3').output)",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "select_keyword4",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "select_keyword_copy1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 5,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "WITH vw_last_date AS (\n\tSELECT \n    to_char(DATE_TRUNC('month', current_date - interval '6 month'), 'YYYYMMDD') as start_date,\n     to_char(now() - interval '2 day', 'YYYYMMDD') as end_date\n)\nselect b.key_id, b.topic, unnest(array['blog','twitter&excludeKeyword=rt','news','insta','community']) as channel\n, a.start_date, a.end_date\nfrom vw_last_date a\n, (\nselect topic, key_id from cd_portal.tb_topic_master\nwhere use_yn = 'Y'\nand new_traker  = 'N'\nand key_id between '121' and '160' \n) b",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1_copy3",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "select_keyword4",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('select_keyword4').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Web4",
+									"type": "WebActivity",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"method": "GET",
+										"headers": {
+											"Authorization": {
+												"value": "Bearer @{activity('token').output.value[0].access_token}",
+												"type": "Expression"
+											}
+										},
+										"url": {
+											"value": "https://dsdata-api.some.co.kr/dataplus/social/GetkeywordTransitions?source=@{item().channel}&startDate=@{item().start_date}&endDate=@{item().end_date}&period=2&rowPerPage=3000&&keyword=@{item().topic}",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "Copy data1_copy3",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Set variable1_copy3",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzurePostgreSqlSource",
+											"additionalColumns": [
+												{
+													"name": "jsonDataCol",
+													"value": {
+														"value": "@variables('jsonData4')",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "topic",
+													"value": {
+														"value": "@item().topic",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "channel",
+													"value": {
+														"value": "@item().channel",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "key_id",
+													"value": {
+														"value": "@item().key_id",
+														"type": "Expression"
+													}
+												}
+											],
+											"query": "select 1 as success",
+											"partitionOption": "None",
+											"queryTimeout": "02:00:00"
+										},
+										"sink": {
+											"type": "AzurePostgreSqlSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"name": "key_id",
+														"type": "String"
+													},
+													"sink": {
+														"name": "key_id",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "topic",
+														"type": "String"
+													},
+													"sink": {
+														"name": "topic",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "channel",
+														"type": "String"
+													},
+													"sink": {
+														"name": "channel",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "jsonDataCol",
+														"type": "String"
+													},
+													"sink": {
+														"name": "jsondata",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												}
+											],
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": "1",
+												"SinkTable": "1"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": {
+													"value": "@pipeline().parameters.SinkSckema",
+													"type": "Expression"
+												},
+												"SinkTable": {
+													"value": "@pipeline().parameters.SinkTable",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "Set variable1_copy3",
+									"type": "SetVariable",
+									"dependsOn": [
+										{
+											"activity": "Web4",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "jsonData4",
+										"value": {
+											"value": "@string(activity('Web4').output)",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "select_keyword5",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "select_keyword_copy1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 5,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "WITH vw_last_date AS (\n\tSELECT \n    to_char(DATE_TRUNC('month', current_date - interval '6 month'), 'YYYYMMDD') as start_date,\n     to_char(now() - interval '2 day', 'YYYYMMDD') as end_date\n)\nselect b.key_id, b.topic, unnest(array['blog','twitter&excludeKeyword=rt','news','insta','community']) as channel\n, a.start_date, a.end_date\nfrom vw_last_date a\n, (\nselect topic, key_id from cd_portal.tb_topic_master\nwhere use_yn = 'Y'\nand new_traker  = 'N'\nand key_id > '160' \n) b",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1_copy4",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "select_keyword5",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('select_keyword5').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Web5",
+									"type": "WebActivity",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"method": "GET",
+										"headers": {
+											"Authorization": {
+												"value": "Bearer @{activity('token').output.value[0].access_token}",
+												"type": "Expression"
+											}
+										},
+										"url": {
+											"value": "https://dsdata-api.some.co.kr/dataplus/social/GetkeywordTransitions?source=@{item().channel}&startDate=@{item().start_date}&endDate=@{item().end_date}&period=2&rowPerPage=3000&&keyword=@{item().topic}",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "Copy data1_copy4",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Set variable1_copy4",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzurePostgreSqlSource",
+											"additionalColumns": [
+												{
+													"name": "jsonDataCol",
+													"value": {
+														"value": "@variables('jsonData5')",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "topic",
+													"value": {
+														"value": "@item().topic",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "channel",
+													"value": {
+														"value": "@item().channel",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "key_id",
+													"value": {
+														"value": "@item().key_id",
+														"type": "Expression"
+													}
+												}
+											],
+											"query": "select 1 as success",
+											"partitionOption": "None",
+											"queryTimeout": "02:00:00"
+										},
+										"sink": {
+											"type": "AzurePostgreSqlSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"name": "key_id",
+														"type": "String"
+													},
+													"sink": {
+														"name": "key_id",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "topic",
+														"type": "String"
+													},
+													"sink": {
+														"name": "topic",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "channel",
+														"type": "String"
+													},
+													"sink": {
+														"name": "channel",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												},
+												{
+													"source": {
+														"name": "jsonDataCol",
+														"type": "String"
+													},
+													"sink": {
+														"name": "jsondata",
+														"type": "String",
+														"physicalType": "character varying"
+													}
+												}
+											],
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": "1",
+												"SinkTable": "1"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": {
+													"value": "@pipeline().parameters.SinkSckema",
+													"type": "Expression"
+												},
+												"SinkTable": {
+													"value": "@pipeline().parameters.SinkTable",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "Set variable1_copy4",
+									"type": "SetVariable",
+									"dependsOn": [
+										{
+											"activity": "Web5",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "jsonData5",
+										"value": {
+											"value": "@string(activity('Web5').output)",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SinkSckema": {
+						"type": "string",
+						"defaultValue": "cd_ods"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "tb_vive_topic_keyword_tran_t"
+					},
+					"pip_date": {
+						"type": "string"
+					},
+					"pip_date2": {
+						"type": "string"
+					}
+				},
+				"variables": {
+					"date": {
+						"type": "String"
+					},
+					"date2": {
+						"type": "String"
+					},
+					"jsonData1": {
+						"type": "String"
+					},
+					"jsonData2": {
+						"type": "String"
+					},
+					"jsonData3": {
+						"type": "String"
+					},
+					"jsonData4": {
+						"type": "String"
+					},
+					"jsonData5": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "고객/외부/홈대시보드"
+				},
+				"annotations": []
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_VIVA_API_TEST')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "select_keyword",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "select '20250801' as start_date, '20250831' as end_date, channel, c.keyword, c.include_keyword, c.exclude_keyword from \nunnest( array['twitter','blog','news','insta','community','youtube_new']) as channel, \ncd_ods.temp_vive_api_test_topic c\n;",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "token",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "select_keyword",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "JsonSource",
+								"storeSettings": {
+									"type": "HttpReadSettings",
+									"requestMethod": "POST",
+									"requestTimeout": ""
+								},
+								"formatSettings": {
+									"type": "JsonReadSettings"
+								}
+							},
+							"dataset": {
+								"referenceName": "DTS_VIVE_API_TOKEN",
+								"type": "DatasetReference",
+								"parameters": {}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "delete table",
+						"type": "Lookup",
+						"state": "Inactive",
+						"onInactiveMarkAs": "Succeeded",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "delete from @{pipeline().parameters.SinkSckema}.@{pipeline().parameters.SinkTable}\n where date between '@{variables('date')}' and '@{variables('date2')}';\n\n select 1 as su\n   ",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "token",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('select_keyword').output.value",
+								"type": "Expression"
+							},
+							"isSequential": false,
+							"batchCount": 3,
+							"activities": [
+								{
+									"name": "Copy data",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 2,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "JsonSource",
+											"additionalColumns": [
+												{
+													"name": "keyword",
+													"value": {
+														"value": "@item().keyword",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "channel_nm",
+													"value": {
+														"value": "@item().channel",
+														"type": "Expression"
+													}
+												}
+											],
+											"storeSettings": {
+												"type": "HttpReadSettings",
+												"requestMethod": "POST",
+												"additionalHeaders": {
+													"value": "Authorization: Bearer @{activity('token').output.value[0].access_token}\nContent-Type:application/json",
+													"type": "Expression"
+												},
+												"requestBody": {
+													"value": "{\n  \"source\": \"@{item().channel}\",\n  \"startDate\": \"@{item().start_date}\",\n  \"endDate\": \"@{item().end_date}\",\n  \"keyword\": \"@{item().keyword}\",\n  \"includeKeyword\": \"@{item().include_keyword}\",\n  \"excludeKeyword\": \"@{item().exclude_keyword}\",\n  \"orderType\": \"0\",\n  \"rowPerPage\": \"1000\",\n  \"pageNum\": \"1\"\n  }",
+													"type": "Expression"
+												},
+												"requestTimeout": ""
+											},
+											"formatSettings": {
+												"type": "JsonReadSettings"
+											}
+										},
+										"sink": {
+											"type": "AzurePostgreSQLSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"enableSkipIncompatibleRow": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"path": "[['date']"
+													},
+													"sink": {
+														"name": "date",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['projectId']"
+													},
+													"sink": {
+														"name": "projectId",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['title']"
+													},
+													"sink": {
+														"name": "title",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['content']"
+													},
+													"sink": {
+														"name": "content",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['url']"
+													},
+													"sink": {
+														"name": "url",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['docID']"
+													},
+													"sink": {
+														"name": "docID",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['writerName']"
+													},
+													"sink": {
+														"name": "writername",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['documentDate']"
+													},
+													"sink": {
+														"name": "documentdate",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['writerRealName']"
+													},
+													"sink": {
+														"name": "writerrealname",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['vks'][0]"
+													},
+													"sink": {
+														"name": "category",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['keyword']"
+													},
+													"sink": {
+														"name": "keyword",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['channel_nm']"
+													},
+													"sink": {
+														"name": "channel_nm",
+														"type": "String"
+													}
+												}
+											],
+											"collectionReference": "$['data']['documentList']",
+											"mapComplexValuesToString": false
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_VIVE_API",
+											"type": "DatasetReference",
+											"parameters": {
+												"param": {
+													"value": "@concat('/dataplus/social/body/GetKeywordDocuments')",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": {
+													"value": "@pipeline().parameters.SinkSckema",
+													"type": "Expression"
+												},
+												"SinkTable": {
+													"value": "@pipeline().parameters.SinkTable",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SinkSckema": {
+						"type": "string",
+						"defaultValue": "cd_ods"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "temp_vive_api_test"
+					},
+					"pip_date": {
+						"type": "string"
+					},
+					"pip_date2": {
+						"type": "string"
+					}
+				},
+				"variables": {
+					"date": {
+						"type": "String"
+					},
+					"date2": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "고객/외부/SRM NEWS"
+				},
+				"annotations": []
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_DM_FM_ASSOCIATION_FREQUENCY_FULL')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -4059,676 +7369,6 @@
 					"SinkTable": {
 						"type": "string",
 						"defaultValue": "tb_eat_bid_detail"
-					}
-				},
-				"folder": {
-					"name": "판촉/내부/급식입개찰"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-10-18T08:30:36Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_NEIS_BID_DETAIL_FULL_PG_SCHOOL')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "Copy data",
-						"type": "Copy",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "7.00:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": "SELECT b.* FROM CD_NEIS.BID_DETAIL b\n,CD_NEIS.BID_MASTER a\nWHERE a.BIDID = b.bidid\nAND a.orgtype = 'S'",
-								"partitionOption": "None",
-								"queryTimeout": "02:00:00"
-							},
-							"sink": {
-								"type": "AzurePostgreSQLSink",
-								"writeBatchSize": 1000000,
-								"writeBatchTimeout": "00:30:00",
-								"preCopyScript": {
-									"value": "DELETE FROM @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}",
-									"type": "Expression"
-								},
-								"writeMethod": "CopyCommand"
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"mappings": [
-									{
-										"source": {
-											"name": "DOCID",
-											"type": "String"
-										},
-										"sink": {
-											"name": "docid",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "BIDID",
-											"type": "String"
-										},
-										"sink": {
-											"name": "bidid",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "ORGNAME",
-											"type": "String"
-										},
-										"sink": {
-											"name": "orgname",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "ORG_BIZ_ID",
-											"type": "String"
-										},
-										"sink": {
-											"name": "org_biz_id",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "ORG_FILENAME",
-											"type": "String"
-										},
-										"sink": {
-											"name": "org_filename",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "SYS_FILENAME",
-											"type": "String"
-										},
-										"sink": {
-											"name": "sys_filename",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "BID_DETAIL_ID",
-											"type": "String"
-										},
-										"sink": {
-											"name": "bid_detail_id",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "WORK_DT",
-											"type": "DateTime"
-										},
-										"sink": {
-											"name": "work_dt",
-											"type": "DateTime",
-											"physicalType": "timestamp without time zone"
-										}
-									},
-									{
-										"source": {
-											"name": "ORDER_FROM_DT",
-											"type": "DateTime"
-										},
-										"sink": {
-											"name": "order_from_dt",
-											"type": "DateTime",
-											"physicalType": "timestamp without time zone"
-										}
-									},
-									{
-										"source": {
-											"name": "ORDER_TO_DT",
-											"type": "DateTime"
-										},
-										"sink": {
-											"name": "order_to_dt",
-											"type": "DateTime",
-											"physicalType": "timestamp without time zone"
-										}
-									},
-									{
-										"source": {
-											"name": "DOWN_UPDATE_ID",
-											"type": "String"
-										},
-										"sink": {
-											"name": "down_update_id",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "DOWN_UPDATE_DT",
-											"type": "DateTime"
-										},
-										"sink": {
-											"name": "down_update_dt",
-											"type": "DateTime",
-											"physicalType": "timestamp without time zone"
-										}
-									},
-									{
-										"source": {
-											"name": "UPLOAD_UPDATE_ID",
-											"type": "String"
-										},
-										"sink": {
-											"name": "upload_update_id",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "UPLOAD_UPDATE_DT",
-											"type": "DateTime"
-										},
-										"sink": {
-											"name": "upload_update_dt",
-											"type": "DateTime",
-											"physicalType": "timestamp without time zone"
-										}
-									}
-								],
-								"typeConversion": true,
-								"typeConversionSettings": {
-									"allowDataTruncation": true,
-									"treatBooleanAsNumber": false
-								}
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_ORACLE_SRC_2",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_POSTGRESQL_SNK_P02",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": {
-										"value": "@pipeline().parameters.SinkSchema",
-										"type": "Expression"
-									},
-									"SinkTable": {
-										"value": "@pipeline().parameters.SinkTable",
-										"type": "Expression"
-									}
-								}
-							}
-						]
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SourceSchema": {
-						"type": "string",
-						"defaultValue": "CD_NEIS"
-					},
-					"SourceTable": {
-						"type": "string",
-						"defaultValue": "BID_DETAIL"
-					},
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "tb_sf_eat_bid_detail"
-					}
-				},
-				"folder": {
-					"name": "판촉/내부/급식입개찰"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-10-18T08:30:36Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_NEIS_BID_DETAIL_SHEET_FULL_PG')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "Copy data",
-						"type": "Copy",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "7.00:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": "SELECT DISTINCT c.* \nFROM CD_NEIS.BID_DETAIL b\n,CD_NEIS.BID_MASTER a\n, CD_NEIS.BID_DETAIL_SHEET c\nWHERE a.BIDID = b.bidid\nAND b.BID_DETAIL_ID = c.BID_DETAIL_ID\nAND a.orgtype = 'A'",
-								"partitionOption": "None",
-								"queryTimeout": "02:00:00"
-							},
-							"sink": {
-								"type": "AzurePostgreSQLSink",
-								"writeBatchSize": 1000000,
-								"writeBatchTimeout": "00:30:00",
-								"preCopyScript": {
-									"value": "DELETE FROM @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}",
-									"type": "Expression"
-								},
-								"writeMethod": "CopyCommand"
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"mappings": [
-									{
-										"source": {
-											"name": "BID_DETAIL_ID",
-											"type": "String"
-										},
-										"sink": {
-											"name": "bid_detail_id",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "SHEET",
-											"type": "String"
-										},
-										"sink": {
-											"name": "sheet",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "USE_YN",
-											"type": "String"
-										},
-										"sink": {
-											"name": "use_yn",
-											"type": "String",
-											"physicalType": "character"
-										}
-									},
-									{
-										"source": {
-											"name": "CREATE_ID",
-											"type": "String"
-										},
-										"sink": {
-											"name": "create_id",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CREATE_DT",
-											"type": "DateTime"
-										},
-										"sink": {
-											"name": "create_dt",
-											"type": "DateTime",
-											"physicalType": "timestamp without time zone"
-										}
-									},
-									{
-										"source": {
-											"name": "UPDATE_ID",
-											"type": "String"
-										},
-										"sink": {
-											"name": "update_id",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "UPDATE_DT",
-											"type": "DateTime"
-										},
-										"sink": {
-											"name": "update_dt",
-											"type": "DateTime",
-											"physicalType": "timestamp without time zone"
-										}
-									},
-									{
-										"source": {
-											"name": "ERROR_CD",
-											"type": "String"
-										},
-										"sink": {
-											"name": "error_cd",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "ERROR_MSG",
-											"type": "String"
-										},
-										"sink": {
-											"name": "error_msg",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									}
-								],
-								"typeConversion": true,
-								"typeConversionSettings": {
-									"allowDataTruncation": true,
-									"treatBooleanAsNumber": false
-								}
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_ORACLE_SRC",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": {
-										"value": "@pipeline().parameters.SourceSchema",
-										"type": "Expression"
-									},
-									"SourceTable": {
-										"value": "@pipeline().parameters.SourceTable",
-										"type": "Expression"
-									}
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_POSTGRESQL_SNK_P02",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": {
-										"value": "@pipeline().parameters.SinkSchema",
-										"type": "Expression"
-									},
-									"SinkTable": {
-										"value": "@pipeline().parameters.SinkTable",
-										"type": "Expression"
-									}
-								}
-							}
-						]
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SourceSchema": {
-						"type": "string",
-						"defaultValue": "CD_NEIS"
-					},
-					"SourceTable": {
-						"type": "string",
-						"defaultValue": "BID_DETAIL_SHEET"
-					},
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "tb_eat_bid_detail_sheet"
-					}
-				},
-				"folder": {
-					"name": "판촉/내부/급식입개찰"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-10-18T08:30:36Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_NEIS_BID_DETAIL_SHEET_FULL_PG_SCHOOL')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "Copy data",
-						"type": "Copy",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "7.00:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": "SELECT c.* FROM CD_NEIS.BID_DETAIL b\n,CD_NEIS.BID_MASTER a\n, CD_NEIS.BID_DETAIL_SHEET c\nWHERE a.BIDID = b.bidid\nAND b.BID_DETAIL_ID = c.BID_DETAIL_ID\nAND a.orgtype = 'S'",
-								"partitionOption": "None",
-								"queryTimeout": "02:00:00"
-							},
-							"sink": {
-								"type": "AzurePostgreSQLSink",
-								"writeBatchSize": 1000000,
-								"writeBatchTimeout": "00:30:00",
-								"preCopyScript": {
-									"value": "DELETE FROM @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}",
-									"type": "Expression"
-								},
-								"writeMethod": "CopyCommand"
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"mappings": [
-									{
-										"source": {
-											"name": "BID_DETAIL_ID",
-											"type": "String"
-										},
-										"sink": {
-											"name": "bid_detail_id",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "SHEET",
-											"type": "String"
-										},
-										"sink": {
-											"name": "sheet",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "USE_YN",
-											"type": "String"
-										},
-										"sink": {
-											"name": "use_yn",
-											"type": "String",
-											"physicalType": "character"
-										}
-									},
-									{
-										"source": {
-											"name": "CREATE_ID",
-											"type": "String"
-										},
-										"sink": {
-											"name": "create_id",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CREATE_DT",
-											"type": "DateTime"
-										},
-										"sink": {
-											"name": "create_dt",
-											"type": "DateTime",
-											"physicalType": "timestamp without time zone"
-										}
-									},
-									{
-										"source": {
-											"name": "UPDATE_ID",
-											"type": "String"
-										},
-										"sink": {
-											"name": "update_id",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "UPDATE_DT",
-											"type": "DateTime"
-										},
-										"sink": {
-											"name": "update_dt",
-											"type": "DateTime",
-											"physicalType": "timestamp without time zone"
-										}
-									},
-									{
-										"source": {
-											"name": "ERROR_CD",
-											"type": "String"
-										},
-										"sink": {
-											"name": "error_cd",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "ERROR_MSG",
-											"type": "String"
-										},
-										"sink": {
-											"name": "error_msg",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									}
-								],
-								"typeConversion": true,
-								"typeConversionSettings": {
-									"allowDataTruncation": true,
-									"treatBooleanAsNumber": false
-								}
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_ORACLE_SRC_2",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_POSTGRESQL_SNK_P02",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": {
-										"value": "@pipeline().parameters.SinkSchema",
-										"type": "Expression"
-									},
-									"SinkTable": {
-										"value": "@pipeline().parameters.SinkTable",
-										"type": "Expression"
-									}
-								}
-							}
-						]
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SourceSchema": {
-						"type": "string",
-						"defaultValue": "CD_NEIS"
-					},
-					"SourceTable": {
-						"type": "string",
-						"defaultValue": "BID_DETAIL_SHEET"
-					},
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "tb_sf_eat_bid_detail_sheet"
 					}
 				},
 				"folder": {
