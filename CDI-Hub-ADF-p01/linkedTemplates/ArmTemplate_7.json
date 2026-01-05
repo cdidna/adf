@@ -8762,72 +8762,50 @@
 			"dependsOn": []
 		},
 		{
-			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_MND_DATE_BY_ML_SVC')]",
+			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_MDM_SCHOOL_ADDRESS')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
 			"properties": {
-				"description": "수요기관정보조회",
 				"activities": [
 					{
-						"name": "set unitcd",
-						"description": "당일자",
-						"type": "SetVariable",
+						"name": "Lookup_parameter",
+						"type": "Lookup",
 						"dependsOn": [],
 						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
 							"secureOutput": false,
 							"secureInput": false
 						},
 						"userProperties": [],
 						"typeProperties": {
-							"variableName": "unitcd",
-							"value": {
-								"value": "@pipeline().parameters.pipunitcd",
-								"type": "Expression"
-							}
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "with vw_max as\n(\nselect max(code) as max_code from cd_ods.tb_sf_mdm_school_real_address_t\n)\n select \"코드\" as code, replace(\"주소[ADDR1]\", ' ', '') as addr\n  FROM cd_ods.tb_mdm_school_info a \n  left join cd_ods.tb_sf_mdm_school_real_address_t b\n  on a.\"코드\" = b.code\n  where coalesce (a.\"주소[ADDR1]\",'') != ''\n  and coalesce (b.address,'') = ''\n--  and a.\"코드\" > (select max_code from vw_max)\n order by code",
+									"type": "Expression"
+								},
+								"partitionOption": "None",
+								"queryTimeout": "02:00:00"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK_P02",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
 						}
 					},
 					{
-						"name": "set unitnm",
-						"description": "당일자",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "unitnm",
-							"value": {
-								"value": "@pipeline().parameters.pipunitnm",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "set tablename",
-						"description": "당일자",
-						"type": "SetVariable",
-						"dependsOn": [],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "tablename",
-							"value": {
-								"value": "@pipeline().parameters.piptablename",
-								"type": "Expression"
-							}
-						}
-					},
-					{
-						"name": "If Condition1",
-						"type": "IfCondition",
+						"name": "ForEach_product_info",
+						"type": "ForEach",
 						"dependsOn": [
 							{
-								"activity": "set tablename_copy1",
+								"activity": "Lookup_parameter",
 								"dependencyConditions": [
 									"Succeeded"
 								]
@@ -8835,18 +8813,20 @@
 						],
 						"userProperties": [],
 						"typeProperties": {
-							"expression": {
-								"value": "@equals(variables('tablename'), 'DS_TB_MNDT_DATEBYMLSVC')",
+							"items": {
+								"value": "@activity('Lookup_parameter').output.value",
 								"type": "Expression"
 							},
-							"ifFalseActivities": [
+							"isSequential": false,
+							"batchCount": 20,
+							"activities": [
 								{
-									"name": "Copy data2",
+									"name": "Copy data_product_info",
 									"type": "Copy",
 									"dependsOn": [],
 									"policy": {
 										"timeout": "0.12:00:00",
-										"retry": 10,
+										"retry": 5,
 										"retryIntervalInSeconds": 30,
 										"secureOutput": false,
 										"secureInput": false
@@ -8857,16 +8837,16 @@
 											"type": "JsonSource",
 											"additionalColumns": [
 												{
-													"name": "unitcd",
+													"name": "code",
 													"value": {
-														"value": "@variables('unitcd')",
+														"value": "@item().code",
 														"type": "Expression"
 													}
 												},
 												{
-													"name": "unitnm",
+													"name": "addr",
 													"value": {
-														"value": "@variables('unitnm')",
+														"value": "@item().addr",
 														"type": "Expression"
 													}
 												}
@@ -8880,89 +8860,7 @@
 											}
 										},
 										"sink": {
-											"type": "AzurePostgreSQLSink",
-											"writeBatchSize": 1000000,
-											"writeBatchTimeout": "00:30:00",
-											"writeMethod": "CopyCommand"
-										},
-										"enableStaging": false,
-										"translator": {
-											"value": "@json(concat(\n'\n{\n                                    \"type\": \"TabularTranslator\",\n                                    \"mappings\": [\n                                        {\n                                            \"source\": {\n                                                \"path\": \"[''dinr_cal'']\"\n                                            },\n                                            \"sink\": {\n                                                \"name\": \"dinr_cal\",\n                                                \"type\": \"String\"\n                                            }\n                                        },\n                                        {\n                                            \"source\": {\n                                                \"path\": \"[''lunc'']\"\n                                            },\n                                            \"sink\": {\n                                                \"name\": \"lunc\",\n                                                \"type\": \"String\"\n                                            }\n                                        },\n                                        {\n                                            \"source\": {\n                                                \"path\": \"[''sum_cal'']\"\n                                            },\n                                            \"sink\": {\n                                                \"name\": \"sum_cal\",\n                                                \"type\": \"String\"\n                                            }\n                                        },\n                                        {\n                                            \"source\": {\n                                                \"path\": \"[''adspcfd'']\"\n                                            },\n                                            \"sink\": {\n                                                \"name\": \"adspcfd\",\n                                                \"type\": \"String\"\n                                            }\n                                        },\n                                        {\n                                            \"source\": {\n                                                \"path\": \"[''adspcfd_cal'']\"\n                                            },\n                                            \"sink\": {\n                                                \"name\": \"adspcfd_cal\",\n                                                \"type\": \"String\"\n                                            }\n                                        },\n                                        {\n                                            \"source\": {\n                                                \"path\": \"[''dates'']\"\n                                            },\n                                            \"sink\": {\n                                                \"name\": \"dates\",\n                                                \"type\": \"String\"\n                                            }\n                                        },\n                                        {\n                                            \"source\": {\n                                                \"path\": \"[''lunc_cal'']\"\n                                            },\n                                            \"sink\": {\n                                                \"name\": \"lunc_cal\",\n                                                \"type\": \"String\"\n                                            }\n                                        },\n                                        {\n                                            \"source\": {\n                                                \"path\": \"[''brst'']\"\n                                            },\n                                            \"sink\": {\n                                                \"name\": \"brst\",\n                                                \"type\": \"String\"\n                                            }\n                                        },\n                                        {\n                                            \"source\": {\n                                                \"path\": \"[''dinr'']\"\n                                            },\n                                            \"sink\": {\n                                                \"name\": \"dinr\",\n                                                \"type\": \"String\"\n                                            }\n                                        },\n                                        {\n                                            \"source\": {\n                                                \"path\": \"[''brst_cal'']\"\n                                            },\n                                            \"sink\": {\n                                                \"name\": \"brst_cal\",\n                                                \"type\": \"String\"\n                                            }\n                                        },\n                                        {\n                                            \"source\": {\n                                                \"path\": \"$[''unitcd'']\"\n                                            },\n                                            \"sink\": {\n                                                \"name\": \"unitcd\",\n                                                \"type\": \"String\"\n                                            }\n                                        },\n                                        {\n                                            \"source\": {\n                                                \"path\": \"$[''unitnm'']\"\n                                            },\n                                            \"sink\": {\n                                                \"name\": \"unitnm\",\n                                                \"type\": \"String\"\n                                            }\n                                        }\n                                    ],\n                                    \"collectionReference\": \"$[''',variables('tablename'),'''][''row'']\",\n                                    \"mapComplexValuesToString\": false\n                                }\n'\n))",
-											"type": "Expression"
-										}
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_API_MND",
-											"type": "DatasetReference",
-											"parameters": {
-												"url": {
-													"value": "@concat(pipeline().parameters.Apikey,'/json/',variables('tablename'),'/1/',variables('list_total_count'))",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_POSTGRESQL_SNK_P02",
-											"type": "DatasetReference",
-											"parameters": {
-												"SinkSchema": {
-													"value": "@pipeline().parameters.SinkSchema",
-													"type": "Expression"
-												},
-												"SinkTable": {
-													"value": "@pipeline().parameters.SinkTable",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								}
-							],
-							"ifTrueActivities": [
-								{
-									"name": "Copy data3",
-									"type": "Copy",
-									"dependsOn": [],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 10,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "JsonSource",
-											"additionalColumns": [
-												{
-													"name": "unitcd",
-													"value": {
-														"value": "@variables('unitcd')",
-														"type": "Expression"
-													}
-												},
-												{
-													"name": "unitnm",
-													"value": {
-														"value": "@variables('unitnm')",
-														"type": "Expression"
-													}
-												}
-											],
-											"storeSettings": {
-												"type": "HttpReadSettings",
-												"requestMethod": "GET"
-											},
-											"formatSettings": {
-												"type": "JsonReadSettings"
-											}
-										},
-										"sink": {
-											"type": "AzurePostgreSQLSink",
+											"type": "AzurePostgreSqlSink",
 											"writeBatchSize": 1000000,
 											"writeBatchTimeout": "00:30:00",
 											"writeMethod": "CopyCommand"
@@ -8973,69 +8871,61 @@
 											"mappings": [
 												{
 													"source": {
-														"path": "[['lunc']"
+														"path": "[['siNm']"
 													},
 													"sink": {
-														"name": "lunc",
+														"name": "sido",
 														"type": "String"
 													}
 												},
 												{
 													"source": {
-														"path": "[['dates']"
+														"path": "[['sggNm']"
 													},
 													"sink": {
-														"name": "dates",
+														"name": "sigungu",
 														"type": "String"
 													}
 												},
 												{
 													"source": {
-														"path": "[['brst']"
+														"path": "[['emdNm']"
 													},
 													"sink": {
-														"name": "brst",
+														"name": "dong",
 														"type": "String"
 													}
 												},
 												{
 													"source": {
-														"path": "[['dinr']"
+														"path": "$['code']"
 													},
 													"sink": {
-														"name": "dinr",
+														"name": "code",
 														"type": "String"
 													}
 												},
 												{
 													"source": {
-														"path": "$['unitcd']"
+														"path": "$['addr']"
 													},
 													"sink": {
-														"name": "unitcd",
-														"type": "String"
-													}
-												},
-												{
-													"source": {
-														"path": "$['unitnm']"
-													},
-													"sink": {
-														"name": "unitnm",
+														"name": "address",
 														"type": "String"
 													}
 												}
 											],
-											"collectionReference": "$['DS_TB_MNDT_DATEBYMLSVC']['row']"
+											"collectionReference": "$['results']['juso']",
+											"mapComplexValuesToString": false
 										}
 									},
 									"inputs": [
 										{
-											"referenceName": "DTS_API_MND",
+											"referenceName": "DTS_API_ADDR",
 											"type": "DatasetReference",
 											"parameters": {
 												"url": {
-													"value": "@concat(pipeline().parameters.Apikey,'/json/',variables('tablename'),'/1/', variables('list_total_count'))",
+													"value": "@concat('?confmKey=U01TX0FVVEgyMDI1MTIxODEzMDgwNjExNjU4MDM=&currentPage=1&countPerPage=1&resultType=json&keyword=',item().addr)",
 													"type": "Expression"
 												}
 											}
@@ -9060,144 +8950,26 @@
 								}
 							]
 						}
-					},
-					{
-						"name": "get totalcount",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "set unitcd",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							},
-							{
-								"activity": "set unitnm",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							},
-							{
-								"activity": "set tablename",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 10,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "JsonSource",
-								"storeSettings": {
-									"type": "HttpReadSettings",
-									"requestMethod": "GET"
-								},
-								"formatSettings": {
-									"type": "JsonReadSettings"
-								}
-							},
-							"dataset": {
-								"referenceName": "DTS_API_MND",
-								"type": "DatasetReference",
-								"parameters": {
-									"url": {
-										"value": "@concat(pipeline().parameters.Apikey,'/json/',variables('tablename'),'/1/10')",
-										"type": "Expression"
-									}
-								}
-							}
-						}
-					},
-					{
-						"name": "set tablename_copy1",
-						"description": "당일자",
-						"type": "SetVariable",
-						"dependsOn": [
-							{
-								"activity": "get totalcount",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"policy": {
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"variableName": "list_total_count",
-							"value": {
-								"value": "@string(activity('get totalcount').output.firstRow[variables('tablename')].list_total_count)",
-								"type": "Expression"
-							}
-						}
 					}
 				],
+				"concurrency": 3,
 				"policy": {
 					"elapsedTimeMetric": {}
 				},
 				"parameters": {
-					"Apikey": {
-						"type": "string",
-						"defaultValue": "/3130313632363038303933313532313334"
-					},
-					"service": {
-						"type": "string"
-					},
 					"SinkSchema": {
 						"type": "string",
 						"defaultValue": "cd_ods"
 					},
 					"SinkTable": {
 						"type": "string",
-						"defaultValue": "tb_mnd_date_by_ml_svc_increase"
-					},
-					"pipunitcd": {
-						"type": "string"
-					},
-					"pipunitnm": {
-						"type": "string"
-					},
-					"piptablename": {
-						"type": "string"
-					},
-					"pipstartindex": {
-						"type": "string"
-					}
-				},
-				"variables": {
-					"unitcd": {
-						"type": "String"
-					},
-					"unitnm": {
-						"type": "String"
-					},
-					"tablename": {
-						"type": "String"
-					},
-					"list_total_count": {
-						"type": "String"
-					},
-					"table": {
-						"type": "String"
-					},
-					"start_index": {
-						"type": "String"
+						"defaultValue": "tb_sf_mdm_school_real_address_t"
 					}
 				},
 				"folder": {
-					"name": "Industry/외부/국방부"
+					"name": "Industry/외부/주소검색"
 				},
-				"annotations": [],
-				"lastPublishTime": "2023-01-16T07:55:39Z"
+				"annotations": []
 			},
 			"dependsOn": []
 		}
