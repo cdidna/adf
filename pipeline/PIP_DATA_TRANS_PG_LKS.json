@@ -4,7 +4,7 @@
 		"description": "PG데이터 lake에 이동 및 테이블 데이터 삭제",
 		"activities": [
 			{
-				"name": "Lookup_parameter_copy1",
+				"name": "Search_condition",
 				"type": "Lookup",
 				"dependsOn": [],
 				"policy": {
@@ -18,14 +18,81 @@
 				"typeProperties": {
 					"source": {
 						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "select schema_name, table_name, date_column_name, date_column_type, retention_value, retention_unit, table_storage_type, lake_container, lake_path_template, file_format, delete_strategy, delete_batch_size from @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}",
+							"type": "Expression"
+						},
 						"partitionOption": "None",
 						"queryTimeout": "02:00:00"
 					},
 					"dataset": {
 						"referenceName": "DTS_POSTGRESQL_SNK",
-						"type": "DatasetReference"
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": {
+								"value": "@pipeline().parameters.SinkSchema",
+								"type": "Expression"
+							},
+							"SinkTable": {
+								"value": "@pipeline().parameters.SinkTable",
+								"type": "Expression"
+							}
+						}
 					},
 					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Search_condition",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Search_condition').output",
+						"type": "Expression"
+					},
+					"isSequential": true,
+					"activities": [
+						{
+							"name": "Copy data1",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzurePostgreSqlSource",
+									"partitionOption": "None",
+									"queryTimeout": "02:00:00"
+								},
+								"enableStaging": false
+							},
+							"inputs": [
+								{
+									"referenceName": "DTS_POSTGRESQL_SNK",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": "1",
+										"SinkTable": "1"
+									}
+								}
+							]
+						}
+					]
 				}
 			}
 		],
