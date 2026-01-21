@@ -1,0 +1,253 @@
+{
+	"name": "PIP_API_KEYWORD_ASSOCIATION",
+	"properties": {
+		"activities": [
+			{
+				"name": "select_keyword",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "SELECT \n    unnest(array['twitter','news','insta','community','youtube','blog']) as channel,\n    '비에이치씨|BHC|bhc' as keyword,\n    '20251221' as start_date,\n    '20260120' as end_date",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "token",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "select_keyword",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "JsonSource",
+						"storeSettings": {
+							"type": "HttpReadSettings",
+							"requestMethod": "POST",
+							"requestTimeout": ""
+						},
+						"formatSettings": {
+							"type": "JsonReadSettings"
+						}
+					},
+					"dataset": {
+						"referenceName": "DTS_VIVE_API_TOKEN",
+						"type": "DatasetReference"
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "token",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('select_keyword').output.value",
+						"type": "Expression"
+					},
+					"isSequential": false,
+					"batchCount": 20,
+					"activities": [
+						{
+							"name": "Copy data",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 2,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "JsonSource",
+									"additionalColumns": [
+										{
+											"name": "keyword",
+											"value": {
+												"value": "@item().keyword",
+												"type": "Expression"
+											}
+										},
+										{
+											"name": "channel",
+											"value": {
+												"value": "@item().channel",
+												"type": "Expression"
+											}
+										}
+									],
+									"storeSettings": {
+										"type": "HttpReadSettings",
+										"requestMethod": "GET",
+										"additionalHeaders": {
+											"value": "@{concat('Authorization : Bearer ',activity('token').output.value[0].access_token)}",
+											"type": "Expression"
+										},
+										"requestTimeout": ""
+									},
+									"formatSettings": {
+										"type": "JsonReadSettings"
+									}
+								},
+								"sink": {
+									"type": "AzurePostgreSQLSink",
+									"writeBatchSize": 1000000,
+									"writeBatchTimeout": "00:30:00",
+									"writeMethod": "CopyCommand"
+								},
+								"enableStaging": false,
+								"enableSkipIncompatibleRow": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"mappings": [
+										{
+											"source": {
+												"path": "['label']"
+											},
+											"sink": {
+												"name": "label",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['frequency']"
+											},
+											"sink": {
+												"name": "frequency",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "$['keyword']"
+											},
+											"sink": {
+												"name": "keyword",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "$['channel']"
+											},
+											"sink": {
+												"name": "channel",
+												"type": "String"
+											}
+										}
+									],
+									"collectionReference": "$['data']['childList']",
+									"mapComplexValuesToString": false
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "DTS_VIVE_API",
+									"type": "DatasetReference",
+									"parameters": {
+										"param": {
+											"value": "@concat('/dataplus/social/GetKeywordAssociation?ang=ko&categorySetName=TSN3&source=',item().channel,'&startDate=',item().start_date,'&endDate=',item().end_date,'&keyword=',item().keyword, '&topN=500&categoryList%5B%5D=1/0/0,1/1/0,1/2/0,2/0/0,2/1/0,2/2/0,2/3/0,2/4/0,2/5/0,2/6/0,3/0/0,3/1/0,3/2/0,3/3/0,4/0/0,4/1/0,4/2/0,4/3/0,4/4/0,4/5/0,5/0/0,5/1/0,5/2/0,5/3/0,5/4/0,6/0/0,6/1/0,6/2/0,6/3/0,6/4/0,6/5/0,6/6/0,6/7/0,6/8/0,7/0/0,7/1/0,7/2/0,7/3/0,7/4/0,7/5/0,7/6/0,7/7/0,7/8/0,8/0/0,8/1/0,8/2/0,8/3/0,8/4/0,9/0/0,9/1/0,9/2/0,9/3/0,9/4/0,9/5/0,9/6/0,9/7/0,10/0/0,10/1/0,10/2/0,10/3/0,10/4/0,11/0/0,11/1/0,11/2/0,11/3/0,11/4/0,12/0/0,12/1/0,12/2/0,12/3/0,12/4/0,12/5/0')",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "DTS_POSTGRESQL_SNK",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": {
+											"value": "@pipeline().parameters.SinkSckema",
+											"type": "Expression"
+										},
+										"SinkTable": {
+											"value": "@pipeline().parameters.SinkTable",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					]
+				}
+			}
+		],
+		"parameters": {
+			"SinkSckema": {
+				"type": "string",
+				"defaultValue": "cd_ods"
+			},
+			"SinkTable": {
+				"type": "string",
+				"defaultValue": "tb_keyword_association_t"
+			},
+			"pip_date": {
+				"type": "string"
+			},
+			"pip_date2": {
+				"type": "string"
+			}
+		},
+		"variables": {
+			"date": {
+				"type": "String"
+			},
+			"date2": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "고객/외부/키워드소셜원문"
+		},
+		"annotations": []
+	}
+}
