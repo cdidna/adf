@@ -19,7 +19,7 @@
 					"source": {
 						"type": "AzurePostgreSqlSource",
 						"query": {
-							"value": "select format(\n    'select * from %I.%I where %I <= %s',\n    schema_name,\n    table_name,\n    date_column_name,\n    case\n        when date_column_type = 'timestamp'\n        then\n            format(\n                'now() - interval ''1 %s'' * %s',\n                retention_unit,\n                retention_value\n            )\n        else\n            format(\n                'current_date - interval ''%s %s''',\n                retention_value,\n                retention_unit\n            )\n    end\n)  as query,\nlake_container, lake_path_template, schema_name, table_name,date_column_name, table_storage_type, delete_strategy,file_format , delete_batch_size\nfrom cd_meta.table_retention_policy\nwhere is_active = true",
+							"value": "select format(\n    'select * from %I.%I where %I <= %s',\n    schema_name,\n    table_name,\n    date_column_name,\n    case\n        when date_column_type = 'timestamp'\n        then\n            format(\n                'now() - interval ''1 %s'' * %s',\n                retention_unit,\n                retention_value\n            )\n        when date_column_type = 'yyyy-mm-dd'\n        then \n        \tformat(\n        \t\t'to_char(current_date - interval ''%s %s'', ''yyyy-mm-dd'')',\n                retention_value,\n                retention_unit\n        \t)\n        else\n            format(\n                'current_date - interval ''%s %s''',\n                retention_value,\n                retention_unit\n            )\n    end\n) as select_query,\nformat(\n    'delete from %I.%I where %I <= %s',\n    schema_name,\n    table_name,\n    date_column_name,\n    case\n        when date_column_type = 'timestamp'\n        then\n            format(\n                'now() - interval ''1 %s'' * %s',\n                retention_unit,\n                retention_value\n            )\n        when date_column_type = 'yyyy-mm-dd'\n        then \n        \tformat(\n        \t\t'to_char(current_date - interval ''%s %s'', ''yyyy-mm-dd'')',\n                retention_value,\n                retention_unit\n        \t)\n        else\n            format(\n                'current_date - interval ''%s %s''',\n                retention_value,\n                retention_unit\n            )\n    end\n) as delete_query,\nlake_container, lake_path_template, schema_name,table_name,  date_column_name, table_storage_type, delete_strategy,file_format , delete_batch_size\nfrom cd_meta.table_retention_policy\nwhere is_active = true",
 							"type": "Expression"
 						},
 						"partitionOption": "None",
@@ -64,14 +64,7 @@
 						{
 							"name": "Copy data1",
 							"type": "Copy",
-							"dependsOn": [
-								{
-									"activity": "Copy data1_copy1",
-									"dependencyConditions": [
-										"Succeeded"
-									]
-								}
-							],
+							"dependsOn": [],
 							"policy": {
 								"timeout": "0.12:00:00",
 								"retry": 0,
@@ -84,7 +77,7 @@
 								"source": {
 									"type": "AzurePostgreSqlSource",
 									"query": {
-										"value": "@item().query",
+										"value": "@item().select_query",
 										"type": "Expression"
 									},
 									"partitionOption": "None",
@@ -130,76 +123,6 @@
 										},
 										"FileName": {
 											"value": "@concat(item().table_name, '_',formatDateTime(addHours(utcNow(), 9), 'yyyyMMdd'))",
-											"type": "Expression"
-										}
-									}
-								}
-							]
-						},
-						{
-							"name": "Copy data1_copy1",
-							"type": "Copy",
-							"dependsOn": [],
-							"policy": {
-								"timeout": "0.12:00:00",
-								"retry": 0,
-								"retryIntervalInSeconds": 30,
-								"secureOutput": false,
-								"secureInput": false
-							},
-							"userProperties": [],
-							"typeProperties": {
-								"source": {
-									"type": "AzurePostgreSqlSource",
-									"query": {
-										"value": "@item().query",
-										"type": "Expression"
-									},
-									"partitionOption": "None",
-									"queryTimeout": "02:00:00"
-								},
-								"sink": {
-									"type": "DelimitedTextSink",
-									"storeSettings": {
-										"type": "AzureBlobFSWriteSettings"
-									},
-									"formatSettings": {
-										"type": "DelimitedTextWriteSettings",
-										"quoteAllText": true,
-										"fileExtension": ".txt"
-									}
-								},
-								"enableStaging": false,
-								"translator": {
-									"type": "TabularTranslator",
-									"typeConversion": true,
-									"typeConversionSettings": {
-										"allowDataTruncation": true,
-										"treatBooleanAsNumber": false
-									}
-								}
-							},
-							"inputs": [
-								{
-									"referenceName": "DTS_POSTGRESQL_SNK",
-									"type": "DatasetReference",
-									"parameters": {
-										"SinkSchema": "1",
-										"SinkTable": "1"
-									}
-								}
-							],
-							"outputs": [
-								{
-									"referenceName": "DTS_DATA_BACKUP_CVS",
-									"type": "DatasetReference",
-									"parameters": {
-										"AdlsDirectory": {
-											"value": "@concat(item().lake_path_template,'/',item().schema_name,'/',item().table_name)",
-											"type": "Expression"
-										},
-										"FileName": {
-											"value": "@concat(item().table_name, '_',formatDateTime(addHours(utcNow(), 9), 'yyyyMMdd'),'.csv')",
 											"type": "Expression"
 										}
 									}
