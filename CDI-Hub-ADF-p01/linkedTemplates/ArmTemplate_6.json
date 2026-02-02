@@ -134,10 +134,6 @@
 		"REST_API_P01_properties_typeProperties_url": {
 			"type": "string",
 			"defaultValue": "https://apis.data.go.kr/"
-		},
-		"LKS_ADLS_P04_properties_typeProperties_url": {
-			"type": "string",
-			"defaultValue": "https://cdidataadlsp01.dfs.core.windows.net/"
 		}
 	},
 	"variables": {
@@ -418,24 +414,6 @@
 					"url": "[parameters('REST_API_P01_properties_typeProperties_url')]",
 					"enableServerCertificateValidation": true,
 					"authenticationType": "Anonymous"
-				},
-				"connectVia": {
-					"referenceName": "IR-SHIR-P01",
-					"type": "IntegrationRuntimeReference"
-				}
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/LKS_ADLS_P04')]",
-			"type": "Microsoft.DataFactory/factories/linkedServices",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "PG 데이터 백",
-				"annotations": [],
-				"type": "AzureBlobFS",
-				"typeProperties": {
-					"url": "[parameters('LKS_ADLS_P04_properties_typeProperties_url')]"
 				},
 				"connectVia": {
 					"referenceName": "IR-SHIR-P01",
@@ -3030,6 +3008,240 @@
 				},
 				"folder": {
 					"name": "Industry/외부/관세청"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-01-16T07:55:39Z"
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_ATFIS_CONSUMPTION_BASIC')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "수요기관정보조회",
+				"activities": [
+					{
+						"name": "Lookup1",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": "select * from cd_ods.tb_atfis_cnsmpmtral_master;",
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK_P02",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": {
+										"value": "@pipeline().parameters.SinkSchema",
+										"type": "Expression"
+									},
+									"SinkTable": {
+										"value": "@pipeline().parameters.SinkTable",
+										"type": "Expression"
+									}
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup1').output.value",
+								"type": "Expression"
+							},
+							"isSequential": false,
+							"batchCount": 50,
+							"activities": [
+								{
+									"name": "Copy data1",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "JsonSource",
+											"storeSettings": {
+												"type": "HttpReadSettings",
+												"requestMethod": "GET"
+											},
+											"formatSettings": {
+												"type": "JsonReadSettings"
+											}
+										},
+										"sink": {
+											"type": "AzurePostgreSQLSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"path": "$['cnsmpYear']"
+													},
+													"sink": {
+														"name": "cnsmpyear",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['cnsmpCd']"
+													},
+													"sink": {
+														"name": "cnsmpcd",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['cnsmpMtralUpperNm']"
+													},
+													"sink": {
+														"name": "cnsmpmtraluppernm",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['cnsmpMtralNm']"
+													},
+													"sink": {
+														"name": "cnsmpmtralnm",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['cnsmpTotUsgqty']"
+													},
+													"sink": {
+														"name": "cnsmptotusgqty",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['cnsmpLocalusgqty']"
+													},
+													"sink": {
+														"name": "cnsmplocalusgqty",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['cnsmpImportUsgqty']"
+													},
+													"sink": {
+														"name": "cnsmpimportusgqty",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['cnsmpLocalRelimp']"
+													},
+													"sink": {
+														"name": "cnsmplocalrelimp",
+														"type": "String"
+													}
+												}
+											],
+											"collectionReference": "",
+											"mapComplexValuesToString": false
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_API_AFTIS",
+											"type": "DatasetReference",
+											"parameters": {
+												"url": {
+													"value": "@concat('/home/api/consumption/basic.do?apiKey=z9JeRfaB44up466XHs+5pTcV31n58LqRkSHZ8H66xbw=&cnsmpMtralCd=',item().code,\n'&beginYear=2022&endYear=2025')",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK_P02",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": {
+													"value": "@pipeline().parameters.SinkSchema",
+													"type": "Expression"
+												},
+												"SinkTable": {
+													"value": "@pipeline().parameters.SinkTable",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SinkSchema": {
+						"type": "string",
+						"defaultValue": "cd_ods"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "tb_atfis_consumption_basic"
+					}
+				},
+				"variables": {
+					"date": {
+						"type": "String"
+					},
+					"url": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "Industry/외부/식품산업통계정보"
 				},
 				"annotations": [],
 				"lastPublishTime": "2023-01-16T07:55:39Z"
