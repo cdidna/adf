@@ -13,6 +13,100 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/DF_ADLS_PG_STORE_REVIEW_M')]",
+			"type": "Microsoft.DataFactory/factories/dataflows",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"folder": {
+					"name": "고객/외부/RSN"
+				},
+				"type": "MappingDataFlow",
+				"typeProperties": {
+					"sources": [
+						{
+							"dataset": {
+								"referenceName": "DTS_RSN_STORE_REVIEW_M",
+								"type": "DatasetReference"
+							},
+							"name": "source1"
+						}
+					],
+					"sinks": [
+						{
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK_P02",
+								"type": "DatasetReference"
+							},
+							"name": "sink1"
+						}
+					],
+					"transformations": [
+						{
+							"name": "select1"
+						},
+						{
+							"name": "derivedColumn1"
+						}
+					],
+					"scriptLines": [
+						"source(output(",
+						"          srd_id as string,",
+						"          sd_reviewid as string,",
+						"          site as string,",
+						"          site_id as string,",
+						"          srd_title as string,",
+						"          srd_content as string,",
+						"          srd_writer as string,",
+						"          srd_writetime as string,",
+						"          srd_rate as string,",
+						"          srd_crawl_time as string",
+						"     ),",
+						"     allowSchemaDrift: true,",
+						"     validateSchema: false,",
+						"     ignoreNoFilesFound: false,",
+						"     wildcardPaths:['고객/외부/온라인몰정보/RSN_온라인몰_리뷰정보(중복제거)/D_RSN_온라인몰_리뷰정보(중복제거)_STORE_REVIEW_DATA_20??????.csv']) ~> source1",
+						"source1 select(mapColumn(",
+						"          id = srd_id,",
+						"          sd_review_id = sd_reviewid,",
+						"          channel_nm = site,",
+						"          title = srd_title,",
+						"          contents = srd_content,",
+						"          write_time = srd_writetime,",
+						"          srd_rate",
+						"     ),",
+						"     skipDuplicateMapInputs: true,",
+						"     skipDuplicateMapOutputs: true) ~> select1",
+						"select1 derive(contents = substring(replace(replace(replace(contents, '//CM//',','),'//LF//','\\n'),'\\u0000',''),1,1000),",
+						"          write_time = toDate(substring(write_time,1,10)),",
+						"          title = replace(replace(replace(title, '//CM//',','),'//LF//','\\n'),'\\u0000',''),",
+						"          source_nm = \"REVIEW\",",
+						"          if_dt = currentTimestamp()) ~> derivedColumn1",
+						"derivedColumn1 sink(allowSchemaDrift: true,",
+						"     validateSchema: false,",
+						"     deletable:false,",
+						"     insertable:true,",
+						"     updateable:false,",
+						"     upsertable:false,",
+						"     format: 'table',",
+						"     skipDuplicateMapInputs: true,",
+						"     skipDuplicateMapOutputs: true,",
+						"     mapColumn(",
+						"          id,",
+						"          sd_review_id,",
+						"          channel_nm,",
+						"          title,",
+						"          contents,",
+						"          write_time,",
+						"          srd_rate,",
+						"          source_nm,",
+						"          if_dt",
+						"     )) ~> sink1"
+					]
+				}
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/DF_ASSOCIATION_BLOG_FULL')]",
 			"type": "Microsoft.DataFactory/factories/dataflows",
 			"apiVersion": "2018-06-01",
@@ -2550,82 +2644,6 @@
 						"          cntdate,",
 						"          delmember_cnt",
 						"     )) ~> PKSNK2"
-					]
-				}
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/DF_REMOVE_RT')]",
-			"type": "Microsoft.DataFactory/factories/dataflows",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "리트윗된 컬럼 제",
-				"folder": {
-					"name": "고객/외부/TEST"
-				},
-				"type": "MappingDataFlow",
-				"typeProperties": {
-					"sources": [
-						{
-							"dataset": {
-								"referenceName": "DTS_ADLS_SRC_DF_P02",
-								"type": "DatasetReference"
-							},
-							"name": "source1"
-						}
-					],
-					"sinks": [
-						{
-							"dataset": {
-								"referenceName": "DTS_ADLS_CSV_DF_SNK",
-								"type": "DatasetReference"
-							},
-							"name": "sink1"
-						}
-					],
-					"transformations": [
-						{
-							"name": "filter1"
-						}
-					],
-					"scriptLines": [
-						"parameters{",
-						"     AdlsDirectory as string,",
-						"     FileName as string",
-						"}",
-						"source(output(",
-						"          date as string,",
-						"          topic_ids as string,",
-						"          topics as string,",
-						"          project_id as string,",
-						"          datetime as string,",
-						"          crawl_datetime as string,",
-						"          id as string,",
-						"          url as string,",
-						"          content as string,",
-						"          retweeted_id as string,",
-						"          site_name as string,",
-						"          author_id as string,",
-						"          author_name as string,",
-						"          retweet_count as string",
-						"     ),",
-						"     allowSchemaDrift: true,",
-						"     validateSchema: false,",
-						"     inferDriftedColumnTypes: true,",
-						"     ignoreNoFilesFound: false,",
-						"     wildcardPaths:[(concat($AdlsDirectory, \"/\", $FileName))]) ~> source1",
-						"source1 filter(!startsWith(content, \"RT @\")) ~> filter1",
-						"filter1 sink(allowSchemaDrift: true,",
-						"     validateSchema: false,",
-						"     partitionFileNames:[(concat($AdlsDirectory, \"/\", $FileName, \"_copy\"))],",
-						"     umask: 0022,",
-						"     preCommands: [],",
-						"     postCommands: [],",
-						"     skipDuplicateMapInputs: true,",
-						"     skipDuplicateMapOutputs: true,",
-						"     saveOrder: 1,",
-						"     partitionBy('hash', 1)) ~> sink1"
 					]
 				}
 			},
