@@ -13,6 +13,296 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_APIS_ItemtradeList_SRM')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "수요기관정보조회",
+				"activities": [
+					{
+						"name": "Lookup1",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": "SELECT \n  to_char(date_trunc('month', dd), 'YYYYMM') AS std,\n  to_char(date_trunc('month', dd), 'YYYY12') AS edt,\n  hscode\nFROM generate_series(\n    '2020-01-01'::date,\n    date_trunc('month', CURRENT_DATE),\n    interval '1 year'\n) dd\nCROSS JOIN (\n    VALUES \n      ('0201'),\n      ('0202'),\n      ('0203'),\n      ('0207141010')\n) AS hs(hscode)\n;",
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK_P02",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": {
+										"value": "@pipeline().parameters.SinkSchema",
+										"type": "Expression"
+									},
+									"SinkTable": {
+										"value": "@pipeline().parameters.SinkTable",
+										"type": "Expression"
+									}
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup1').output.value",
+								"type": "Expression"
+							},
+							"isSequential": false,
+							"batchCount": 4,
+							"activities": [
+								{
+									"name": "Copy data1",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "XmlSource",
+											"additionalColumns": [
+												{
+													"name": "hscode_master",
+													"value": {
+														"value": "@item().hscode",
+														"type": "Expression"
+													}
+												}
+											],
+											"storeSettings": {
+												"type": "HttpReadSettings",
+												"requestMethod": "GET"
+											},
+											"formatSettings": {
+												"type": "XmlReadSettings",
+												"validationMode": "none",
+												"namespaces": true
+											}
+										},
+										"sink": {
+											"type": "AzurePostgreSQLSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"path": "[['balPayments']"
+													},
+													"sink": {
+														"name": "balpayments",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['expDlr']"
+													},
+													"sink": {
+														"name": "expdlr",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['expWgt']"
+													},
+													"sink": {
+														"name": "expwgt",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['hsCode']"
+													},
+													"sink": {
+														"name": "hscode",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['impDlr']"
+													},
+													"sink": {
+														"name": "impdlr",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['impWgt']"
+													},
+													"sink": {
+														"name": "impwgt",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['statKor']"
+													},
+													"sink": {
+														"name": "statkor",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['year']"
+													},
+													"sink": {
+														"name": "year",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['hscode_master']"
+													},
+													"sink": {
+														"name": "hscode_master",
+														"type": "String"
+													}
+												}
+											],
+											"collectionReference": "$['response']['body']['items']['item']",
+											"mapComplexValuesToString": false
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_API_APIS_XML",
+											"type": "DatasetReference",
+											"parameters": {
+												"url": {
+													"value": "@concat('/1220000/Itemtrade/getItemtradeList?serviceKey=rj5HeIJYh3E2HRvmEw3P3%2BeVDZoZj074w7IIt%2BpcAaujPSI9CTx0U88XSd6C9eWwkBMUncCaG4w%2FtYRT898jcw%3D%3D&strtYymm=',item().std,'&endYymm=',item().edt,'&hsSgn=',item().hscode)",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": {
+													"value": "@pipeline().parameters.SinkSchema",
+													"type": "Expression"
+												},
+												"SinkTable": {
+													"value": "@pipeline().parameters.SinkTable",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					},
+					{
+						"name": "Lookup1_copy1",
+						"type": "Lookup",
+						"dependsOn": [
+							{
+								"activity": "ForEach1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": "SELECT cd_ods.fn_srm_apis_itemtradelist();",
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SinkSchema": {
+						"type": "string",
+						"defaultValue": "cd_ods"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "tb_srm_apis_itemtradelist_temp"
+					}
+				},
+				"variables": {
+					"date": {
+						"type": "String"
+					},
+					"url": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "Industry/외부/관세청"
+				},
+				"annotations": [],
+				"lastPublishTime": "2023-01-16T07:55:39Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_APIS_KIMCHI_MATERIAL_WEATHER_LONG_M')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -6024,277 +6314,6 @@
 					"SinkTable": {
 						"type": "string",
 						"defaultValue": "tb_sf_bluesis_brand_info_t"
-					}
-				},
-				"folder": {
-					"name": "Industry/외부/블루시스"
-				},
-				"annotations": []
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_BULESIS_GROUP_INFO')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "Copy data_foodgroup_master",
-						"type": "Copy",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 5,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "JsonSource",
-								"storeSettings": {
-									"type": "HttpReadSettings",
-									"requestMethod": "GET"
-								},
-								"formatSettings": {
-									"type": "JsonReadSettings"
-								}
-							},
-							"sink": {
-								"type": "AzurePostgreSqlSink",
-								"writeBatchSize": 1000000,
-								"writeBatchTimeout": "00:30:00",
-								"writeMethod": "CopyCommand"
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"mappings": [
-									{
-										"source": {
-											"path": "[['fn_cate_1']"
-										},
-										"sink": {
-											"name": "fn_cate_1",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['fn_cate_2']"
-										},
-										"sink": {
-											"name": "fn_cate_2",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['fn_cate_3']"
-										},
-										"sink": {
-											"name": "fn_cate_3",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['fn_name']"
-										},
-										"sink": {
-											"name": "fn_name",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['fn_code']"
-										},
-										"sink": {
-											"name": "fn_code",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['fn_group']"
-										},
-										"sink": {
-											"name": "fn_group",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['fn_calorie']"
-										},
-										"sink": {
-											"name": "fn_calorie",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['fn_protein']"
-										},
-										"sink": {
-											"name": "fn_protein",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['fn_calcium']"
-										},
-										"sink": {
-											"name": "fn_calcium",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['fn_iron']"
-										},
-										"sink": {
-											"name": "fn_iron",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['fn_niacin']"
-										},
-										"sink": {
-											"name": "fn_niacin",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['fn_vitamin_a']"
-										},
-										"sink": {
-											"name": "fn_vitamin_a",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['fn_vitamin_b1']"
-										},
-										"sink": {
-											"name": "fn_vitamin_b1",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['fn_vitamin_b2']"
-										},
-										"sink": {
-											"name": "fn_vitamin_b2",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['fn_vitamin_c']"
-										},
-										"sink": {
-											"name": "fn_vitamin_c",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['fn_vitamin_d']"
-										},
-										"sink": {
-											"name": "fn_vitamin_d",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['fn_discard_rate']"
-										},
-										"sink": {
-											"name": "fn_discard_rate",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['fn_cate_1_code']"
-										},
-										"sink": {
-											"name": "fn_cate_1_code",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['fn_cate_2_code']"
-										},
-										"sink": {
-											"name": "fn_cate_2_code",
-											"type": "String"
-										}
-									},
-									{
-										"source": {
-											"path": "[['fn_cate_3_code']"
-										},
-										"sink": {
-											"name": "fn_cate_3_code",
-											"type": "String"
-										}
-									}
-								],
-								"collectionReference": "$['data']"
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_API_BLUESIS",
-								"type": "DatasetReference",
-								"parameters": {
-									"url": {
-										"value": "@concat('/api/foodgroups?key=XNBGd1SDc9OLQQEFNuowuBcFwj62JY30')",
-										"type": "Expression"
-									}
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_POSTGRESQL_SNK_P02",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "@pipeline().parameters.SinkSchema",
-									"SinkTable": {
-										"value": "@pipeline().parameters.SinkTable",
-										"type": "Expression"
-									}
-								}
-							}
-						]
-					}
-				],
-				"concurrency": 5,
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "tb_sf_bluesis_group_info_t"
 					}
 				},
 				"folder": {
