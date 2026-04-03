@@ -13,6 +13,502 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_DATA_BACKUP_LKS_TEST')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "PG데이터 lake에 이동 및 테이블 데이터 삭제",
+				"activities": [
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"state": "Inactive",
+						"onInactiveMarkAs": "Succeeded",
+						"dependsOn": [],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Search_condition').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "Copy data1",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzurePostgreSqlSource",
+											"query": {
+												"value": "@item().select_query",
+												"type": "Expression"
+											},
+											"partitionOption": "None",
+											"queryTimeout": "02:00:00"
+										},
+										"sink": {
+											"type": "ParquetSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "ParquetWriteSettings",
+												"maxRowsPerFile": 1000000,
+												"fileNamePrefix": {
+													"value": "@concat(item().table_name, '_', formatDateTime(utcNow(), 'yyyyMM'))",
+													"type": "Expression"
+												}
+											}
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"typeConversion": true,
+											"typeConversionSettings": {
+												"allowDataTruncation": true,
+												"treatBooleanAsNumber": false
+											}
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": "1",
+												"SinkTable": "1"
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_DATA_BACKUP_PARQUET",
+											"type": "DatasetReference",
+											"parameters": {
+												"AdlsDirectory": {
+													"value": "@concat(item().lake_path_template,'/',item().schema_name,'/',item().table_name)",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "Search_condition_copy1",
+									"type": "Lookup",
+									"dependsOn": [
+										{
+											"activity": "Search_condition_copy1_copy1",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzurePostgreSqlSource",
+											"query": {
+												"value": "update cd_meta.table_retention_policy set last_upd_dt = now() , is_active  = (case when '@{item().retention_value}' = '0' and '@{item().retention_unit}' = 'month' then false  else true  end) where policy_id = @{item().policy_id};\n\nselect 1 as success",
+												"type": "Expression"
+											},
+											"partitionOption": "None",
+											"queryTimeout": "02:00:00"
+										},
+										"dataset": {
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": "1",
+												"SinkTable": "1"
+											}
+										},
+										"firstRowOnly": false
+									}
+								},
+								{
+									"name": "Search_condition_copy1_copy1",
+									"type": "Lookup",
+									"state": "Inactive",
+									"onInactiveMarkAs": "Succeeded",
+									"dependsOn": [
+										{
+											"activity": "Copy data1",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzurePostgreSqlSource",
+											"query": {
+												"value": "@item().delete_strategy",
+												"type": "Expression"
+											},
+											"partitionOption": "None",
+											"queryTimeout": "02:00:00"
+										},
+										"dataset": {
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": "1",
+												"SinkTable": "1"
+											}
+										},
+										"firstRowOnly": false
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "Search_condition",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "\nselect select_query,  \ncase when delete_strategy = 'delete' then delete_query||'; select 1 as success' \n     else drop_query||'; select 1 as success'  \n     end as delete_strategy, \npolicy_id, lake_container, lake_path_template, schema_name,table_name,  date_column_name, table_storage_type, file_format, retention_value, retention_unit, backup_required\nfrom ( \nselect format( \n    'select * from %I.%I where %I <= %s', \n    schema_name, \n    table_name, \n    date_column_name, \n    case \n        when date_column_type = 'timestamp' \n        then \n            format( \n                'now() - interval ''1 %s'' * %s ', \n                retention_unit, \n               case when retention_value = 0 then 0  \n               else retention_value + 1 end \n            ) \n        when date_column_type = 'yyyy-mm-dd' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yyyy-mm-dd'')', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n        when date_column_type = 'yymm' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yymm'')', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n     when date_column_type = 'yyyymmdd' and retention_unit = 'year' \n\t  then format( \n\t      'to_char(date_trunc(''year'', current_date - interval ''%s %s'') - interval ''1 day'', ''yyyymmdd'')', \n\t      retention_value, \n\t      retention_unit \n\t  ) \n\t       when date_column_type = 'yyyymm' and retention_unit = 'year' \n\t  then format( \n\t      'to_char(date_trunc(''year'', current_date - interval ''%s %s'') - interval ''1 day'', ''yyyymm'')', \n\t      retention_value, \n\t      retention_unit \n\t  ) \n         when date_column_type = 'yyyymmdd' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yyyymmdd'')', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n         when date_column_type = 'yyyymm' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yyyymm'')', \n               case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n        when date_column_type = 'week' and date_column_name = 'per_tag'\n        then  \n\t        format(\n\t        '(select a.%s from %I.%I a order by %s desc limit 1 )',\n    \t\tdate_column_name,\n\t        schema_name, \n\t\t    table_name, \n\t\t    date_column_name\n\t\t)\n        else \n            format( \n                'current_date - interval ''%s %s''', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n            ) \n    end \n) as select_query, \nformat( \n    'delete from %I.%I where %I <= %s', \n    schema_name, \n    table_name, \n    date_column_name, \n    case \n        when date_column_type = 'timestamp' \n        then \n            format( \n                'now() - interval ''1 %s'' * %s', \n                retention_unit, \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end \n            ) \n        when date_column_type = 'yyyy-mm-dd' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yyyy-mm-dd'')', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n          when date_column_type = 'yymm' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yymm'')', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n\t\twhen date_column_type = 'yyyymmdd' and retention_unit = 'year' \n\t\t  then format( \n\t\t      'to_char(date_trunc(''year'', current_date - interval ''%s %s'') - interval ''1 day'', ''yyyymmdd'')', \n\t\t      retention_value, \n\t\t      retention_unit \n\t\t  ) \n\t\t       when date_column_type = 'yyyymm' and retention_unit = 'year' \n\t\t  then format( \n\t\t      'to_char(date_trunc(''year'', current_date - interval ''%s %s'') - interval ''1 day'', ''yyyymm'')', \n\t\t      retention_value, \n\t\t      retention_unit \n\t\t  )\n         when date_column_type = 'yyyymmdd' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yyyymmdd'')', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n      when date_column_type = 'yyyymm' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yyyymm'')', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n        when date_column_type = 'week' and date_column_name = 'per_tag'\n        then  \n\t        format(\n\t        '(select a.%s from %I.%I a order by %s desc limit 1 )',\n    \t\tdate_column_name,\n\t        schema_name, \n\t\t    table_name, \n\t\t    date_column_name\n\t\t)\n        else \n            format( \n                'current_date - interval ''%s %s''', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n            ) \n    end \n) as delete_query, \nformat( \n    'drop table %I.%I_%s', \n    schema_name, \n    table_name, \n    (select  to_char(now() - interval '1 month' * (retention_value +1),'YYMM') \n    )        \n) as drop_query, \npolicy_id, lake_container, lake_path_template, schema_name,table_name,  date_column_name, table_storage_type, delete_strategy,file_format , retention_value, retention_unit, backup_required \nfrom cd_meta.table_retention_policy \nwhere 1=1 \nand is_active = true \n)",
+									"type": "Expression"
+								},
+								"partitionOption": "None",
+								"queryTimeout": "02:00:00"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": {
+										"value": "@pipeline().parameters.SinkSchema",
+										"type": "Expression"
+									},
+									"SinkTable": {
+										"value": "@pipeline().parameters.SinkTable",
+										"type": "Expression"
+									}
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1_copy2_copy1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Search_condition",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Search_condition').output.value",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "If Condition2",
+									"type": "IfCondition",
+									"dependsOn": [],
+									"userProperties": [],
+									"typeProperties": {
+										"expression": {
+											"value": "@equals(item().backup_required, 'Y')",
+											"type": "Expression"
+										},
+										"ifFalseActivities": [
+											{
+												"name": "Search_condition_copy5",
+												"type": "Lookup",
+												"state": "Inactive",
+												"onInactiveMarkAs": "Succeeded",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "0.12:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "AzurePostgreSqlSource",
+														"query": {
+															"value": "@item().delete_strategy",
+															"type": "Expression"
+														},
+														"partitionOption": "None",
+														"queryTimeout": "02:00:00"
+													},
+													"dataset": {
+														"referenceName": "DTS_POSTGRESQL_SNK",
+														"type": "DatasetReference",
+														"parameters": {
+															"SinkSchema": "1",
+															"SinkTable": "1"
+														}
+													},
+													"firstRowOnly": false
+												}
+											},
+											{
+												"name": "Search_condition_copy6",
+												"type": "Lookup",
+												"dependsOn": [
+													{
+														"activity": "Search_condition_copy5",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "0.12:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "AzurePostgreSqlSource",
+														"query": {
+															"value": "update cd_meta.table_retention_policy set last_upd_dt = now() , is_active  = (case when '@{item().retention_value}' = '0' and '@{item().retention_unit}' = 'month' then false  else true  end) where policy_id = @{item().policy_id};\n\nselect 1 as success",
+															"type": "Expression"
+														},
+														"partitionOption": "None",
+														"queryTimeout": "02:00:00"
+													},
+													"dataset": {
+														"referenceName": "DTS_POSTGRESQL_SNK",
+														"type": "DatasetReference",
+														"parameters": {
+															"SinkSchema": "1",
+															"SinkTable": "1"
+														}
+													},
+													"firstRowOnly": false
+												}
+											}
+										],
+										"ifTrueActivities": [
+											{
+												"name": "Copy data2",
+												"type": "Copy",
+												"dependsOn": [],
+												"policy": {
+													"timeout": "0.12:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "AzurePostgreSqlSource",
+														"query": {
+															"value": "@item().select_query",
+															"type": "Expression"
+														},
+														"partitionOption": "None",
+														"queryTimeout": "02:00:00"
+													},
+													"sink": {
+														"type": "ParquetSink",
+														"storeSettings": {
+															"type": "AzureBlobFSWriteSettings"
+														},
+														"formatSettings": {
+															"type": "ParquetWriteSettings",
+															"maxRowsPerFile": 1000000,
+															"fileNamePrefix": {
+																"value": "@concat(item().table_name, '_', formatDateTime(utcNow(), 'yyyyMM'))",
+																"type": "Expression"
+															}
+														}
+													},
+													"enableStaging": false,
+													"translator": {
+														"type": "TabularTranslator",
+														"typeConversion": true,
+														"typeConversionSettings": {
+															"allowDataTruncation": true,
+															"treatBooleanAsNumber": false
+														}
+													}
+												},
+												"inputs": [
+													{
+														"referenceName": "DTS_POSTGRESQL_SNK",
+														"type": "DatasetReference",
+														"parameters": {
+															"SinkSchema": "1",
+															"SinkTable": "1"
+														}
+													}
+												],
+												"outputs": [
+													{
+														"referenceName": "DTS_DATA_BACKUP_PARQUET",
+														"type": "DatasetReference",
+														"parameters": {
+															"AdlsDirectory": "@concat(item().lake_path_template,'/',item().schema_name,'/',item().table_name)"
+														}
+													}
+												]
+											},
+											{
+												"name": "Search_condition_copy3",
+												"type": "Lookup",
+												"state": "Inactive",
+												"onInactiveMarkAs": "Succeeded",
+												"dependsOn": [
+													{
+														"activity": "Copy data2",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "0.12:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "AzurePostgreSqlSource",
+														"query": {
+															"value": "@item().delete_strategy",
+															"type": "Expression"
+														},
+														"partitionOption": "None",
+														"queryTimeout": "02:00:00"
+													},
+													"dataset": {
+														"referenceName": "DTS_POSTGRESQL_SNK",
+														"type": "DatasetReference",
+														"parameters": {
+															"SinkSchema": "1",
+															"SinkTable": "1"
+														}
+													},
+													"firstRowOnly": false
+												}
+											},
+											{
+												"name": "Search_condition_copy4",
+												"type": "Lookup",
+												"dependsOn": [
+													{
+														"activity": "Search_condition_copy3",
+														"dependencyConditions": [
+															"Succeeded"
+														]
+													}
+												],
+												"policy": {
+													"timeout": "0.12:00:00",
+													"retry": 0,
+													"retryIntervalInSeconds": 30,
+													"secureOutput": false,
+													"secureInput": false
+												},
+												"userProperties": [],
+												"typeProperties": {
+													"source": {
+														"type": "AzurePostgreSqlSource",
+														"query": {
+															"value": "update cd_meta.table_retention_policy set last_upd_dt = now() , is_active  = (case when '@{item().retention_value}' = '0' and '@{item().retention_unit}' = 'month' then false  else true  end) where policy_id = @{item().policy_id};\n\nselect 1 as success",
+															"type": "Expression"
+														},
+														"partitionOption": "None",
+														"queryTimeout": "02:00:00"
+													},
+													"dataset": {
+														"referenceName": "DTS_POSTGRESQL_SNK",
+														"type": "DatasetReference",
+														"parameters": {
+															"SinkSchema": "1",
+															"SinkTable": "1"
+														}
+													},
+													"firstRowOnly": false
+												}
+											}
+										]
+									}
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SinkSchema": {
+						"type": "string",
+						"defaultValue": "cd_meta"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "table_retention_policy"
+					}
+				},
+				"folder": {
+					"name": "Test"
+				},
+				"annotations": []
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_DM_FM_ASSOCIATION_FREQUENCY_FULL')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -4528,209 +5024,6 @@
 					"SinkTable": {
 						"type": "string",
 						"defaultValue": "tb_eat_bid_detail_sheet"
-					}
-				},
-				"folder": {
-					"name": "판촉/내부/급식입개찰"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-10-18T08:30:36Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_D_CD_NEIS_BID_DETAIL_SHEET_FULL_PG_SCHOOL')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"activities": [
-					{
-						"name": "Copy data",
-						"type": "Copy",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "7.00:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "OracleSource",
-								"oracleReaderQuery": "SELECT c.* FROM CD_NEIS.BID_DETAIL b\n,CD_NEIS.BID_MASTER a\n, CD_NEIS.BID_DETAIL_SHEET c\nWHERE a.BIDID = b.bidid\nAND b.BID_DETAIL_ID = c.BID_DETAIL_ID\nAND a.orgtype = 'S'",
-								"partitionOption": "None",
-								"queryTimeout": "02:00:00"
-							},
-							"sink": {
-								"type": "AzurePostgreSQLSink",
-								"writeBatchSize": 1000000,
-								"writeBatchTimeout": "00:30:00",
-								"preCopyScript": {
-									"value": "DELETE FROM @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}",
-									"type": "Expression"
-								},
-								"writeMethod": "CopyCommand"
-							},
-							"enableStaging": false,
-							"translator": {
-								"type": "TabularTranslator",
-								"mappings": [
-									{
-										"source": {
-											"name": "BID_DETAIL_ID",
-											"type": "String"
-										},
-										"sink": {
-											"name": "bid_detail_id",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "SHEET",
-											"type": "String"
-										},
-										"sink": {
-											"name": "sheet",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "USE_YN",
-											"type": "String"
-										},
-										"sink": {
-											"name": "use_yn",
-											"type": "String",
-											"physicalType": "character"
-										}
-									},
-									{
-										"source": {
-											"name": "CREATE_ID",
-											"type": "String"
-										},
-										"sink": {
-											"name": "create_id",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "CREATE_DT",
-											"type": "DateTime"
-										},
-										"sink": {
-											"name": "create_dt",
-											"type": "DateTime",
-											"physicalType": "timestamp without time zone"
-										}
-									},
-									{
-										"source": {
-											"name": "UPDATE_ID",
-											"type": "String"
-										},
-										"sink": {
-											"name": "update_id",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "UPDATE_DT",
-											"type": "DateTime"
-										},
-										"sink": {
-											"name": "update_dt",
-											"type": "DateTime",
-											"physicalType": "timestamp without time zone"
-										}
-									},
-									{
-										"source": {
-											"name": "ERROR_CD",
-											"type": "String"
-										},
-										"sink": {
-											"name": "error_cd",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									},
-									{
-										"source": {
-											"name": "ERROR_MSG",
-											"type": "String"
-										},
-										"sink": {
-											"name": "error_msg",
-											"type": "String",
-											"physicalType": "character varying"
-										}
-									}
-								],
-								"typeConversion": true,
-								"typeConversionSettings": {
-									"allowDataTruncation": true,
-									"treatBooleanAsNumber": false
-								}
-							}
-						},
-						"inputs": [
-							{
-								"referenceName": "DTS_ORACLE_SRC_2",
-								"type": "DatasetReference",
-								"parameters": {
-									"SourceSchema": "1",
-									"SourceTable": "1"
-								}
-							}
-						],
-						"outputs": [
-							{
-								"referenceName": "DTS_POSTGRESQL_SNK_P02",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": {
-										"value": "@pipeline().parameters.SinkSchema",
-										"type": "Expression"
-									},
-									"SinkTable": {
-										"value": "@pipeline().parameters.SinkTable",
-										"type": "Expression"
-									}
-								}
-							}
-						]
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SourceSchema": {
-						"type": "string",
-						"defaultValue": "CD_NEIS"
-					},
-					"SourceTable": {
-						"type": "string",
-						"defaultValue": "BID_DETAIL_SHEET"
-					},
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "tb_sf_eat_bid_detail_sheet"
 					}
 				},
 				"folder": {

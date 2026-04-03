@@ -13,6 +13,609 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_QUALITY_ADR_D')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "식품의약품안전처(식품위해정보)\n행정처분결과 정보",
+				"activities": [
+					{
+						"name": "ORA GET CNT",
+						"description": "저장된 값의 Total 값을 확인하기 위해 DB조",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "OracleSource",
+								"oracleReaderQuery": {
+									"value": "@concat('SELECT NVL(max(qty), 0) as total_cnt FROM cd_if.cd_fdsfty_seq WHERE type = ''', pipeline().parameters.ServiceId, ''' ORDER BY row_id DESC ')",
+									"type": "Expression"
+								},
+								"partitionOption": "None",
+								"convertDecimalToInteger": false,
+								"queryTimeout": "02:00:00"
+							},
+							"dataset": {
+								"referenceName": "DTS_ORACLE_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"SourceSchema": "1",
+									"SourceTable": "1"
+								}
+							},
+							"firstRowOnly": true
+						}
+					},
+					{
+						"name": "ForEach API data",
+						"description": "cdi-root / 품질/외부/식품위해관리/행정처분결과 위치에 항목별로 복사합니다.",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "ORA GET CNT",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							},
+							{
+								"activity": "API GET CNT",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@range(\n    1\n    ,add(\n        div(\n            sub(\n                activity('API GET CNT').output.firstRow.I0470.total_count\n                ,int(activity('ORA GET CNT').output.firstRow.total_cnt)\n            )\n            , 1000\n        )\n        ,if(\n            greater(\n                mod(\n                    sub(\n                        activity('API GET CNT').output.firstRow.I0470.total_count\n                        ,int(activity('ORA GET CNT').output.firstRow.total_cnt)\n                    )\n                    , 1000\n                )\n                , 0\n            )\n            , 1\n            , 0\n        )\n    )\n)",
+								"type": "Expression"
+							},
+							"isSequential": true,
+							"activities": [
+								{
+									"name": "API REQ_copy",
+									"description": "각 API 호출",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Set endIndex",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "XmlSource",
+											"storeSettings": {
+												"type": "HttpReadSettings",
+												"requestMethod": "GET"
+											},
+											"formatSettings": {
+												"type": "XmlReadSettings",
+												"validationMode": "none",
+												"namespaces": true
+											}
+										},
+										"sink": {
+											"type": "DelimitedTextSink",
+											"storeSettings": {
+												"type": "AzureBlobFSWriteSettings"
+											},
+											"formatSettings": {
+												"type": "DelimitedTextWriteSettings",
+												"quoteAllText": true,
+												"fileExtension": ".txt"
+											}
+										},
+										"enableStaging": false,
+										"enableSkipIncompatibleRow": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"path": "[['PRSDNT_NM']"
+													},
+													"sink": {
+														"name": "PRSDNT_NM",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['TEL_NO']"
+													},
+													"sink": {
+														"name": "TEL_NO",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['LAST_UPDT_DTM']"
+													},
+													"sink": {
+														"name": "LAST_UPDT_DTM",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['LCNS_NO']"
+													},
+													"sink": {
+														"name": "LCNS_NO",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['DSPS_INSTTCD_NM']"
+													},
+													"sink": {
+														"name": "DSPS_INSTTCD_NM",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['LAWORD_CD_NM']"
+													},
+													"sink": {
+														"name": "LAWORD_CD_NM",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['DSPSDTLS_SEQ']"
+													},
+													"sink": {
+														"name": "DSPSDTLS_SEQ",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['VILTCN']"
+													},
+													"sink": {
+														"name": "VILTCN",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['ADDR']"
+													},
+													"sink": {
+														"name": "ADDR",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['PUBLIC_DT']"
+													},
+													"sink": {
+														"name": "PUBLIC_DT",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['INDUTY_CD_NM']"
+													},
+													"sink": {
+														"name": "INDUTY_CD_NM",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['DSPS_DCSNDT']"
+													},
+													"sink": {
+														"name": "DSPS_DCSNDT",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['PRCSCITYPOINT_BSSHNM']"
+													},
+													"sink": {
+														"name": "PRCSCITYPOINT_BSSHNM",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['DSPS_BGNDT']"
+													},
+													"sink": {
+														"name": "DSPS_BGNDT",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['DSPS_TYPECD_NM']"
+													},
+													"sink": {
+														"name": "DSPS_TYPECD_NM",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['DSPS_ENDDT']"
+													},
+													"sink": {
+														"name": "DSPS_ENDDT",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['DSPSCN']"
+													},
+													"sink": {
+														"name": "DSPSCN",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['@id']"
+													},
+													"sink": {
+														"name": "ROWId",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['I0470']['total_count']"
+													},
+													"sink": {
+														"name": "total_count",
+														"type": "String"
+													}
+												}
+											],
+											"collectionReference": "$['I0470']['row']",
+											"mapComplexValuesToString": false
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_API_DITBCD_SRC",
+											"type": "DatasetReference",
+											"parameters": {
+												"ApiKey": {
+													"value": "@pipeline().parameters.Apikey",
+													"type": "Expression"
+												},
+												"StartIdx": {
+													"value": "@variables('startIdx')",
+													"type": "Expression"
+												},
+												"EndIdx": {
+													"value": "@variables('endIdx')",
+													"type": "Expression"
+												},
+												"ServiceId": {
+													"value": "@pipeline().parameters.ServiceId",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_ADLS_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"AdlsDirectory": {
+													"value": "@concat(pipeline().parameters.AdlsDirectoryOri,'/',formatDateTime(addHours(utcNow(), 9), 'yyyyMMdd'))",
+													"type": "Expression"
+												},
+												"FileName": {
+													"value": "@concat(pipeline().parameters.FileName, '_', replace(variables('endIdx') , '/', '_'),'_',formatDateTime(addHours(utcNow(), 9), 'yyyyMMdd'), '.csv')",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								},
+								{
+									"name": "Set startIdx",
+									"description": "시 인덱스 값을 정의한다.",
+									"type": "SetVariable",
+									"dependsOn": [],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "startIdx",
+										"value": {
+											"value": "@string(sub(\n    add(\n        int(activity('ORA GET CNT').output.firstRow.total_cnt)\n        , add(mul(1000, item()), 1)\n    )\n, 1000))",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "Set endIndex",
+									"description": "종료 인덱스 값을 정의한다.",
+									"type": "SetVariable",
+									"dependsOn": [
+										{
+											"activity": "Set startIdx",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "endIdx",
+										"value": {
+											"value": "@string(add(\n    int(variables('startIdx'))\n    , if(\n        greater(\n            sub(\n                activity('API GET CNT').output.firstRow.I0470.total_count\n                , int(variables('startIdx'))\n            )\n            , 1000\n        )\n        , 999\n        , sub(\n            activity('API GET CNT').output.firstRow.I0470.total_count\n            , int(variables('startIdx'))\n        )\n    )\n))",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "Insert Sequence",
+									"description": "cd_if.cd_fdsfty_seq 값 Insert",
+									"type": "Script",
+									"dependsOn": [
+										{
+											"activity": "API REQ_copy",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"linkedServiceName": {
+										"referenceName": "LKS_ORA_P01",
+										"type": "LinkedServiceReference"
+									},
+									"typeProperties": {
+										"scripts": [
+											{
+												"type": "Query",
+												"text": {
+													"value": "INSERT INTO cd_if.cd_fdsfty_seq (type, row_id, qty, crt_dt, crt_user) \nVALUES (\n  '@{pipeline().parameters.ServiceId}'\n  , (SELECT NVL(MAX(row_id), 0) + 1 FROM cd_if.cd_fdsfty_seq WHERE type = '@{pipeline().parameters.ServiceId}')\n  , '@{variables('endIdx')}'\n  , to_char(sysdate, 'yyyymmddhhmiss')\n, 'system'\n);",
+													"type": "Expression"
+												}
+											}
+										],
+										"scriptBlockExecutionTimeout": "02:00:00"
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "Merge Data",
+						"description": "cdi-root /품질/외부/식품위해관리/ 위치에 항목별로 복사합니다.",
+						"type": "Copy",
+						"dependsOn": [
+							{
+								"activity": "ForEach API data",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"policy": {
+							"timeout": "7.00:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "DelimitedTextSource",
+								"storeSettings": {
+									"type": "AzureBlobFSReadSettings",
+									"maxConcurrentConnections": 1,
+									"recursive": true,
+									"wildcardFolderPath": {
+										"value": "@concat(pipeline().parameters.AdlsDirectoryOri,'/',formatDateTime(addHours(utcNow(), 9), 'yyyyMMdd'))",
+										"type": "Expression"
+									},
+									"wildcardFileName": "*",
+									"enablePartitionDiscovery": false
+								},
+								"formatSettings": {
+									"type": "DelimitedTextReadSettings"
+								}
+							},
+							"sink": {
+								"type": "DelimitedTextSink",
+								"storeSettings": {
+									"type": "AzureBlobFSWriteSettings",
+									"maxConcurrentConnections": 1,
+									"copyBehavior": "MergeFiles"
+								},
+								"formatSettings": {
+									"type": "DelimitedTextWriteSettings",
+									"quoteAllText": true,
+									"fileExtension": ".txt"
+								}
+							},
+							"enableStaging": false,
+							"parallelCopies": 1,
+							"enableSkipIncompatibleRow": true,
+							"validateDataConsistency": false,
+							"translator": {
+								"type": "TabularTranslator",
+								"typeConversion": true,
+								"typeConversionSettings": {
+									"allowDataTruncation": true,
+									"treatBooleanAsNumber": false
+								}
+							}
+						},
+						"inputs": [
+							{
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": {
+										"value": "@pipeline().parameters.AdlsDirectory",
+										"type": "Expression"
+									},
+									"FileName": {
+										"value": "@pipeline().parameters.FileName",
+										"type": "Expression"
+									}
+								}
+							}
+						],
+						"outputs": [
+							{
+								"referenceName": "DTS_ADLS_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"AdlsDirectory": {
+										"value": "@pipeline().parameters.AdlsDirectory",
+										"type": "Expression"
+									},
+									"FileName": {
+										"value": "@concat(pipeline().parameters.FileName,'_', formatDateTime(addHours(utcNow(), 9), 'yyyyMMdd'),'.csv')\n\n",
+										"type": "Expression"
+									}
+								}
+							}
+						]
+					},
+					{
+						"name": "API GET CNT",
+						"description": "API의 총 건 수를 확인하기 위해 API 1회 호출.",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "XmlSource",
+								"storeSettings": {
+									"type": "HttpReadSettings",
+									"requestMethod": "GET"
+								},
+								"formatSettings": {
+									"type": "XmlReadSettings",
+									"validationMode": "none",
+									"detectDataType": true,
+									"namespaces": true
+								}
+							},
+							"dataset": {
+								"referenceName": "DTS_API_DITBCD_SRC",
+								"type": "DatasetReference",
+								"parameters": {
+									"ApiKey": "@pipeline().parameters.Apikey",
+									"StartIdx": "1",
+									"EndIdx": "1",
+									"ServiceId": "@pipeline().parameters.ServiceId"
+								}
+							}
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"AdlsDirectory": {
+						"type": "string",
+						"defaultValue": "품질/외부/식품위해관리"
+					},
+					"FileName": {
+						"type": "string",
+						"defaultValue": "행정처분결과"
+					},
+					"AdlsDirectoryConf": {
+						"type": "string",
+						"defaultValue": "품질/외부/식품위해관리/conf"
+					},
+					"ConfFile": {
+						"type": "string",
+						"defaultValue": "행정처분결과Index"
+					},
+					"AdlsDirectoryOri": {
+						"type": "string",
+						"defaultValue": "품질/외부/식품위해관리/행정처분결과"
+					},
+					"Apikey": {
+						"type": "string",
+						"defaultValue": "f93320322b05463499de"
+					},
+					"ServiceId": {
+						"type": "string",
+						"defaultValue": "I0470"
+					}
+				},
+				"variables": {
+					"startIdx": {
+						"type": "String"
+					},
+					"endIdx": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "품질/외부/식품위해관리"
+				},
+				"annotations": [],
+				"lastPublishTime": "2022-12-15T11:46:34Z"
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_API_QUALITY_ADR_D_V2')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -11148,502 +11751,6 @@
 											{
 												"name": "Search_condition_copy3",
 												"type": "Lookup",
-												"dependsOn": [
-													{
-														"activity": "Copy data2",
-														"dependencyConditions": [
-															"Succeeded"
-														]
-													}
-												],
-												"policy": {
-													"timeout": "0.12:00:00",
-													"retry": 0,
-													"retryIntervalInSeconds": 30,
-													"secureOutput": false,
-													"secureInput": false
-												},
-												"userProperties": [],
-												"typeProperties": {
-													"source": {
-														"type": "AzurePostgreSqlSource",
-														"query": {
-															"value": "@item().delete_strategy",
-															"type": "Expression"
-														},
-														"partitionOption": "None",
-														"queryTimeout": "02:00:00"
-													},
-													"dataset": {
-														"referenceName": "DTS_POSTGRESQL_SNK",
-														"type": "DatasetReference",
-														"parameters": {
-															"SinkSchema": "1",
-															"SinkTable": "1"
-														}
-													},
-													"firstRowOnly": false
-												}
-											},
-											{
-												"name": "Search_condition_copy4",
-												"type": "Lookup",
-												"dependsOn": [
-													{
-														"activity": "Search_condition_copy3",
-														"dependencyConditions": [
-															"Succeeded"
-														]
-													}
-												],
-												"policy": {
-													"timeout": "0.12:00:00",
-													"retry": 0,
-													"retryIntervalInSeconds": 30,
-													"secureOutput": false,
-													"secureInput": false
-												},
-												"userProperties": [],
-												"typeProperties": {
-													"source": {
-														"type": "AzurePostgreSqlSource",
-														"query": {
-															"value": "update cd_meta.table_retention_policy set last_upd_dt = now() , is_active  = (case when '@{item().retention_value}' = '0' and '@{item().retention_unit}' = 'month' then false  else true  end) where policy_id = @{item().policy_id};\n\nselect 1 as success",
-															"type": "Expression"
-														},
-														"partitionOption": "None",
-														"queryTimeout": "02:00:00"
-													},
-													"dataset": {
-														"referenceName": "DTS_POSTGRESQL_SNK",
-														"type": "DatasetReference",
-														"parameters": {
-															"SinkSchema": "1",
-															"SinkTable": "1"
-														}
-													},
-													"firstRowOnly": false
-												}
-											}
-										]
-									}
-								}
-							]
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_meta"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "table_retention_policy"
-					}
-				},
-				"folder": {
-					"name": "Test"
-				},
-				"annotations": []
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_DATA_BACKUP_LKS_TEST')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "PG데이터 lake에 이동 및 테이블 데이터 삭제",
-				"activities": [
-					{
-						"name": "ForEach1",
-						"type": "ForEach",
-						"state": "Inactive",
-						"onInactiveMarkAs": "Succeeded",
-						"dependsOn": [],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Search_condition').output.value",
-								"type": "Expression"
-							},
-							"isSequential": true,
-							"activities": [
-								{
-									"name": "Copy data1",
-									"type": "Copy",
-									"dependsOn": [],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "AzurePostgreSqlSource",
-											"query": {
-												"value": "@item().select_query",
-												"type": "Expression"
-											},
-											"partitionOption": "None",
-											"queryTimeout": "02:00:00"
-										},
-										"sink": {
-											"type": "ParquetSink",
-											"storeSettings": {
-												"type": "AzureBlobFSWriteSettings"
-											},
-											"formatSettings": {
-												"type": "ParquetWriteSettings",
-												"maxRowsPerFile": 1000000,
-												"fileNamePrefix": {
-													"value": "@concat(item().table_name, '_', formatDateTime(utcNow(), 'yyyyMM'))",
-													"type": "Expression"
-												}
-											}
-										},
-										"enableStaging": false,
-										"translator": {
-											"type": "TabularTranslator",
-											"typeConversion": true,
-											"typeConversionSettings": {
-												"allowDataTruncation": true,
-												"treatBooleanAsNumber": false
-											}
-										}
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_POSTGRESQL_SNK",
-											"type": "DatasetReference",
-											"parameters": {
-												"SinkSchema": "1",
-												"SinkTable": "1"
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_DATA_BACKUP_PARQUET",
-											"type": "DatasetReference",
-											"parameters": {
-												"AdlsDirectory": {
-													"value": "@concat(item().lake_path_template,'/',item().schema_name,'/',item().table_name)",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								},
-								{
-									"name": "Search_condition_copy1",
-									"type": "Lookup",
-									"dependsOn": [
-										{
-											"activity": "Search_condition_copy1_copy1",
-											"dependencyConditions": [
-												"Succeeded"
-											]
-										}
-									],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "AzurePostgreSqlSource",
-											"query": {
-												"value": "update cd_meta.table_retention_policy set last_upd_dt = now() , is_active  = (case when '@{item().retention_value}' = '0' and '@{item().retention_unit}' = 'month' then false  else true  end) where policy_id = @{item().policy_id};\n\nselect 1 as success",
-												"type": "Expression"
-											},
-											"partitionOption": "None",
-											"queryTimeout": "02:00:00"
-										},
-										"dataset": {
-											"referenceName": "DTS_POSTGRESQL_SNK",
-											"type": "DatasetReference",
-											"parameters": {
-												"SinkSchema": "1",
-												"SinkTable": "1"
-											}
-										},
-										"firstRowOnly": false
-									}
-								},
-								{
-									"name": "Search_condition_copy1_copy1",
-									"type": "Lookup",
-									"state": "Inactive",
-									"onInactiveMarkAs": "Succeeded",
-									"dependsOn": [
-										{
-											"activity": "Copy data1",
-											"dependencyConditions": [
-												"Succeeded"
-											]
-										}
-									],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "AzurePostgreSqlSource",
-											"query": {
-												"value": "@item().delete_strategy",
-												"type": "Expression"
-											},
-											"partitionOption": "None",
-											"queryTimeout": "02:00:00"
-										},
-										"dataset": {
-											"referenceName": "DTS_POSTGRESQL_SNK",
-											"type": "DatasetReference",
-											"parameters": {
-												"SinkSchema": "1",
-												"SinkTable": "1"
-											}
-										},
-										"firstRowOnly": false
-									}
-								}
-							]
-						}
-					},
-					{
-						"name": "Search_condition",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "\nselect select_query,  \ncase when delete_strategy = 'delete' then delete_query||'; select 1 as success' \n     else drop_query||'; select 1 as success'  \n     end as delete_strategy, \npolicy_id, lake_container, lake_path_template, schema_name,table_name,  date_column_name, table_storage_type, file_format, retention_value, retention_unit, backup_required\nfrom ( \nselect format( \n    'select * from %I.%I where %I <= %s', \n    schema_name, \n    table_name, \n    date_column_name, \n    case \n        when date_column_type = 'timestamp' \n        then \n            format( \n                'now() - interval ''1 %s'' * %s ', \n                retention_unit, \n               case when retention_value = 0 then 0  \n               else retention_value + 1 end \n            ) \n        when date_column_type = 'yyyy-mm-dd' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yyyy-mm-dd'')', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n        when date_column_type = 'yymm' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yymm'')', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n     when date_column_type = 'yyyymmdd' and retention_unit = 'year' \n\t  then format( \n\t      'to_char(date_trunc(''year'', current_date - interval ''%s %s'') - interval ''1 day'', ''yyyymmdd'')', \n\t      retention_value, \n\t      retention_unit \n\t  ) \n\t       when date_column_type = 'yyyymm' and retention_unit = 'year' \n\t  then format( \n\t      'to_char(date_trunc(''year'', current_date - interval ''%s %s'') - interval ''1 day'', ''yyyymm'')', \n\t      retention_value, \n\t      retention_unit \n\t  ) \n         when date_column_type = 'yyyymmdd' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yyyymmdd'')', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n         when date_column_type = 'yyyymm' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yyyymm'')', \n               case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n        when date_column_type = 'week' and date_column_name = 'per_tag'\n        then  \n\t        format(\n\t        '(select a.%s from %I.%I a order by %s desc limit 1 )',\n    \t\tdate_column_name,\n\t        schema_name, \n\t\t    table_name, \n\t\t    date_column_name\n\t\t)\n        else \n            format( \n                'current_date - interval ''%s %s''', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n            ) \n    end \n) as select_query, \nformat( \n    'delete from %I.%I where %I <= %s', \n    schema_name, \n    table_name, \n    date_column_name, \n    case \n        when date_column_type = 'timestamp' \n        then \n            format( \n                'now() - interval ''1 %s'' * %s', \n                retention_unit, \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end \n            ) \n        when date_column_type = 'yyyy-mm-dd' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yyyy-mm-dd'')', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n          when date_column_type = 'yymm' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yymm'')', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n\t\twhen date_column_type = 'yyyymmdd' and retention_unit = 'year' \n\t\t  then format( \n\t\t      'to_char(date_trunc(''year'', current_date - interval ''%s %s'') - interval ''1 day'', ''yyyymmdd'')', \n\t\t      retention_value, \n\t\t      retention_unit \n\t\t  ) \n\t\t       when date_column_type = 'yyyymm' and retention_unit = 'year' \n\t\t  then format( \n\t\t      'to_char(date_trunc(''year'', current_date - interval ''%s %s'') - interval ''1 day'', ''yyyymm'')', \n\t\t      retention_value, \n\t\t      retention_unit \n\t\t  )\n         when date_column_type = 'yyyymmdd' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yyyymmdd'')', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n      when date_column_type = 'yyyymm' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yyyymm'')', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n        when date_column_type = 'week' and date_column_name = 'per_tag'\n        then  \n\t        format(\n\t        '(select a.%s from %I.%I a order by %s desc limit 1 )',\n    \t\tdate_column_name,\n\t        schema_name, \n\t\t    table_name, \n\t\t    date_column_name\n\t\t)\n        else \n            format( \n                'current_date - interval ''%s %s''', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n            ) \n    end \n) as delete_query, \nformat( \n    'drop table %I.%I_%s', \n    schema_name, \n    table_name, \n    (select  to_char(now() - interval '1 month' * (retention_value +1),'YYMM') \n    )        \n) as drop_query, \npolicy_id, lake_container, lake_path_template, schema_name,table_name,  date_column_name, table_storage_type, delete_strategy,file_format , retention_value, retention_unit, backup_required \nfrom cd_meta.table_retention_policy \nwhere 1=1 \nand is_active = true \n)",
-									"type": "Expression"
-								},
-								"partitionOption": "None",
-								"queryTimeout": "02:00:00"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": {
-										"value": "@pipeline().parameters.SinkSchema",
-										"type": "Expression"
-									},
-									"SinkTable": {
-										"value": "@pipeline().parameters.SinkTable",
-										"type": "Expression"
-									}
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1_copy2_copy1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Search_condition",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Search_condition').output.value",
-								"type": "Expression"
-							},
-							"isSequential": true,
-							"activities": [
-								{
-									"name": "If Condition2",
-									"type": "IfCondition",
-									"dependsOn": [],
-									"userProperties": [],
-									"typeProperties": {
-										"expression": {
-											"value": "@equals(item().backup_required, 'Y')",
-											"type": "Expression"
-										},
-										"ifFalseActivities": [
-											{
-												"name": "Search_condition_copy5",
-												"type": "Lookup",
-												"state": "Inactive",
-												"onInactiveMarkAs": "Succeeded",
-												"dependsOn": [],
-												"policy": {
-													"timeout": "0.12:00:00",
-													"retry": 0,
-													"retryIntervalInSeconds": 30,
-													"secureOutput": false,
-													"secureInput": false
-												},
-												"userProperties": [],
-												"typeProperties": {
-													"source": {
-														"type": "AzurePostgreSqlSource",
-														"query": {
-															"value": "@item().delete_strategy",
-															"type": "Expression"
-														},
-														"partitionOption": "None",
-														"queryTimeout": "02:00:00"
-													},
-													"dataset": {
-														"referenceName": "DTS_POSTGRESQL_SNK",
-														"type": "DatasetReference",
-														"parameters": {
-															"SinkSchema": "1",
-															"SinkTable": "1"
-														}
-													},
-													"firstRowOnly": false
-												}
-											},
-											{
-												"name": "Search_condition_copy6",
-												"type": "Lookup",
-												"dependsOn": [
-													{
-														"activity": "Search_condition_copy5",
-														"dependencyConditions": [
-															"Succeeded"
-														]
-													}
-												],
-												"policy": {
-													"timeout": "0.12:00:00",
-													"retry": 0,
-													"retryIntervalInSeconds": 30,
-													"secureOutput": false,
-													"secureInput": false
-												},
-												"userProperties": [],
-												"typeProperties": {
-													"source": {
-														"type": "AzurePostgreSqlSource",
-														"query": {
-															"value": "update cd_meta.table_retention_policy set last_upd_dt = now() , is_active  = (case when '@{item().retention_value}' = '0' and '@{item().retention_unit}' = 'month' then false  else true  end) where policy_id = @{item().policy_id};\n\nselect 1 as success",
-															"type": "Expression"
-														},
-														"partitionOption": "None",
-														"queryTimeout": "02:00:00"
-													},
-													"dataset": {
-														"referenceName": "DTS_POSTGRESQL_SNK",
-														"type": "DatasetReference",
-														"parameters": {
-															"SinkSchema": "1",
-															"SinkTable": "1"
-														}
-													},
-													"firstRowOnly": false
-												}
-											}
-										],
-										"ifTrueActivities": [
-											{
-												"name": "Copy data2",
-												"type": "Copy",
-												"dependsOn": [],
-												"policy": {
-													"timeout": "0.12:00:00",
-													"retry": 0,
-													"retryIntervalInSeconds": 30,
-													"secureOutput": false,
-													"secureInput": false
-												},
-												"userProperties": [],
-												"typeProperties": {
-													"source": {
-														"type": "AzurePostgreSqlSource",
-														"query": {
-															"value": "@item().select_query",
-															"type": "Expression"
-														},
-														"partitionOption": "None",
-														"queryTimeout": "02:00:00"
-													},
-													"sink": {
-														"type": "ParquetSink",
-														"storeSettings": {
-															"type": "AzureBlobFSWriteSettings"
-														},
-														"formatSettings": {
-															"type": "ParquetWriteSettings",
-															"maxRowsPerFile": 1000000,
-															"fileNamePrefix": {
-																"value": "@concat(item().table_name, '_', formatDateTime(utcNow(), 'yyyyMM'))",
-																"type": "Expression"
-															}
-														}
-													},
-													"enableStaging": false,
-													"translator": {
-														"type": "TabularTranslator",
-														"typeConversion": true,
-														"typeConversionSettings": {
-															"allowDataTruncation": true,
-															"treatBooleanAsNumber": false
-														}
-													}
-												},
-												"inputs": [
-													{
-														"referenceName": "DTS_POSTGRESQL_SNK",
-														"type": "DatasetReference",
-														"parameters": {
-															"SinkSchema": "1",
-															"SinkTable": "1"
-														}
-													}
-												],
-												"outputs": [
-													{
-														"referenceName": "DTS_DATA_BACKUP_PARQUET",
-														"type": "DatasetReference",
-														"parameters": {
-															"AdlsDirectory": "@concat(item().lake_path_template,'/',item().schema_name,'/',item().table_name)"
-														}
-													}
-												]
-											},
-											{
-												"name": "Search_condition_copy3",
-												"type": "Lookup",
-												"state": "Inactive",
-												"onInactiveMarkAs": "Succeeded",
 												"dependsOn": [
 													{
 														"activity": "Copy data2",
