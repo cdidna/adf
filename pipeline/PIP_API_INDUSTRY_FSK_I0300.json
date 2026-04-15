@@ -105,7 +105,7 @@
 				"userProperties": [],
 				"typeProperties": {
 					"expression": {
-						"value": "@and(less(variables('copyCount'), 1000), equals(variables('cnt'), 0))",
+						"value": "@or(less(variables('copyCount'), 1000),greater(variables('cnt'),0 ))",
 						"type": "Expression"
 					},
 					"activities": [
@@ -149,7 +149,7 @@
 								"source": {
 									"type": "AzurePostgreSqlSource",
 									"query": {
-										"value": "select case when coalesce (max(cast(st as numeric)), 0) = 0 then 1\n            else coalesce (max(cast(st as numeric)), 0) + 1000\n            end as st\n            ,\n        case when coalesce (max(cast(ed as numeric)), 0) = 0 then 1000\n            else coalesce (max(cast(ed as numeric)), 0) + 1000\n            end as ed\nfrom cd_ods.tb_fsk_i0300\nwhere EVL_YR = '@{variables('yyyy')}'",
+										"value": "with year_data as (\n    select \n        count(*) as year_cnt,\n        coalesce(max(cast(st as numeric)), 0) as max_st,\n        coalesce(max(cast(ed as numeric)), 0) as max_ed\n    from cd_ods.tb_fsk_i0300\n    where evl_yr = '@{variables('yyyy')}'\n),\ntoday_data as (\n    select count(*) as today_cnt\n    from cd_ods.tb_fsk_i0300\n    where evl_yr = to_char(now(), 'yyyy')\n      and if_date >= date_trunc('day', now())\n      and if_date < date_trunc('day', now()) + interval '1 day'\n)\nselect\n    case\n        when y.year_cnt = 0 then 1  \n        when t.today_cnt = 0 then 0      \n        when y.max_st = 0 then 1\n        else y.max_st + 1000\n    end as st,\n    case\n        when y.year_cnt = 0 then 1000     \n        when t.today_cnt = 0 then 0     \n        when y.max_ed = 0 then 1000\n        else y.max_ed + 1000\n    end as ed\nfrom year_data y\ncross join today_data t",
 										"type": "Expression"
 									},
 									"partitionOption": "None",
