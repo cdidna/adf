@@ -7,14 +7,7 @@
 				"name": "set strdt",
 				"description": "당일자",
 				"type": "SetVariable",
-				"dependsOn": [
-					{
-						"activity": "Lookup2",
-						"dependencyConditions": [
-							"Succeeded"
-						]
-					}
-				],
+				"dependsOn": [],
 				"policy": {
 					"secureOutput": false,
 					"secureInput": false
@@ -23,70 +16,7 @@
 				"typeProperties": {
 					"variableName": "yyyy",
 					"value": {
-						"value": "@activity('Lookup2').output.firstRow.yyyy",
-						"type": "Expression"
-					}
-				}
-			},
-			{
-				"name": "Lookup2",
-				"type": "Lookup",
-				"dependsOn": [],
-				"policy": {
-					"timeout": "0.12:00:00",
-					"retry": 5,
-					"retryIntervalInSeconds": 30,
-					"secureOutput": false,
-					"secureInput": false
-				},
-				"userProperties": [],
-				"typeProperties": {
-					"source": {
-						"type": "AzurePostgreSqlSource",
-						"query": {
-							"value": "select count(*) as cnt, to_char(now() - interval '1 year','yyyy') as yyyy  from @{pipeline().parameters.SinkSchema}.@{pipeline().parameters.SinkTable}\nwhere evl_yr  = to_char(now() - interval '1 year','yyyy')",
-							"type": "Expression"
-						},
-						"partitionOption": "None",
-						"queryTimeout": "02:00:00"
-					},
-					"dataset": {
-						"referenceName": "DTS_POSTGRESQL_SNK",
-						"type": "DatasetReference",
-						"parameters": {
-							"SinkSchema": {
-								"value": "@pipeline().parameters.SinkSchema",
-								"type": "Expression"
-							},
-							"SinkTable": {
-								"value": "@pipeline().parameters.SinkTable",
-								"type": "Expression"
-							}
-						}
-					}
-				}
-			},
-			{
-				"name": "set cnt",
-				"description": "전년도 카운",
-				"type": "SetVariable",
-				"dependsOn": [
-					{
-						"activity": "Lookup2",
-						"dependencyConditions": [
-							"Succeeded"
-						]
-					}
-				],
-				"policy": {
-					"secureOutput": false,
-					"secureInput": false
-				},
-				"userProperties": [],
-				"typeProperties": {
-					"variableName": "cnt",
-					"value": {
-						"value": "@activity('Lookup2').output.firstRow.cnt",
+						"value": "@formatDateTime(adddays(utcNow(), -365), 'yyyy')",
 						"type": "Expression"
 					}
 				}
@@ -96,7 +26,7 @@
 				"type": "Until",
 				"dependsOn": [
 					{
-						"activity": "set cnt",
+						"activity": "Lookup2_copy1",
 						"dependencyConditions": [
 							"Succeeded"
 						]
@@ -105,7 +35,7 @@
 				"userProperties": [],
 				"typeProperties": {
 					"expression": {
-						"value": "@or(less(variables('copyCount'), 1000),greater(variables('cnt'),0 ))",
+						"value": "@less(variables('copyCount'), 1000)",
 						"type": "Expression"
 					},
 					"activities": [
@@ -149,7 +79,7 @@
 								"source": {
 									"type": "AzurePostgreSqlSource",
 									"query": {
-										"value": "with year_data as (\n    select \n        count(*) as year_cnt,\n        coalesce(max(cast(st as numeric)), 0) as max_st,\n        coalesce(max(cast(ed as numeric)), 0) as max_ed\n    from cd_ods.tb_fsk_i0300\n    where evl_yr = '@{variables('yyyy')}'\n),\ntoday_data as (\n    select count(*) as today_cnt\n    from cd_ods.tb_fsk_i0300\n    where evl_yr = to_char(now(), 'yyyy')\n      and if_date >= date_trunc('day', now())\n      and if_date < date_trunc('day', now()) + interval '1 day'\n)\nselect\n    case\n        when y.year_cnt = 0 then 1  \n        when t.today_cnt = 0 then 0      \n        when y.max_st = 0 then 1\n        else y.max_st + 1000\n    end as st,\n    case\n        when y.year_cnt = 0 then 1000     \n        when t.today_cnt = 0 then 0     \n        when y.max_ed = 0 then 1000\n        else y.max_ed + 1000\n    end as ed\nfrom year_data y\ncross join today_data t",
+										"value": "with year_data as (\n    select \n        count(*) as year_cnt,\n        coalesce(max(cast(st as numeric)), 0) as max_st,\n        coalesce(max(cast(ed as numeric)), 0) as max_ed\n    from cd_ods.tb_fsk_i0300_temp\n    where evl_yr = '@{variables('yyyy')}'\n),\ntoday_data as (\n    select count(*) as today_cnt\n    from cd_ods.tb_fsk_i0300_temp\n    where evl_yr = to_char(now(), 'yyyy')\n      and if_date >= date_trunc('day', now())\n      and if_date < date_trunc('day', now()) + interval '1 day'\n)\nselect\n    case\n        when y.year_cnt = 0 then 1  \n        when t.today_cnt = 0 then 0      \n        when y.max_st = 0 then 1\n        else y.max_st + 1000\n    end as st,\n    case\n        when y.year_cnt = 0 then 1000     \n        when t.today_cnt = 0 then 0     \n        when y.max_ed = 0 then 1000\n        else y.max_ed + 1000\n    end as ed\nfrom year_data y\ncross join today_data t",
 										"type": "Expression"
 									},
 									"partitionOption": "None",
@@ -357,6 +287,96 @@
 					],
 					"timeout": "0.12:00:00"
 				}
+			},
+			{
+				"name": "Lookup2_copy1",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "set strdt",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 5,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "truncate table cd_ods.tb_fsk_i0300_temp;\n\nselect 1 as success",
+							"type": "Expression"
+						},
+						"partitionOption": "None",
+						"queryTimeout": "02:00:00"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": {
+								"value": "@pipeline().parameters.SinkSchema",
+								"type": "Expression"
+							},
+							"SinkTable": {
+								"value": "@pipeline().parameters.SinkTable",
+								"type": "Expression"
+							}
+						}
+					}
+				}
+			},
+			{
+				"name": "Lookup2_copy1_copy1",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "Until1",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 5,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "delete from cd_ods.tb_fsk_i0300 where evl_yr  = '@{variables('yyyy')}';\n\ninsert into cd_ods.tb_fsk_i0300 select * from cd_ods.tb_fsk_i0300_temp where evl_yr  = '@{variables('yyyy')}';\n\nselect 1 as success",
+							"type": "Expression"
+						},
+						"partitionOption": "None",
+						"queryTimeout": "02:00:00"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": {
+								"value": "@pipeline().parameters.SinkSchema",
+								"type": "Expression"
+							},
+							"SinkTable": {
+								"value": "@pipeline().parameters.SinkTable",
+								"type": "Expression"
+							}
+						}
+					}
+				}
 			}
 		],
 		"parameters": {
@@ -366,7 +386,7 @@
 			},
 			"SinkTable": {
 				"type": "string",
-				"defaultValue": "tb_fsk_I0300"
+				"defaultValue": "tb_fsk_i0300_temp"
 			}
 		},
 		"variables": {
