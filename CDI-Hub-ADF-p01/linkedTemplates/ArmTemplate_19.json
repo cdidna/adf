@@ -13,281 +13,6 @@
 	},
 	"resources": [
 		{
-			"name": "[concat(parameters('factoryName'), '/PIP_API_CUSTOMER_TOPKEYWORD_INSTA')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "소셜 고객 의견 데이터 Top키워드 블로그",
-				"activities": [
-					{
-						"name": "API REQ INFO",
-						"description": "API 호출 정보를 가져오기 위해 설정 파일에서 Date을 읽어옵니다.",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "7.00:00:00",
-							"retry": 0,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "DelimitedTextSource",
-								"storeSettings": {
-									"type": "AzureBlobFSReadSettings",
-									"recursive": true,
-									"enablePartitionDiscovery": false
-								},
-								"formatSettings": {
-									"type": "DelimitedTextReadSettings"
-								}
-							},
-							"dataset": {
-								"referenceName": "DTS_ADLS_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"AdlsDirectory": {
-										"value": "@pipeline().parameters.AdlsDirectoryConf",
-										"type": "Expression"
-									},
-									"FileName": {
-										"value": "@concat(pipeline().parameters.ConfFile,'.csv')",
-										"type": "Expression"
-									}
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach Copy data",
-						"description": "cdi-root / 고객/외부/Top키워드/블로그 위치에 항목별로 복사합니다.",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "API REQ INFO",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('API REQ INFO').output.value",
-								"type": "Expression"
-							},
-							"isSequential": true,
-							"activities": [
-								{
-									"name": "API REQ",
-									"description": "각 API 호출",
-									"type": "Copy",
-									"dependsOn": [],
-									"policy": {
-										"timeout": "7.00:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "BinarySource",
-											"storeSettings": {
-												"type": "HttpReadSettings",
-												"requestMethod": "GET"
-											},
-											"formatSettings": {
-												"type": "BinaryReadSettings"
-											}
-										},
-										"sink": {
-											"type": "BinarySink",
-											"storeSettings": {
-												"type": "AzureBlobFSWriteSettings",
-												"maxConcurrentConnections": 1,
-												"copyBehavior": "FlattenHierarchy"
-											}
-										},
-										"enableStaging": false
-									},
-									"inputs": [
-										{
-											"referenceName": "CUSTOMER_OPINION_JsonGz",
-											"type": "DatasetReference",
-											"parameters": {
-												"channel": {
-													"value": "@pipeline().parameters.Channel",
-													"type": "Expression"
-												},
-												"date": {
-													"value": "@formatDateTime(addDays(addHours(utcNow(), 9),int(item().date)),'yyyyMMdd')",
-													"type": "Expression"
-												},
-												"authkey": {
-													"value": "@pipeline().parameters.Apikey",
-													"type": "Expression"
-												},
-												"category1": {
-													"value": "@pipeline().parameters.Category1",
-													"type": "Expression"
-												},
-												"category2": {
-													"value": "@pipeline().parameters.Category2",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_ADLS_SNK_BINARYGz_P01",
-											"type": "DatasetReference",
-											"parameters": {
-												"AdlsDirectory": {
-													"value": "@concat(pipeline().parameters.AdlsDirectory,'/원본')",
-													"type": "Expression"
-												},
-												"FileName": {
-													"value": "@concat(pipeline().parameters.FileName,'_',formatDateTime(addDays(addHours(utcNow(), 9),int(item().date)),'yyyyMMdd'), '.json')",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								},
-								{
-									"name": "Copy data",
-									"description": "데이터 이관",
-									"type": "Copy",
-									"dependsOn": [
-										{
-											"activity": "API REQ",
-											"dependencyConditions": [
-												"Succeeded"
-											]
-										}
-									],
-									"policy": {
-										"timeout": "0.12:00:00",
-										"retry": 0,
-										"retryIntervalInSeconds": 30,
-										"secureOutput": false,
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"source": {
-											"type": "JsonSource",
-											"storeSettings": {
-												"type": "AzureBlobFSReadSettings",
-												"recursive": true,
-												"enablePartitionDiscovery": false
-											},
-											"formatSettings": {
-												"type": "JsonReadSettings"
-											}
-										},
-										"sink": {
-											"type": "DelimitedTextSink",
-											"storeSettings": {
-												"type": "AzureBlobFSWriteSettings"
-											},
-											"formatSettings": {
-												"type": "DelimitedTextWriteSettings",
-												"quoteAllText": true,
-												"fileExtension": ".txt"
-											}
-										},
-										"enableStaging": false
-									},
-									"inputs": [
-										{
-											"referenceName": "DTS_ADLS_JSON_SRC_P1",
-											"type": "DatasetReference",
-											"parameters": {
-												"AdlsDirectory": {
-													"value": "@concat(pipeline().parameters.AdlsDirectory,'/원본')",
-													"type": "Expression"
-												},
-												"FileName": {
-													"value": "@concat(pipeline().parameters.FileName,'_',formatDateTime(addDays(addHours(utcNow(), 9),int(item().date)),'yyyyMMdd'), '.json')",
-													"type": "Expression"
-												}
-											}
-										}
-									],
-									"outputs": [
-										{
-											"referenceName": "DTS_ADLS_SNK",
-											"type": "DatasetReference",
-											"parameters": {
-												"AdlsDirectory": {
-													"value": "@concat(pipeline().parameters.AdlsDirectory,'/',formatDateTime(addDays(addHours(utcNow(), 9),int(item().date)),'yyyyMM'))",
-													"type": "Expression"
-												},
-												"FileName": {
-													"value": "@concat(pipeline().parameters.FileName,'_',formatDateTime(addDays(addHours(utcNow(), 9),int(item().date)),'yyyyMMdd'), '.csv')",
-													"type": "Expression"
-												}
-											}
-										}
-									]
-								}
-							]
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"AdlsDirectory": {
-						"type": "string",
-						"defaultValue": "고객/외부/Top키워드/인스타"
-					},
-					"FileName": {
-						"type": "string",
-						"defaultValue": "Top키워드_인스"
-					},
-					"AdlsDirectoryConf": {
-						"type": "string",
-						"defaultValue": "고객/외부/Top키워드/conf"
-					},
-					"ConfFile": {
-						"type": "string",
-						"defaultValue": "Top키워드_INSTA_conf"
-					},
-					"Apikey": {
-						"type": "string",
-						"defaultValue": "50151fed78146d9974fc10b335738ef395cc6d0c20998505442c7d1c75642242"
-					},
-					"Channel": {
-						"type": "string",
-						"defaultValue": "ko.insta"
-					},
-					"Category1": {
-						"type": "string",
-						"defaultValue": "top_keyword"
-					},
-					"Category2": {
-						"type": "string",
-						"defaultValue": "TOP_KEYWORD"
-					}
-				},
-				"folder": {
-					"name": "고객/외부/Top키워드"
-				},
-				"annotations": [],
-				"lastPublishTime": "2022-12-15T13:28:38Z"
-			},
-			"dependsOn": []
-		},
-		{
 			"name": "[concat(parameters('factoryName'), '/PIP_API_CUSTOMER_TOPKEYWORD_INSTA_M')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -5429,6 +5154,316 @@
 											"parameters": {
 												"SinkSchema": "cd_ods",
 												"SinkTable": "tb_hash_amazon_t"
+											}
+										}
+									}
+								}
+							],
+							"timeout": "0.12:00:00"
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"variables": {
+					"copyCount": {
+						"type": "Integer"
+					}
+				},
+				"folder": {
+					"name": "Industry/외부/해시스크래퍼"
+				},
+				"annotations": []
+			},
+			"dependsOn": []
+		},
+		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_HASHSCRAPER_AMAZON_REVIEW')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Until1",
+						"type": "Until",
+						"dependsOn": [],
+						"userProperties": [],
+						"typeProperties": {
+							"expression": {
+								"value": "@lessOrEquals(variables('copyCount'),99 )\n",
+								"type": "Expression"
+							},
+							"activities": [
+								{
+									"name": "Copy data1_copy1",
+									"type": "Copy",
+									"dependsOn": [
+										{
+											"activity": "Lookup1",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "JsonSource",
+											"storeSettings": {
+												"type": "HttpReadSettings",
+												"requestMethod": "POST",
+												"additionalHeaders": {
+													"value": "Content-Type: application/json; version=3",
+													"type": "Expression"
+												},
+												"requestBody": {
+													"value": "{\"api_key\": \"d7937c81efbbec118ee8dbc18923d61a\", \"schedule_id\": \"ds_amazon_review\", \"next_id\" : \"@{activity('Lookup1').output.firstRow.nxt_id}\"}",
+													"type": "Expression"
+												},
+												"requestTimeout": ""
+											},
+											"formatSettings": {
+												"type": "JsonReadSettings"
+											}
+										},
+										"sink": {
+											"type": "AzurePostgreSqlSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"path": "[['id']"
+													},
+													"sink": {
+														"name": "id",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['schedule_result_id']"
+													},
+													"sink": {
+														"name": "schedule_result_id",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['created_at']"
+													},
+													"sink": {
+														"name": "created_at",
+														"type": "DateTime"
+													}
+												},
+												{
+													"source": {
+														"path": "[['채널']"
+													},
+													"sink": {
+														"name": "channel",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['제품 상세페이지 URL']"
+													},
+													"sink": {
+														"name": "product_detail_page_url",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['제품명']"
+													},
+													"sink": {
+														"name": "product_name",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['총 리뷰 개수']"
+													},
+													"sink": {
+														"name": "total_review_count",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['평점']"
+													},
+													"sink": {
+														"name": "overall_rating",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['리뷰 제목']"
+													},
+													"sink": {
+														"name": "review_title",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['리뷰 작성자']"
+													},
+													"sink": {
+														"name": "review_author",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['리뷰 날짜']"
+													},
+													"sink": {
+														"name": "review_date",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['리뷰 국가']"
+													},
+													"sink": {
+														"name": "review_country",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['리뷰 평점']"
+													},
+													"sink": {
+														"name": "review_rating",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['구매 옵션']"
+													},
+													"sink": {
+														"name": "purchase_options",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['리뷰 원문']"
+													},
+													"sink": {
+														"name": "review_text",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['이미지 URLs']"
+													},
+													"sink": {
+														"name": "image_urls",
+														"type": "String"
+													}
+												}
+											],
+											"collectionReference": "$['data']"
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_API_HASHSCRAPER",
+											"type": "DatasetReference",
+											"parameters": {
+												"url": {
+													"value": "@concat('api/get_results_of_schedule')",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": "cd_ods",
+												"SinkTable": "tb_hash_amazon_review_t"
+											}
+										}
+									]
+								},
+								{
+									"name": "Set variable1",
+									"type": "SetVariable",
+									"dependsOn": [
+										{
+											"activity": "Copy data1_copy1",
+											"dependencyConditions": [
+												"Succeeded"
+											]
+										}
+									],
+									"policy": {
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"variableName": "copyCount",
+										"value": {
+											"value": "@activity('Copy data1_copy1').output.rowsCopied",
+											"type": "Expression"
+										}
+									}
+								},
+								{
+									"name": "Lookup1",
+									"type": "Lookup",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 0,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "AzurePostgreSqlSource",
+											"query": "select coalesce (max(id::numeric), 0) as nxt_id from cd_ods.tb_hash_amazon_review_t;",
+											"partitionOption": "None",
+											"queryTimeout": "02:00:00"
+										},
+										"dataset": {
+											"referenceName": "DTS_POSTGRESQL_SNK",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": "cd_ods",
+												"SinkTable": "tb_hash_amazon_review_t"
 											}
 										}
 									}
