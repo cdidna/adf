@@ -3,8 +3,8 @@
 	"properties": {
 		"activities": [
 			{
-				"name": "Copy data1",
-				"type": "Copy",
+				"name": "Lookup1",
+				"type": "Lookup",
 				"dependsOn": [],
 				"policy": {
 					"timeout": "0.12:00:00",
@@ -17,161 +17,241 @@
 				"typeProperties": {
 					"source": {
 						"type": "AzurePostgreSqlSource",
-						"query": {
-							"value": "SELECT *\n    FROM cd_ods.tb_sf_bluesis_ext_send_dalpha\n    WHERE yymm = to_char(now(), 'yymm')",
-							"type": "Expression"
-						},
+						"query": "select count(*) as bluesis_cnt from days.tb_sf_bluesis_ext_send_dalpha where yymm = to_char(now(), 'yymm')",
 						"partitionOption": "None",
 						"queryTimeout": "02:00:00"
 					},
-					"sink": {
-						"type": "AzurePostgreSqlSink",
-						"writeBatchSize": 1000000,
-						"writeBatchTimeout": "00:30:00",
-						"writeMethod": "CopyCommand"
-					},
-					"enableStaging": false,
-					"translator": {
-						"type": "TabularTranslator",
-						"mappings": [
-							{
-								"source": {
-									"name": "yymm",
-									"type": "String",
-									"physicalType": "text"
-								},
-								"sink": {
-									"name": "yymm",
-									"type": "String",
-									"physicalType": "text"
-								}
-							},
-							{
-								"source": {
-									"name": "brname",
-									"type": "String",
-									"physicalType": "text"
-								},
-								"sink": {
-									"name": "brname",
-									"type": "String",
-									"physicalType": "text"
-								}
-							},
-							{
-								"source": {
-									"name": "pname",
-									"type": "String",
-									"physicalType": "text"
-								},
-								"sink": {
-									"name": "pname",
-									"type": "String",
-									"physicalType": "text"
-								}
-							},
-							{
-								"source": {
-									"name": "pstand",
-									"type": "String",
-									"physicalType": "text"
-								},
-								"sink": {
-									"name": "pstand",
-									"type": "String",
-									"physicalType": "text"
-								}
-							},
-							{
-								"source": {
-									"name": "pexpl",
-									"type": "String",
-									"physicalType": "text"
-								},
-								"sink": {
-									"name": "pexpl",
-									"type": "String",
-									"physicalType": "text"
-								}
-							},
-							{
-								"source": {
-									"name": "porg",
-									"type": "String",
-									"physicalType": "text"
-								},
-								"sink": {
-									"name": "porg",
-									"type": "String",
-									"physicalType": "text"
-								}
-							},
-							{
-								"source": {
-									"name": "pdnote",
-									"type": "String",
-									"physicalType": "text"
-								},
-								"sink": {
-									"name": "pdnote",
-									"type": "String",
-									"physicalType": "text"
-								}
-							},
-							{
-								"source": {
-									"name": "punit",
-									"type": "String",
-									"physicalType": "text"
-								},
-								"sink": {
-									"name": "punit",
-									"type": "String",
-									"physicalType": "text"
-								}
-							},
-							{
-								"source": {
-									"name": "send_dt",
-									"type": "String",
-									"physicalType": "text"
-								},
-								"sink": {
-									"name": "send_dt",
-									"type": "String",
-									"physicalType": "text"
-								}
-							}
-						],
-						"typeConversion": true,
-						"typeConversionSettings": {
-							"allowDataTruncation": true,
-							"treatBooleanAsNumber": false
-						}
-					}
-				},
-				"inputs": [
-					{
-						"referenceName": "DTS_POSTGRESQL_SNK",
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK_AWS_COMMON",
 						"type": "DatasetReference",
 						"parameters": {
 							"SinkSchema": "1",
 							"SinkTable": "1"
 						}
 					}
-				],
-				"outputs": [
+				}
+			},
+			{
+				"name": "Set variable1",
+				"type": "SetVariable",
+				"dependsOn": [
 					{
-						"referenceName": "DTS_POSTGRESQL_SNK_AWS_COMMON",
-						"type": "DatasetReference",
-						"parameters": {
-							"SinkSchema": "days",
-							"SinkTable": "tb_sf_bluesis_ext_send_dalpha"
-						}
+						"activity": "Lookup1",
+						"dependencyConditions": [
+							"Succeeded"
+						]
 					}
-				]
+				],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "bluesis_cnt",
+					"value": {
+						"value": "@activity('Lookup1').output.firstRow.bluesis_cnt",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "If Condition1",
+				"type": "IfCondition",
+				"dependsOn": [
+					{
+						"activity": "Set variable1",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"expression": {
+						"value": "@equals(variables('bluesis_cnt'), 0)",
+						"type": "Expression"
+					},
+					"ifTrueActivities": [
+						{
+							"name": "Copy data1",
+							"type": "Copy",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzurePostgreSqlSource",
+									"query": {
+										"value": "SELECT *\n    FROM cd_ods.tb_sf_bluesis_ext_send_dalpha\n    WHERE yymm = to_char(now(), 'yymm')",
+										"type": "Expression"
+									},
+									"partitionOption": "None",
+									"queryTimeout": "02:00:00"
+								},
+								"sink": {
+									"type": "AzurePostgreSqlSink",
+									"writeBatchSize": 1000000,
+									"writeBatchTimeout": "00:30:00",
+									"writeMethod": "CopyCommand"
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"mappings": [
+										{
+											"source": {
+												"name": "yymm",
+												"type": "String",
+												"physicalType": "text"
+											},
+											"sink": {
+												"name": "yymm",
+												"type": "String",
+												"physicalType": "text"
+											}
+										},
+										{
+											"source": {
+												"name": "brname",
+												"type": "String",
+												"physicalType": "text"
+											},
+											"sink": {
+												"name": "brname",
+												"type": "String",
+												"physicalType": "text"
+											}
+										},
+										{
+											"source": {
+												"name": "pname",
+												"type": "String",
+												"physicalType": "text"
+											},
+											"sink": {
+												"name": "pname",
+												"type": "String",
+												"physicalType": "text"
+											}
+										},
+										{
+											"source": {
+												"name": "pstand",
+												"type": "String",
+												"physicalType": "text"
+											},
+											"sink": {
+												"name": "pstand",
+												"type": "String",
+												"physicalType": "text"
+											}
+										},
+										{
+											"source": {
+												"name": "pexpl",
+												"type": "String",
+												"physicalType": "text"
+											},
+											"sink": {
+												"name": "pexpl",
+												"type": "String",
+												"physicalType": "text"
+											}
+										},
+										{
+											"source": {
+												"name": "porg",
+												"type": "String",
+												"physicalType": "text"
+											},
+											"sink": {
+												"name": "porg",
+												"type": "String",
+												"physicalType": "text"
+											}
+										},
+										{
+											"source": {
+												"name": "pdnote",
+												"type": "String",
+												"physicalType": "text"
+											},
+											"sink": {
+												"name": "pdnote",
+												"type": "String",
+												"physicalType": "text"
+											}
+										},
+										{
+											"source": {
+												"name": "punit",
+												"type": "String",
+												"physicalType": "text"
+											},
+											"sink": {
+												"name": "punit",
+												"type": "String",
+												"physicalType": "text"
+											}
+										},
+										{
+											"source": {
+												"name": "send_dt",
+												"type": "String",
+												"physicalType": "text"
+											},
+											"sink": {
+												"name": "send_dt",
+												"type": "String",
+												"physicalType": "text"
+											}
+										}
+									],
+									"typeConversion": true,
+									"typeConversionSettings": {
+										"allowDataTruncation": true,
+										"treatBooleanAsNumber": false
+									}
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "DTS_POSTGRESQL_SNK",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": "1",
+										"SinkTable": "1"
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "DTS_POSTGRESQL_SNK_AWS_COMMON",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": "days",
+										"SinkTable": "tb_sf_bluesis_ext_send_dalpha"
+									}
+								}
+							]
+						}
+					]
+				}
 			}
 		],
+		"variables": {
+			"bluesis_cnt": {
+				"type": "Integer",
+				"defaultValue": 0
+			}
+		},
 		"folder": {
 			"name": "Industry/외부/학교급식"
 		},
