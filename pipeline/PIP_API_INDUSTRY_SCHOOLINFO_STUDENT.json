@@ -1,0 +1,251 @@
+{
+	"name": "PIP_API_INDUSTRY_SCHOOLINFO_STUDENT",
+	"properties": {
+		"activities": [
+			{
+				"name": "Lookup2",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": "SELECT\n    a.sidocode,\n    a.sggcode,\n    b.schulKndCode\nFROM cd_ods.tb_sn_schoolinfo_area_master a\nCROSS JOIN LATERAL (\n    SELECT unnest(ARRAY[\n        '02','03','04','05','06','07'\n    ]) AS schulKndCode\n) b",
+						"partitionOption": "None",
+						"queryTimeout": "02:00:00"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Lookup2",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Lookup2').output.value",
+						"type": "Expression"
+					},
+					"batchCount": 5,
+					"activities": [
+						{
+							"name": "Web1",
+							"type": "WebActivity",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"method": "GET",
+								"url": {
+									"value": "http://www.schoolinfo.go.kr/openApi.do?apiKey=a3405cc4439049f7915db26ef62b47ad&apiType=09&pbanYr=2026&schulKndCode=@{item().schulKndCode}&sidoCode=@{item().sidoCode}&sggCode=@{item().sggCode}",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "Set variable1",
+							"type": "SetVariable",
+							"dependsOn": [
+								{
+									"activity": "Web1",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"variableName": "jsonData",
+								"value": {
+									"value": "@string(activity('Web1').output)",
+									"type": "Expression"
+								}
+							}
+						},
+						{
+							"name": "Copy data1",
+							"type": "Copy",
+							"dependsOn": [
+								{
+									"activity": "Set variable1",
+									"dependencyConditions": [
+										"Succeeded"
+									]
+								}
+							],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "AzurePostgreSqlSource",
+									"additionalColumns": [
+										{
+											"name": "jsonData",
+											"value": {
+												"value": "@variables('jsonData')",
+												"type": "Expression"
+											}
+										},
+										{
+											"name": "sidocode",
+											"value": {
+												"value": "@item().sidoCode",
+												"type": "Expression"
+											}
+										},
+										{
+											"name": "sggcode",
+											"value": {
+												"value": "@item().sggCode",
+												"type": "Expression"
+											}
+										},
+										{
+											"name": "schulKndCode",
+											"value": {
+												"value": "@item().schulKndCode",
+												"type": "Expression"
+											}
+										}
+									],
+									"query": "select 1 as success",
+									"partitionOption": "None",
+									"queryTimeout": "02:00:00"
+								},
+								"sink": {
+									"type": "AzurePostgreSqlSink",
+									"writeBatchSize": 1000000,
+									"writeBatchTimeout": "00:30:00",
+									"writeMethod": "CopyCommand"
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"mappings": [
+										{
+											"source": {
+												"name": "sidocode",
+												"type": "String"
+											},
+											"sink": {
+												"name": "sidocode",
+												"type": "String",
+												"physicalType": "character varying"
+											}
+										},
+										{
+											"source": {
+												"name": "sggcode",
+												"type": "String"
+											},
+											"sink": {
+												"name": "sggcode",
+												"type": "String",
+												"physicalType": "character varying"
+											}
+										},
+										{
+											"source": {
+												"name": "schulKndCode",
+												"type": "String"
+											},
+											"sink": {
+												"name": "schulkndcode",
+												"type": "String",
+												"physicalType": "character varying"
+											}
+										},
+										{
+											"source": {
+												"name": "jsonData",
+												"type": "String"
+											},
+											"sink": {
+												"name": "jsondata",
+												"type": "String",
+												"physicalType": "jsonb"
+											}
+										}
+									],
+									"typeConversion": true,
+									"typeConversionSettings": {
+										"allowDataTruncation": true,
+										"treatBooleanAsNumber": false
+									}
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "DTS_POSTGRESQL_SNK",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": "1",
+										"SinkTable": "1"
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "DTS_POSTGRESQL_SNK",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": "cd_ods",
+										"SinkTable": "tb_sn_schoolinfo_student_raw"
+									}
+								}
+							]
+						}
+					]
+				}
+			}
+		],
+		"variables": {
+			"jsonData": {
+				"type": "String"
+			}
+		},
+		"folder": {
+			"name": "Industry/외부/학교알리미"
+		},
+		"annotations": []
+	}
+}
