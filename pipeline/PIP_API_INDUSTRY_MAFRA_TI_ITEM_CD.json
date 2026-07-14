@@ -1,0 +1,265 @@
+{
+	"name": "PIP_API_INDUSTRY_MAFRA_TI_ITEM_CD",
+	"properties": {
+		"description": "수요기관정보조회",
+		"activities": [
+			{
+				"name": "ForEach1",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Lookup1",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Lookup1').output.value",
+						"type": "Expression"
+					},
+					"activities": [
+						{
+							"name": "Copy data1_copy1_copy1",
+							"type": "Copy",
+							"state": "Inactive",
+							"onInactiveMarkAs": "Succeeded",
+							"dependsOn": [],
+							"policy": {
+								"timeout": "0.12:00:00",
+								"retry": 0,
+								"retryIntervalInSeconds": 30,
+								"secureOutput": false,
+								"secureInput": false
+							},
+							"userProperties": [],
+							"typeProperties": {
+								"source": {
+									"type": "JsonSource",
+									"storeSettings": {
+										"type": "HttpReadSettings",
+										"requestMethod": "GET"
+									},
+									"formatSettings": {
+										"type": "JsonReadSettings"
+									}
+								},
+								"sink": {
+									"type": "AzurePostgreSQLSink",
+									"writeBatchSize": 1000000,
+									"writeBatchTimeout": "00:30:00",
+									"writeMethod": "CopyCommand"
+								},
+								"enableStaging": false,
+								"translator": {
+									"type": "TabularTranslator",
+									"mappings": [
+										{
+											"source": {
+												"path": "['YEAR']"
+											},
+											"sink": {
+												"name": "year",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['MT']"
+											},
+											"sink": {
+												"name": "mt",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['LVSTCKSPC_LRGE_CL']"
+											},
+											"sink": {
+												"name": "lvstckspc_lrge_cl",
+												"type": "String"
+											}
+										},
+										{
+											"source": {
+												"path": "['PRDCTN_QY']"
+											},
+											"sink": {
+												"name": "prdctn_qy",
+												"type": "String"
+											}
+										}
+									],
+									"collectionReference": "$['Grid_20141119000000000068_1']['row']",
+									"mapComplexValuesToString": false
+								}
+							},
+							"inputs": [
+								{
+									"referenceName": "DTS_API_MAFRA",
+									"type": "DatasetReference",
+									"parameters": {
+										"url": {
+											"value": "@concat('/openapi/',pipeline().parameters.key,'/json/Grid_20141119000000000068_1/1/1000?YEAR=',item().date)",
+											"type": "Expression"
+										}
+									}
+								}
+							],
+							"outputs": [
+								{
+									"referenceName": "DTS_POSTGRESQL_SNK_P02",
+									"type": "DatasetReference",
+									"parameters": {
+										"SinkSchema": {
+											"value": "@pipeline().parameters.SinkSchema",
+											"type": "Expression"
+										},
+										"SinkTable": {
+											"value": "@pipeline().parameters.SinkTable",
+											"type": "Expression"
+										}
+									}
+								}
+							]
+						}
+					]
+				}
+			},
+			{
+				"name": "get page",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "JsonSource",
+						"storeSettings": {
+							"type": "HttpReadSettings",
+							"requestMethod": "GET"
+						},
+						"formatSettings": {
+							"type": "JsonReadSettings"
+						}
+					},
+					"dataset": {
+						"referenceName": "DTS_API_MAFRA",
+						"type": "DatasetReference",
+						"parameters": {
+							"url": {
+								"value": "@concat('/openapi/',pipeline().parameters.key,'/json/Grid_20240626000000000668_1/1/10')",
+								"type": "Expression"
+							}
+						}
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "total_count",
+				"description": "당일자",
+				"type": "SetVariable",
+				"dependsOn": [
+					{
+						"activity": "get page",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"variableName": "total_count",
+					"value": {
+						"value": "@div(int(activity('get page').output.firstRow.Grid_20240626000000000668_1.total_count), 1000)",
+						"type": "Expression"
+					}
+				}
+			},
+			{
+				"name": "Lookup1",
+				"type": "Lookup",
+				"dependsOn": [
+					{
+						"activity": "total_count",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 5,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzurePostgreSqlSource",
+						"query": {
+							"value": "WITH vw_range AS (\n    SELECT \n        (g * 1000 + 1) AS st,\n        ((g + 1) * 1000) AS ed\n    FROM generate_series(0, @{variables('total_count')}) AS g\n)\nSELECT r.st, r.ed\nFROM vw_range r\n;",
+							"type": "Expression"
+						},
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "DTS_POSTGRESQL_SNK",
+						"type": "DatasetReference",
+						"parameters": {
+							"SinkSchema": "1",
+							"SinkTable": "1"
+						}
+					},
+					"firstRowOnly": false
+				}
+			}
+		],
+		"parameters": {
+			"SinkSchema": {
+				"type": "string",
+				"defaultValue": "cd_ods"
+			},
+			"SinkTable": {
+				"type": "string",
+				"defaultValue": "tb_srm_MAFRA_ARDD_PRDCTN_ACMSLT_t"
+			},
+			"key": {
+				"type": "string",
+				"defaultValue": "0f6519f1c936cfc1168b827fb0b8b5ee906a06b1118da759f06ae5d646ff494c"
+			}
+		},
+		"variables": {
+			"from": {
+				"type": "Integer"
+			},
+			"to": {
+				"type": "Integer"
+			},
+			"total_count": {
+				"type": "Integer"
+			}
+		},
+		"folder": {
+			"name": "Industry/외부/농림축산식품"
+		},
+		"annotations": [],
+		"lastPublishTime": "2023-01-16T07:55:39Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}
