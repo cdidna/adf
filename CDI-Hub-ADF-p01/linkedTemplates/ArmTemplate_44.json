@@ -13,6 +13,125 @@
 	},
 	"resources": [
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_D2B_COMPETITION_BID_RESULT_DETAIL_M')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"description": "국내 경쟁입찰결과 상세",
+				"activities": [
+					{
+						"name": "Lookup1",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "SELECT\ndemandyear , dcsno , orntcode ,  iemno, opengdate, pblancno, pblancodr\nFROM \n(\nSELECT COALESCE (b.dcsno, 'xxxxx') AS b_dcsno \n     , a.dcsno AS dcsno\n     , a.orntcode  AS orntcode\n     , a.pblancno AS pblancno\n     , a.pblancOdr AS pblancOdr\n     , a.demandyear  AS demandyear\n     , a.iemno  AS iemno\n     , a.opengdate  AS opengdate\nFROM cd_ods.tb_d2b_competition_bid_result_list a\n  LEFT OUTER join   cd_ods.tb_d2b_competition_bid_result_detail b\non a.dcsno  = b.dcsno\n  AND a.pblancno = b.pblancno\n  AND a.pblancOdr = b.pblancOdr\nWHERE a.opengdate LIKE '2021%'\n) a\nWHERE a.b_dcsno = 'xxxxx'",
+									"type": "Expression"
+								},
+								"partitionOption": "None"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach1",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup1",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup1').output.value",
+								"type": "Expression"
+							},
+							"isSequential": false,
+							"batchCount": 50,
+							"activities": [
+								{
+									"name": "Execute Pipeline1",
+									"type": "ExecutePipeline",
+									"dependsOn": [],
+									"policy": {
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"pipeline": {
+											"referenceName": "PIP_API_INDUSTRY_D2B_COMPETITION_BID_RESULT_DETAIL",
+											"type": "PipelineReference"
+										},
+										"waitOnCompletion": true,
+										"parameters": {
+											"pipdemandyear": {
+												"value": "@item().demandYear",
+												"type": "Expression"
+											},
+											"pipdcsno": {
+												"value": "@item().dcsNo",
+												"type": "Expression"
+											},
+											"piporntcode": {
+												"value": "@item().orntCode",
+												"type": "Expression"
+											},
+											"pipiemno": {
+												"value": "@item().iemNo",
+												"type": "Expression"
+											},
+											"pipopengdate": {
+												"value": "@item().opengDate",
+												"type": "Expression"
+											},
+											"pippblancno": {
+												"value": "@item().pblancNo",
+												"type": "Expression"
+											},
+											"pippblancodr": {
+												"value": "@item().pblancOdr",
+												"type": "Expression"
+											}
+										}
+									}
+								}
+							]
+						}
+					}
+				],
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"folder": {
+					"name": "Industry/외부/방위사업청"
+				},
+				"annotations": []
+			},
+			"dependsOn": []
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_D2B_COMPETITION_BID_RESULT_INC')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -3941,539 +4060,6 @@
 				},
 				"folder": {
 					"name": "트렌드/외부/네이버"
-				},
-				"annotations": [],
-				"lastPublishTime": "2023-01-16T07:55:39Z"
-			},
-			"dependsOn": []
-		},
-		{
-			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_NEIS_MEAL_SERVICE_DIET_INFO_M')]",
-			"type": "Microsoft.DataFactory/factories/pipelines",
-			"apiVersion": "2018-06-01",
-			"properties": {
-				"description": "수요기관정보조회",
-				"activities": [
-					{
-						"name": "Lookup1",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 5,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "select  atpt_ofcdc_sc_code, sd_schul_code, to_char(now(), 'YYYYMMDD') AS start_ymd\n     FROM cd_ods.tb_sf_neis_school_info_t a, \n     (select max(seq) * 0 /5 + 1 as min_seq, max(seq) * ( 0 + 1) / 5 as max_seq from cd_ods.tb_sf_neis_school_info_t ) b\n     WHERE COALESCE(TRIM(sd_schul_code), '') != '' AND seq BETWEEN b.min_seq AND b.max_seq\n     and not exists (select 1 from cd_ods.tb_sf_neis_meal_service_diet_info_t c\n\t\t\t\t\twhere c.atpt_ofcdc_sc_code = a.atpt_ofcdc_sc_code \n\t\t\t\t\t  and c.sd_schul_code = a.sd_schul_code \n\t\t\t\t\t  and c.mlsv_ymd >= to_char(now(), 'YYYYMMDD')\n\t\t\t\t\t);",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup1').output.value",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"batchCount": 20,
-							"activities": [
-								{
-									"name": "PIP_API_INDUSTRY_NEIS_MEAL_SERVICE_DIET_INFO",
-									"type": "ExecutePipeline",
-									"dependsOn": [],
-									"policy": {
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"pipeline": {
-											"referenceName": "PIP_API_INDUSTRY_NEIS_MEAL_SERVICE_DIET_INFO",
-											"type": "PipelineReference"
-										},
-										"waitOnCompletion": true,
-										"parameters": {
-											"pipATPT_OFCDC_SC_CODE": {
-												"value": "@item().atpt_ofcdc_sc_code",
-												"type": "Expression"
-											},
-											"pipSD_SCHUL_CODE": {
-												"value": "@item().sd_schul_code",
-												"type": "Expression"
-											},
-											"pipSTART_YMD": {
-												"value": "@item().start_ymd",
-												"type": "Expression"
-											}
-										}
-									}
-								}
-							]
-						}
-					},
-					{
-						"name": "Lookup1_copy1",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 5,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "select  atpt_ofcdc_sc_code, sd_schul_code, to_char(now(), 'YYYYMMDD') AS start_ymd\n     FROM cd_ods.tb_sf_neis_school_info_t a, \n     (select max(seq) * 1 /5 + 1 as min_seq, max(seq) * ( 1 + 1) / 5 as max_seq from cd_ods.tb_sf_neis_school_info_t ) b\n     WHERE COALESCE(TRIM(sd_schul_code), '') != '' AND seq BETWEEN b.min_seq AND b.max_seq\n     and not exists (select 1 from cd_ods.tb_sf_neis_meal_service_diet_info_t c\n\t\t\t\t\twhere c.atpt_ofcdc_sc_code = a.atpt_ofcdc_sc_code \n\t\t\t\t\t  and c.sd_schul_code = a.sd_schul_code \n\t\t\t\t\t  and c.mlsv_ymd >= to_char(now(), 'YYYYMMDD')\n\t\t\t\t\t)\n     ;",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1_copy1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup1_copy1",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup1_copy1').output.value",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"batchCount": 20,
-							"activities": [
-								{
-									"name": "PIP_API_INDUSTRY_NEIS_MEAL_SERVICE_DIET_INFO_copy1",
-									"type": "ExecutePipeline",
-									"dependsOn": [],
-									"policy": {
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"pipeline": {
-											"referenceName": "PIP_API_INDUSTRY_NEIS_MEAL_SERVICE_DIET_INFO",
-											"type": "PipelineReference"
-										},
-										"waitOnCompletion": true,
-										"parameters": {
-											"pipATPT_OFCDC_SC_CODE": {
-												"value": "@item().atpt_ofcdc_sc_code",
-												"type": "Expression"
-											},
-											"pipSD_SCHUL_CODE": {
-												"value": "@item().sd_schul_code",
-												"type": "Expression"
-											},
-											"pipSTART_YMD": {
-												"value": "@item().start_ymd",
-												"type": "Expression"
-											}
-										}
-									}
-								}
-							]
-						}
-					},
-					{
-						"name": "Lookup1_copy2",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 5,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "select  atpt_ofcdc_sc_code, sd_schul_code, to_char(now(), 'YYYYMMDD') AS start_ymd\n     FROM cd_ods.tb_sf_neis_school_info_t a, \n     (select max(seq) * 2 /5 + 1 as min_seq, max(seq) * ( 2 + 1) / 5 as max_seq from cd_ods.tb_sf_neis_school_info_t ) b\n     WHERE COALESCE(TRIM(sd_schul_code), '') != '' AND seq BETWEEN b.min_seq AND b.max_seq\n     and not exists (select 1 from cd_ods.tb_sf_neis_meal_service_diet_info_t c\n\t\t\t\t\twhere c.atpt_ofcdc_sc_code = a.atpt_ofcdc_sc_code \n\t\t\t\t\t  and c.sd_schul_code = a.sd_schul_code \n\t\t\t\t\t  and c.mlsv_ymd >= to_char(now(), 'YYYYMMDD')\n\t\t\t\t\t)\n                         ;",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1_copy2",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup1_copy2",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup1_copy2').output.value",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"batchCount": 20,
-							"activities": [
-								{
-									"name": "PIP_API_INDUSTRY_NEIS_MEAL_SERVICE_DIET_INFO_copy2",
-									"type": "ExecutePipeline",
-									"dependsOn": [],
-									"policy": {
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"pipeline": {
-											"referenceName": "PIP_API_INDUSTRY_NEIS_MEAL_SERVICE_DIET_INFO",
-											"type": "PipelineReference"
-										},
-										"waitOnCompletion": true,
-										"parameters": {
-											"pipATPT_OFCDC_SC_CODE": {
-												"value": "@item().atpt_ofcdc_sc_code",
-												"type": "Expression"
-											},
-											"pipSD_SCHUL_CODE": {
-												"value": "@item().sd_schul_code",
-												"type": "Expression"
-											},
-											"pipSTART_YMD": {
-												"value": "@item().start_ymd",
-												"type": "Expression"
-											}
-										}
-									}
-								}
-							]
-						}
-					},
-					{
-						"name": "Execute_SP",
-						"type": "Lookup",
-						"dependsOn": [
-							{
-								"activity": "ForEach1",
-								"dependencyConditions": [
-									"Completed"
-								]
-							},
-							{
-								"activity": "ForEach1_copy1",
-								"dependencyConditions": [
-									"Completed"
-								]
-							},
-							{
-								"activity": "ForEach1_copy2",
-								"dependencyConditions": [
-									"Completed"
-								]
-							},
-							{
-								"activity": "ForEach1_copy2_copy1",
-								"dependencyConditions": [
-									"Completed"
-								]
-							},
-							{
-								"activity": "ForEach1_copy2_copy2",
-								"dependencyConditions": [
-									"Completed"
-								]
-							}
-						],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 5,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "select cd_ods.fn_sf_neis_meal_keyword_frequency();",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							}
-						}
-					},
-					{
-						"name": "Lookup1_copy3",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 5,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "select  atpt_ofcdc_sc_code, sd_schul_code, to_char(now(), 'YYYYMMDD') AS start_ymd\n     FROM cd_ods.tb_sf_neis_school_info_t a, \n     (select max(seq) * 3 /5 + 1 as min_seq, max(seq) * ( 3 + 1) / 5 as max_seq from cd_ods.tb_sf_neis_school_info_t ) b\n     WHERE COALESCE(TRIM(sd_schul_code), '') != '' AND seq BETWEEN b.min_seq AND b.max_seq\n     and not exists (select 1 from cd_ods.tb_sf_neis_meal_service_diet_info_t c\n\t\t\t\t\twhere c.atpt_ofcdc_sc_code = a.atpt_ofcdc_sc_code \n\t\t\t\t\t  and c.sd_schul_code = a.sd_schul_code \n\t\t\t\t\t  and c.mlsv_ymd >= to_char(now(), 'YYYYMMDD')\n\t\t\t\t\t)\n                         ;",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1_copy2_copy1",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup1_copy3",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup1_copy3').output.value",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"batchCount": 20,
-							"activities": [
-								{
-									"name": "PIP_API_INDUSTRY_NEIS_MEAL_SERVICE_DIET_INFO_copy3",
-									"type": "ExecutePipeline",
-									"dependsOn": [],
-									"policy": {
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"pipeline": {
-											"referenceName": "PIP_API_INDUSTRY_NEIS_MEAL_SERVICE_DIET_INFO",
-											"type": "PipelineReference"
-										},
-										"waitOnCompletion": true,
-										"parameters": {
-											"pipATPT_OFCDC_SC_CODE": {
-												"value": "@item().atpt_ofcdc_sc_code",
-												"type": "Expression"
-											},
-											"pipSD_SCHUL_CODE": {
-												"value": "@item().sd_schul_code",
-												"type": "Expression"
-											},
-											"pipSTART_YMD": {
-												"value": "@item().start_ymd",
-												"type": "Expression"
-											}
-										}
-									}
-								}
-							]
-						}
-					},
-					{
-						"name": "Lookup1_copy4",
-						"type": "Lookup",
-						"dependsOn": [],
-						"policy": {
-							"timeout": "0.12:00:00",
-							"retry": 5,
-							"retryIntervalInSeconds": 30,
-							"secureOutput": false,
-							"secureInput": false
-						},
-						"userProperties": [],
-						"typeProperties": {
-							"source": {
-								"type": "AzurePostgreSqlSource",
-								"query": {
-									"value": "select  atpt_ofcdc_sc_code, sd_schul_code, to_char(now(), 'YYYYMMDD') AS start_ymd\n     FROM cd_ods.tb_sf_neis_school_info_t a, \n     (select max(seq) * 4 /5 + 1 as min_seq, max(seq) * ( 4 + 1) / 5 as max_seq from cd_ods.tb_sf_neis_school_info_t ) b\n     WHERE COALESCE(TRIM(sd_schul_code), '') != '' AND seq BETWEEN b.min_seq AND b.max_seq\n     and not exists (select 1 from cd_ods.tb_sf_neis_meal_service_diet_info_t c\n\t\t\t\t\twhere c.atpt_ofcdc_sc_code = a.atpt_ofcdc_sc_code \n\t\t\t\t\t  and c.sd_schul_code = a.sd_schul_code \n\t\t\t\t\t  and c.mlsv_ymd >= to_char(now(), 'YYYYMMDD')\n\t\t\t\t\t)\n                         ;",
-									"type": "Expression"
-								},
-								"partitionOption": "None"
-							},
-							"dataset": {
-								"referenceName": "DTS_POSTGRESQL_SNK",
-								"type": "DatasetReference",
-								"parameters": {
-									"SinkSchema": "1",
-									"SinkTable": "1"
-								}
-							},
-							"firstRowOnly": false
-						}
-					},
-					{
-						"name": "ForEach1_copy2_copy2",
-						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Lookup1_copy4",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
-						"userProperties": [],
-						"typeProperties": {
-							"items": {
-								"value": "@activity('Lookup1_copy4').output.value",
-								"type": "Expression"
-							},
-							"isSequential": false,
-							"batchCount": 20,
-							"activities": [
-								{
-									"name": "PIP_API_INDUSTRY_NEIS_MEAL_SERVICE_DIET_INFO_copy4",
-									"type": "ExecutePipeline",
-									"dependsOn": [],
-									"policy": {
-										"secureInput": false
-									},
-									"userProperties": [],
-									"typeProperties": {
-										"pipeline": {
-											"referenceName": "PIP_API_INDUSTRY_NEIS_MEAL_SERVICE_DIET_INFO",
-											"type": "PipelineReference"
-										},
-										"waitOnCompletion": true,
-										"parameters": {
-											"pipATPT_OFCDC_SC_CODE": {
-												"value": "@item().atpt_ofcdc_sc_code",
-												"type": "Expression"
-											},
-											"pipSD_SCHUL_CODE": {
-												"value": "@item().sd_schul_code",
-												"type": "Expression"
-											},
-											"pipSTART_YMD": {
-												"value": "@item().start_ymd",
-												"type": "Expression"
-											}
-										}
-									}
-								}
-							]
-						}
-					}
-				],
-				"policy": {
-					"elapsedTimeMetric": {}
-				},
-				"parameters": {
-					"SinkSchema": {
-						"type": "string",
-						"defaultValue": "cd_ods"
-					},
-					"SinkTable": {
-						"type": "string",
-						"defaultValue": "tb_sf_neis_meal_service_diet_info_t"
-					}
-				},
-				"variables": {
-					"date": {
-						"type": "String"
-					},
-					"url": {
-						"type": "String"
-					},
-					"obsr_Spot_Code": {
-						"type": "String"
-					},
-					"begin_Date": {
-						"type": "String"
-					},
-					"end_Date": {
-						"type": "String"
-					}
-				},
-				"folder": {
-					"name": "Industry/외부/교육정보개방포털"
 				},
 				"annotations": [],
 				"lastPublishTime": "2023-01-16T07:55:39Z"
