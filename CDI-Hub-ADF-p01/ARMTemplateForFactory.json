@@ -83689,8 +83689,6 @@
 					{
 						"name": "Lookup_parameter_copy1",
 						"type": "Lookup",
-						"state": "Inactive",
-						"onInactiveMarkAs": "Succeeded",
 						"dependsOn": [
 							{
 								"activity": "Set variable1",
@@ -144469,6 +144467,229 @@
 			]
 		},
 		{
+			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_WNG_HQ_ADDRESS')]",
+			"type": "Microsoft.DataFactory/factories/pipelines",
+			"apiVersion": "2018-06-01",
+			"properties": {
+				"activities": [
+					{
+						"name": "Lookup_parameter",
+						"type": "Lookup",
+						"dependsOn": [],
+						"policy": {
+							"timeout": "0.12:00:00",
+							"retry": 0,
+							"retryIntervalInSeconds": 30,
+							"secureOutput": false,
+							"secureInput": false
+						},
+						"userProperties": [],
+						"typeProperties": {
+							"source": {
+								"type": "AzurePostgreSqlSource",
+								"query": {
+									"value": "select clos_ym, biz_registration_num,registration_num,hq_address\nfrom (\n\tselect  a.clos_ym,  a.biz_registration_num,a.registration_num,a.hq_address,\n\tb.sido, b.sigungu, b.dong \n\tfrom (select * from \n\t\t\t(\n\t\t\tselect clos_ym,biz_registration_num,registration_num,REGEXP_REPLACE(\n        REGEXP_REPLACE(\n            REGEXP_REPLACE(\n                REGEXP_REPLACE(\n                    SPLIT_PART(\n                        REGEXP_REPLACE(\n                            trim(hq_address),\n                            '^\\s*우\\s*:\\s*[0-9]{5}\\s*',\n                            ''\n                        ),\n                        '-', 1\n                    ),\n                    '\\s*\\(.*$', ''\n                ),\n                '(^|\\s)(\\S+)\\s+\\2', '\\1\\2', 'g'\n            ),\n            '\\s+', ' ', 'g'\n        ),\n        '(\\d+(?:번길|대로|로|길)|\\d+)(-\\d+)?\\s.*$', '\\1'\n    ) as hq_address\n\t\t\t, rank() over( partition by biz_registration_num,registration_num order by clos_ym desc) as rnk\n\t\t\tfrom cd_ods.tb_fc_disclosures_kftc_t\n\t\t\t)\n\t\t\twhere rnk = 1\n\t\t\t) a \n\tleft join cd_ods.tb_fc_hq_real_address_t b\n\ton a.biz_registration_num  = b.biz_registration_num \n)\nwhere 1=1\nand coalesce (sido, '') = ''\norder by clos_ym desc\nlimit 5000;",
+									"type": "Expression"
+								},
+								"partitionOption": "None",
+								"queryTimeout": "02:00:00"
+							},
+							"dataset": {
+								"referenceName": "DTS_POSTGRESQL_SNK_P02",
+								"type": "DatasetReference",
+								"parameters": {
+									"SinkSchema": "1",
+									"SinkTable": "1"
+								}
+							},
+							"firstRowOnly": false
+						}
+					},
+					{
+						"name": "ForEach_product_info",
+						"type": "ForEach",
+						"dependsOn": [
+							{
+								"activity": "Lookup_parameter",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
+						"userProperties": [],
+						"typeProperties": {
+							"items": {
+								"value": "@activity('Lookup_parameter').output.value",
+								"type": "Expression"
+							},
+							"isSequential": false,
+							"batchCount": 20,
+							"activities": [
+								{
+									"name": "Copy data_product_info",
+									"type": "Copy",
+									"dependsOn": [],
+									"policy": {
+										"timeout": "0.12:00:00",
+										"retry": 5,
+										"retryIntervalInSeconds": 30,
+										"secureOutput": false,
+										"secureInput": false
+									},
+									"userProperties": [],
+									"typeProperties": {
+										"source": {
+											"type": "JsonSource",
+											"additionalColumns": [
+												{
+													"name": "biz_registration_num",
+													"value": {
+														"value": "@item().biz_registration_num",
+														"type": "Expression"
+													}
+												},
+												{
+													"name": "registration_num",
+													"value": {
+														"value": "@item().registration_num",
+														"type": "Expression"
+													}
+												}
+											],
+											"storeSettings": {
+												"type": "HttpReadSettings",
+												"requestMethod": "GET"
+											},
+											"formatSettings": {
+												"type": "JsonReadSettings"
+											}
+										},
+										"sink": {
+											"type": "AzurePostgreSqlSink",
+											"writeBatchSize": 1000000,
+											"writeBatchTimeout": "00:30:00",
+											"writeMethod": "CopyCommand"
+										},
+										"enableStaging": false,
+										"translator": {
+											"type": "TabularTranslator",
+											"mappings": [
+												{
+													"source": {
+														"path": "[['siNm']"
+													},
+													"sink": {
+														"name": "sido",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['sggNm']"
+													},
+													"sink": {
+														"name": "sigungu",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "[['emdNm']"
+													},
+													"sink": {
+														"name": "dong",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['biz_registration_num']"
+													},
+													"sink": {
+														"name": "biz_registration_num",
+														"type": "String"
+													}
+												},
+												{
+													"source": {
+														"path": "$['registration_num']"
+													},
+													"sink": {
+														"name": "registration_num",
+														"type": "String"
+													}
+												}
+											],
+											"collectionReference": "$['results']['juso']",
+											"mapComplexValuesToString": false
+										}
+									},
+									"inputs": [
+										{
+											"referenceName": "DTS_API_ADDR",
+											"type": "DatasetReference",
+											"parameters": {
+												"url": {
+													"value": "@concat('?confmKey=U01TX0FVVEgyMDI1MTIxODEzMDgwNjExNjU4MDM=&currentPage=1&countPerPage=1&resultType=json&keyword=',item().hq_address)",
+													"type": "Expression"
+												}
+											}
+										}
+									],
+									"outputs": [
+										{
+											"referenceName": "DTS_POSTGRESQL_SNK_P02",
+											"type": "DatasetReference",
+											"parameters": {
+												"SinkSchema": {
+													"value": "@pipeline().parameters.SinkSchema",
+													"type": "Expression"
+												},
+												"SinkTable": {
+													"value": "@pipeline().parameters.SinkTable",
+													"type": "Expression"
+												}
+											}
+										}
+									]
+								}
+							]
+						}
+					}
+				],
+				"concurrency": 3,
+				"policy": {
+					"elapsedTimeMetric": {}
+				},
+				"parameters": {
+					"SinkSchema": {
+						"type": "string",
+						"defaultValue": "cd_ods"
+					},
+					"SinkTable": {
+						"type": "string",
+						"defaultValue": "tb_fc_hq_real_address_t"
+					},
+					"p_yymm": {
+						"type": "string"
+					}
+				},
+				"variables": {
+					"yymm": {
+						"type": "String"
+					}
+				},
+				"folder": {
+					"name": "Industry/외부/주소검색"
+				},
+				"annotations": []
+			},
+			"dependsOn": [
+				"[concat(variables('factoryId'), '/datasets/DTS_POSTGRESQL_SNK_P02')]",
+				"[concat(variables('factoryId'), '/datasets/DTS_API_ADDR')]"
+			]
+		},
+		{
 			"name": "[concat(parameters('factoryName'), '/PIP_API_INDUSTRY_WNG_STORE_ADDRESS')]",
 			"type": "Microsoft.DataFactory/factories/pipelines",
 			"apiVersion": "2018-06-01",
@@ -159650,9 +159871,14 @@
 					{
 						"name": "ForEach1",
 						"type": "ForEach",
-						"state": "Inactive",
-						"onInactiveMarkAs": "Succeeded",
-						"dependsOn": [],
+						"dependsOn": [
+							{
+								"activity": "Search_condition",
+								"dependencyConditions": [
+									"Succeeded"
+								]
+							}
+						],
 						"userProperties": [],
 						"typeProperties": {
 							"items": {
@@ -159733,6 +159959,8 @@
 								{
 									"name": "Search_condition_copy1",
 									"type": "Lookup",
+									"state": "Inactive",
+									"onInactiveMarkAs": "Succeeded",
 									"dependsOn": [
 										{
 											"activity": "Search_condition_copy1_copy1",
@@ -159831,7 +160059,7 @@
 							"source": {
 								"type": "AzurePostgreSqlSource",
 								"query": {
-									"value": "\nselect select_query,  \ncase when delete_strategy = 'delete' then delete_query||'; select 1 as success' \n     else drop_query||'; select 1 as success'  \n     end as delete_strategy, \npolicy_id, lake_container, lake_path_template, schema_name,table_name,  date_column_name, table_storage_type, file_format, retention_value, retention_unit, backup_required\nfrom ( \nselect format( \n    'select * from %I.%I where %I <= %s', \n    schema_name, \n    table_name, \n    date_column_name, \n    case \n        when date_column_type = 'timestamp' \n        then \n            format( \n                'now() - interval ''1 %s'' * %s ', \n                retention_unit, \n               case when retention_value = 0 then 0  \n               else retention_value + 1 end \n            ) \n        when date_column_type = 'yyyy-mm-dd' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yyyy-mm-dd'')', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n        when date_column_type = 'yymm' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yymm'')', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n     when date_column_type = 'yyyymmdd' and retention_unit = 'year' \n\t  then format( \n\t      'to_char(date_trunc(''year'', current_date - interval ''%s %s'') - interval ''1 day'', ''yyyymmdd'')', \n\t      retention_value, \n\t      retention_unit \n\t  ) \n\t       when date_column_type = 'yyyymm' and retention_unit = 'year' \n\t  then format( \n\t      'to_char(date_trunc(''year'', current_date - interval ''%s %s'') - interval ''1 day'', ''yyyymm'')', \n\t      retention_value, \n\t      retention_unit \n\t  ) \n         when date_column_type = 'yyyymmdd' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yyyymmdd'')', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n         when date_column_type = 'yyyymm' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yyyymm'')', \n               case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n        when date_column_type = 'week' and date_column_name = 'per_tag'\n        then  \n\t        format(\n\t        '(select a.%s from %I.%I a order by %s desc limit 1 )',\n    \t\tdate_column_name,\n\t        schema_name, \n\t\t    table_name, \n\t\t    date_column_name\n\t\t)\n        else \n            format( \n                'current_date - interval ''%s %s''', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n            ) \n    end \n) as select_query, \nformat( \n    'delete from %I.%I where %I <= %s', \n    schema_name, \n    table_name, \n    date_column_name, \n    case \n        when date_column_type = 'timestamp' \n        then \n            format( \n                'now() - interval ''1 %s'' * %s', \n                retention_unit, \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end \n            ) \n        when date_column_type = 'yyyy-mm-dd' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yyyy-mm-dd'')', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n          when date_column_type = 'yymm' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yymm'')', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n\t\twhen date_column_type = 'yyyymmdd' and retention_unit = 'year' \n\t\t  then format( \n\t\t      'to_char(date_trunc(''year'', current_date - interval ''%s %s'') - interval ''1 day'', ''yyyymmdd'')', \n\t\t      retention_value, \n\t\t      retention_unit \n\t\t  ) \n\t\t       when date_column_type = 'yyyymm' and retention_unit = 'year' \n\t\t  then format( \n\t\t      'to_char(date_trunc(''year'', current_date - interval ''%s %s'') - interval ''1 day'', ''yyyymm'')', \n\t\t      retention_value, \n\t\t      retention_unit \n\t\t  )\n         when date_column_type = 'yyyymmdd' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yyyymmdd'')', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n      when date_column_type = 'yyyymm' \n        then  \n         format( \n          'to_char(current_date - interval ''%s %s'', ''yyyymm'')', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n         ) \n        when date_column_type = 'week' and date_column_name = 'per_tag'\n        then  \n\t        format(\n\t        '(select a.%s from %I.%I a order by %s desc limit 1 )',\n    \t\tdate_column_name,\n\t        schema_name, \n\t\t    table_name, \n\t\t    date_column_name\n\t\t)\n        else \n            format( \n                'current_date - interval ''%s %s''', \n                 case when retention_value = 0 then 0  \n               else retention_value + 1 end, \n                retention_unit \n            ) \n    end \n) as delete_query, \nformat( \n    'drop table %I.%I_%s', \n    schema_name, \n    table_name, \n    (select  to_char(now() - interval '1 month' * (retention_value +1),'YYMM') \n    )        \n) as drop_query, \npolicy_id, lake_container, lake_path_template, schema_name,table_name,  date_column_name, table_storage_type, delete_strategy,file_format , retention_value, retention_unit, backup_required \nfrom cd_meta.table_retention_policy \nwhere 1=1 \nand is_active = true \n)",
+									"value": "with v as\n(\nselect unnest(array[\n  'tb_fc_menu_menuinfo_processed_category_t',\n  'tb_fc_menu_menuinfo_processed_ingredient_t',\n  'tb_fc_menu_menuinfo_raw_navermap_t'\n]) as table_name\n) \nselect 'select * from cd_ods.'||v.table_name|| ' 'as select_query,  \n'cd_ods' as schema_name, \nv.table_name as table_name,\n'cdi_root' as lake_container, \n'Data Backup' as lake_path_template\nfrom v",
 									"type": "Expression"
 								},
 								"partitionOption": "None",
@@ -159857,14 +160085,9 @@
 					{
 						"name": "ForEach1_copy2_copy1",
 						"type": "ForEach",
-						"dependsOn": [
-							{
-								"activity": "Search_condition",
-								"dependencyConditions": [
-									"Succeeded"
-								]
-							}
-						],
+						"state": "Inactive",
+						"onInactiveMarkAs": "Succeeded",
+						"dependsOn": [],
 						"userProperties": [],
 						"typeProperties": {
 							"items": {
